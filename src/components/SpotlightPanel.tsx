@@ -40,9 +40,15 @@ export function SpotlightPanel() {
       if (cancelled) return
       try {
         await call<string>('ping')
-        if (!cancelled) setStatus('ready')
-      } catch {
-        // invoke 失败(后端未就绪 / 序列化失败),重试
+        if (!cancelled) {
+          // ⚠️ 成功后必须清除 deadline,否则 5 秒后 setTimeout 会用 'timeout' 覆盖 'ready'。
+          // 实测发现的竞态 bug:StrictMode 双渲染时两个 probe 竞争,deadline 覆盖 ready。
+          window.clearTimeout(deadline)
+          setStatus('ready')
+        }
+      } catch (e) {
+        // invoke 失败(后端未就绪 / 序列化失败),重试。日志暴露根因(不静默吞错)
+        console.error('[probe] ping 失败,将重试:', e)
         if (!cancelled) {
           window.setTimeout(probe, PROBE_INTERVAL_MS)
         }
