@@ -34,8 +34,12 @@ status: active
 - **阶段 D+E**(`4a03c33`):前端换栈 Tailwind+shadcn,删 axios/AntD/路由,重建 invoke 通信层
   - 踩坑:CSS 文件 JSDoc 风格多行注释(含 `bg-*`)让 PostCSS parser 报错,精简单行注释
 - **阶段 F**(`ff3b92d`):清理配置/脚本/环境变量(.env.example + init-project.sh + .gitignore)
-- **阶段 G**:文档同步(AGENTS/CLAUDE/README + wiki 架构文档,定位改为剪贴板应用)
-- **阶段 H**:启动实测验证
+- **阶段 G**(`29af37f`):文档同步(AGENTS/CLAUDE/README + wiki 架构文档,定位改为剪贴板应用)
+- **阶段 H**(`7a3bb7a`):启动实测验证,修复探活竞态 bug
+  - 实测发现:静态检查全过但 GUI 实测暴露真实 bug(§1.5 价值)
+  - 根因:React StrictMode 双渲染 + 成功路径漏 clearTimeout(deadline),ping 成功后超时 setTimeout 覆盖了 ready
+  - 修复:ping 成功后立即 clearTimeout(deadline)
+  - 验证:UI 正确显示「● 后端就绪」,Console 零错误
 
 **关键技术决策**(产品定位明确后重新规划):
 - UI:Tailwind + shadcn/ui(换掉 AntD,轻量 + 键盘导航友好)

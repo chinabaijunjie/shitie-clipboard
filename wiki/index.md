@@ -13,17 +13,16 @@ status: active
 
 ---
 
-## 🚨 当前任务（M0 架构清理 + Spotlight UI 骨架）
+## 🚨 当前状态(M0 完成,下一步 M1)
 
-> **当前任务**:M0 — 把工程从「Tauri + Python sidecar 双进程」激进精简成
-> 「纯 Rust 单进程 + Spotlight 风格剪贴板工具」骨架。
+> **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架,8 阶段 7 commit。
+> 详见 [[dev/m0-plan]](规划)+ [[dev/progress]](完成记录)。
 >
-> **必读**:[[dev/m0-plan]] —— 完整 M0 规划(产品定位 / 技术栈 / 资产处置 /
-> 8 阶段施工步骤 / 验证流程)。
+> **下一步:M1 macOS 剪贴板监听 MVP**(NSPasteboard.changeCount + rusqlite + 历史列表 + 回填)。
+> M1 启动前需先做技术 spike + 规划文档(§1.16)。详见 [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
-> 被新规划替代(变更原因见归档文档顶部)。sidecar 方法论删前留档见
-> [[dev/archive/sidecar-methodology-extract]]。
+> sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。
 
 ---
 
