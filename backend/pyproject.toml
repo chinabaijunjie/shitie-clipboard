@@ -1,0 +1,122 @@
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# pytest-asyncio 0.23+ 必需，否则 DeprecationWarning 在 0.24+ 升级为 Error
+asyncio_default_fixture_loop_scope = "function"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "unit: 单元测试（纯函数，无 DB 无 IO，<1s）",
+    "integration: 集成测试（service + 真实 DB，<5s）",
+    "api: API 层测试（FastAPI TestClient）",
+    "slow: 耗时测试（>5s，默认跳过）",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:sqlalchemy.*",
+    "ignore::DeprecationWarning:pydantic.*",
+    "ignore::DeprecationWarning:aiosqlite.*",
+]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--tb=short",
+]
+
+
+# ============================================================
+# ruff — 中等规则集 E+F+I+UP+B
+#
+# 决策原则：稳定 > 架构 > 维护性 > 短期成本
+# - E（pycodestyle errors）+ F（pyflakes）+ I（isort）+ UP（pyupgrade）+ B（bugbear）
+# - 不选 SIM（simplify，自动简化有副作用风险）
+# - 不选 C4（推导式强制改写，可读性不一定提升）
+# ============================================================
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    "__pycache__",
+    ".venv",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes（unused import / undefined name / unused variable）
+    "I",    # isort（import 排序）
+    "UP",   # pyupgrade（语法现代化：Optional[X]→X|None 等）
+    "B",    # bugbear（潜在 bug：可变默认参数、过宽 except 等）
+]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI File()/Depends() 在默认参数合法用法
+"api/*.py" = ["B008"]
+# sidecar.py 需先设环境变量再 import（.env 加载顺序）
+"sidecar.py" = ["E402"]
+# conftest.py 需先 import path 设置再 import 业务模块
+"tests/conftest.py" = ["E402"]
+# alembic/env.py 需先 sys.path 注入再 import core.*（I001 强制重排会破坏顺序）
+"alembic/env.py" = ["E402", "I001"]
+# alembic/versions/*.py 是 autogenerate 产物，不应手工 reformat
+# （破坏 autogenerate idempotent 性质，跟 alembic 行业实践一致）
+"alembic/versions/*.py" = ["E501", "I001"]
+# 测试允许未使用变量（"调用但不用返回值"模式）
+"tests/**/*.py" = ["F841"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "api",
+    "core",
+    "engines",
+    "services",
+]
+
+[tool.ruff.format]
+# 默认配置兼容 black 风格
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+
+# ============================================================
+# mypy — baseline 模式（仅暴露问题不强制修复）
+#
+# 决策：先配 + baseline，修复留独立 Tier（避免一次性失控）
+# 业务工程起步时，可逐步开启 strict 选项。
+# ============================================================
+
+[tool.mypy]
+python_version = "3.10"
+plugins = [
+    "sqlalchemy.ext.mypy.plugin",
+    "pydantic.mypy",
+]
+# 第三方无 stub 包容
+ignore_missing_imports = true
+# 显示错误码便于定位
+show_error_codes = true
+# baseline 模式：容忍当前问题，不强制修复
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+warn_return_any = false
+warn_unused_ignores = false
+warn_unreachable = false
+# 排除生成代码和虚拟环境
+exclude = [
+    "__pycache__",
+    "\\.venv",
+    "build",
+    "dist",
+]
+
+[tool.pydantic-mypy]
+# Pydantic plugin baseline 模式（宽松）
+init_forbid_extra = false
+init_typed = false
+warn_required_dynamic_aliases = false

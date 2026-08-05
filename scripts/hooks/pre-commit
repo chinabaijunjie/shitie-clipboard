@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""
+pre-commit hook: 检查 CLAUDE.md ↔ AGENTS.md 双工具同步状态
+
+设计：
+1. 只在 CLAUDE.md 或 AGENTS.md 在暂存区时触发（其他改动放行）
+2. 对两个文件做 normalization（消除已知允许的差异）：
+   - 删除 AGENTS.md §8「通用工程纪律」整段（🔒 受保护，永不同步）
+   - 删除 AGENTS.md Code Review ZCode 专属补充整段 + 通用清单 4 项「ZCode 专属补充」标记行
+   - 删除 AGENTS.md 中"（ZCode 还需额外...）"括号提示（视角提示）
+   - 删除 AGENTS.md 中"+「§8 通用工程纪律」"短语（视角提示）
+   - 视角词归一化：'Claude Code' / 'ZCode' → '__TOOL_NAME__'
+   - 文件名归一化：'CLAUDE.md' / 'AGENTS.md' → '__TOOL_DOC__'
+   - 删除「最后更新」行（时间戳描述）
+3. normalization 后做 diff，应该为空
+4. 如果不为空 → 列出未同步差异 + 阻塞 commit
+5. 兜底：确认为误报时 `git commit --no-verify` 跳过，并在 dual-tool-sync.md 补规则
+
+详见：wiki/process/dual-tool-sync.md
+"""
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+def normalize(content: str, is_agents: bool) -> str:
+    """Normalize CLAUDE.md / AGENTS.md content for comparison.
+
+    消除已知允许的差异，让两边归一化后内容一致。
+    """
+    lines = content.split("\n")
+    result = []
+    in_protected_section = False  # §8 段（🔒 受保护）
+    in_zcode_supplement = False   # Code Review ZCode 专属补充段
+
+    for line in lines:
+        # 跳过「最后更新」行（时间戳会变）
+        if line.startswith("_最后更新："):
+            continue
+
+        # 视角词 + 文件名归一化（两边都做，先做以便后续匹配用归一化形式）
+        line = line.replace("Claude Code", "__TOOL_NAME__")
+        line = line.replace("ZCode", "__TOOL_NAME__")
+        line = line.replace("CLAUDE.md", "__TOOL_DOC__")
+        line = line.replace("AGENTS.md", "__TOOL_DOC__")
+
+        if is_agents:
+            # §8 段开始（🔒 受保护）
+            if line.startswith("### 8. 通用工程纪律"):
+                in_protected_section = True
+                continue
+            # §8 段内：跳过直到下一个 ### 三级标题（非 §8 内嵌）/ ## 二级标题 / --- 分隔符
+            if in_protected_section:
+                if line.startswith("## ") or line == "---" or (
+                    line.startswith("### ") and not line.startswith("### 8.")
+                ):
+                    in_protected_section = False
+                    # 落到下方正常处理（不 continue）
+                else:
+                    continue
+
+            # Code Review ZCode 专属补充整段
+            if line.startswith("### Code Review ZCode 专属补充") or \
+               line.startswith("### Code Review __TOOL_NAME__ 专属补充"):
+                in_zcode_supplement = True
+                continue
+            if in_zcode_supplement:
+                if line.startswith("## ") or line.startswith("### ") or line == "---":
+                    in_zcode_supplement = False
+                    # 落到下方正常处理（不 continue）
+                else:
+                    continue
+
+            # 删除"（ZCode 还需额外...）"括号提示（视角提示，允许差异）
+            # 归一化后是"（__TOOL_NAME__ 还需额外...）"
+            line = re.sub(r'（__TOOL_NAME__ 还需额外[^）]*）', '', line)
+
+            # 删除"+「§8 通用工程纪律」"短语（视角提示）
+            line = line.replace(" + 「§8 通用工程纪律」", "")
+            line = line.replace("+「§8 通用工程纪律」", "")
+
+            # 跳过 Code Review 通用清单中的「ZCode 专属补充」标记行
+            if "__TOOL_NAME__ 专属补充" in line:
+                continue
+
+        result.append(line)
+
+    return "\n".join(result)
+
+
+def main() -> int:
+    # 只在 CLAUDE.md 或 AGENTS.md 在暂存区时触发
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        capture_output=True,
+        text=True,
+    )
+    staged = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    if "CLAUDE.md" not in staged and "AGENTS.md" not in staged:
+        return 0  # 不涉及，放行
+
+    claude_path = Path("CLAUDE.md")
+    agents_path = Path("AGENTS.md")
+    if not claude_path.exists() or not agents_path.exists():
+        return 0  # 文件不存在（异常情况），放行
+
+    claude_norm = normalize(claude_path.read_text(), is_agents=False)
+    agents_norm = normalize(agents_path.read_text(), is_agents=True)
+
+    if claude_norm == agents_norm:
+        return 0  # 同步，放行
+
+    # 不同步，列出差异
+    import difflib
+    diff = list(
+        difflib.unified_diff(
+            claude_norm.split("\n"),
+            agents_norm.split("\n"),
+            fromfile="CLAUDE.md (normalized)",
+            tofile="AGENTS.md (normalized)",
+            lineterm="",
+        )
+    )
+
+    print("=" * 70)
+    print("❌ CLAUDE.md ↔ AGENTS.md 不同步")
+    print("=" * 70)
+    print()
+    print("本次 commit 涉及 CLAUDE.md 或 AGENTS.md，但归一化后两边内容不一致。")
+    print()
+    print("📋 已知允许的差异（normalization 已排除，无需补同步）：")
+    print("  1. AGENTS.md §8「通用工程纪律」整段（🔒 受保护）")
+    print("  2. AGENTS.md Code Review ZCode 专属补充整段 + 通用清单 4 项标记")
+    print("  3. AGENTS.md 中「（ZCode 还需额外...）」括号提示")
+    print("  4. AGENTS.md 中「+「§8 通用工程纪律」」短语")
+    print("  5. 视角词替换：'Claude Code' ↔ 'ZCode'")
+    print("  6. 文件名替换：'CLAUDE.md' ↔ 'AGENTS.md'")
+    print("  7. 「最后更新」行的时间戳/描述")
+    print()
+    print("📋 未同步差异（normalized diff，前 150 行）：")
+    print("-" * 70)
+    for line in diff[:150]:
+        print(line)
+    if len(diff) > 150:
+        print(f"... (more {len(diff) - 150} lines)")
+    print()
+    print("=" * 70)
+    print("❓ 处理方式：")
+    print("   - 按 wiki/process/dual-tool-sync.md 同步 → 重新 git commit")
+    print("   - 确认为误报（hook 规则未覆盖的允许差异）→ git commit --no-verify")
+    print("     ⚠️  使用 --no-verify 后请在 wiki/process/dual-tool-sync.md 补充新规则")
+    print("=" * 70)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
