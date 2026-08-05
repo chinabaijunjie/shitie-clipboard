@@ -1,13 +1,13 @@
 /**
  * 轻量事件总线 — 应用内 pub/sub
  *
- * 用于解耦模块之间的非直接调用通信（如：sidecar 启动后通知 UI、
- * 任务完成后刷新列表）。跨窗口/跨进程通信走 Tauri Events，不走这里。
+ * 用于解耦模块之间的非直接调用通信(如:主题切换后通知 UI 刷新)。
+ * 跨窗口/跨进程通信走 Tauri Events,不走这里。
  *
- * 使用方式：
+ * 使用方式:
  *   import { eventBus } from '@core/events'
- *   const off = eventBus.on('item:created', (payload) => {})
- *   eventBus.emit('item:created', { id: '1' })
+ *   const off = eventBus.on('theme:changed', () => {})
+ *   eventBus.emit('theme:changed')
  *   off() // 卸载时取消订阅
  */
 
@@ -53,11 +53,8 @@ class EventBus {
 export const eventBus = new EventBus()
 
 // ============================================================
-// 全局事件名常量（避免拼写错误，业务工程起步时在此追加业务事件）
+// 全局事件名常量(避免拼写错误)
 // ============================================================
 export const EVENTS = {
-  SIDECAR_STARTED: 'sidecar:started',
-  SIDECAR_STOPPED: 'sidecar:stopped',
-  SIDECAR_HEALTH_CHANGED: 'sidecar:health-changed',
   THEME_CHANGED: 'theme:changed',
 } as const

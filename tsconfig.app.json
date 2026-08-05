@@ -21,10 +21,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@core/*": ["./src/core/*"],
-      "@modules/*": ["./src/modules/*"],
+      "@lib/*": ["./src/lib/*"],
       "@components/*": ["./src/components/*"],
-      "@pages/*": ["./src/pages/*"],
-      "@styles/*": ["./src/styles/*"]
+      "@pages/*": ["./src/pages/*"]
     },
     "types": []
   },

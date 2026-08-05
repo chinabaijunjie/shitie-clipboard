@@ -11,10 +11,9 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@core': path.resolve(__dirname, './src/core'),
-      '@modules': path.resolve(__dirname, './src/modules'),
+      '@lib': path.resolve(__dirname, './src/lib'),
       '@components': path.resolve(__dirname, './src/components'),
       '@pages': path.resolve(__dirname, './src/pages'),
-      '@styles': path.resolve(__dirname, './src/styles'),
     },
   },
   // Tauri 在 dev 模式下用固定端口 5173
@@ -25,8 +24,8 @@ export default defineConfig({
     host: host || false,
     hmr: process.env.TAURI_STAGE === 'tauri' ? { protocol: 'ws', host, port: 1421 } : undefined,
     watch: {
-      // 不监听 src-tauri / backend，避免 Rust/Python 改动触发前端热重载
-      ignored: ['**/src-tauri/**', '**/backend/**'],
+      // 不监听 src-tauri,避免 Rust 改动触发前端热重载
+      ignored: ['**/src-tauri/**'],
     },
   },
 })

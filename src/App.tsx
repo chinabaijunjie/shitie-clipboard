@@ -1,21 +1,15 @@
 /**
  * App — 应用根组件
  *
- * 启动守卫模式：SetupGate 等待 Python sidecar 就绪后再渲染主应用内容。
- * sidecar 启动期间显示 SplashScreen（loading），就绪后渲染主应用。
+ * Spotlight 风格应用:无 SetupGate 启动守卫(Rust 即时启动,不需要等 sidecar 解压)。
+ * 后端就绪探活由 SpotlightPanel 内部 invoke ping 完成。
  *
- * 业务工程起步时，在此接入主应用 Layout + 路由（react-router）+ 业务页面。
- * 模板用单页面 HomePage 演示前端调后端全链路。
+ * M1 起此组件接入剪贴板历史列表 + 键盘导航。
  */
-import { SetupGate } from '@components/business/SetupGate'
-import { HomePage } from '@pages/HomePage'
+import { SpotlightPanel } from '@components/SpotlightPanel'
 
 function App() {
-  return (
-    <SetupGate>
-      <HomePage />
-    </SetupGate>
-  )
+  return <SpotlightPanel />
 }
 
 export default App
