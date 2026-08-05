@@ -1,12 +1,22 @@
 ---
-title: 闲时任务交接文档 — M0 架构清理
-tags: [闲时任务, 交接, M0, 架构清理, sidecar-removal]
+title: 闲时任务交接文档 — M0 架构清理（已归档·被新规划替代）
+tags: [闲时任务, 交接, M0, 架构清理, sidecar-removal, 归档]
 created: 2026-08-05
 updated: 2026-08-05
-status: ready-for-idle-task
+status: archived-superseded
+superseded_by: ../m0-plan.md
 ---
 
 # 闲时任务交接文档 — M0 架构清理
+
+> ⚠️ **本文档已于 2026-08-05 归档,被 [[../m0-plan]] 替代。**
+>
+> **归档原因**:用户重新明确了产品定位(轻量常驻的剪贴板历史工具),
+> 决定采用更激进的精简策略(换 UI 栈、删启动守卫、Spotlight 窗口形态等),
+> 超出本文档「保留 wiki sidecar 方法论的温和迁移」范围。新规划见 `../m0-plan.md`。
+>
+> **本文档保留作为历史轨迹**(遵循 engineering-principles §1.4 不删原文原则)。
+> 下方内容是归档时的原始版本,不再代表当前任务。
 
 > **本文档是闲时任务的入口**。如果你是被闲时任务唤起的 AI,请**先完整读完本文件**,
 > 再按「必读文档清单」读相关 wiki,然后开始执行「M0 任务」。

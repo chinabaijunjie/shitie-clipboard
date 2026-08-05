@@ -2,7 +2,7 @@
 title: 知识库总索引（门面）
 tags: [索引, 门面, 导航]
 created: 2026-06-29
-updated: 2026-06-29
+updated: 2026-08-05
 status: active
 ---
 
@@ -13,13 +13,17 @@ status: active
 
 ---
 
-## 🚨 当前任务（闲时任务 / 新会话 AI 必读）
+## 🚨 当前任务（M0 架构清理 + Spotlight UI 骨架）
 
-> **如果你是被闲时任务唤起的 AI，或新窗口第一次进入本工程**：
-> 直接读 **[[dev/idle-task-context]]** —— 它是当前任务（M0 架构清理）的完整交接文档，
-> 包含项目背景、任务详情、必读文档清单、施工步骤、完成判据、验证流程。
+> **当前任务**:M0 — 把工程从「Tauri + Python sidecar 双进程」激进精简成
+> 「纯 Rust 单进程 + Spotlight 风格剪贴板工具」骨架。
 >
-> **不要从零摸索**，先读交接文档再开工。
+> **必读**:[[dev/m0-plan]] —— 完整 M0 规划(产品定位 / 技术栈 / 资产处置 /
+> 8 阶段施工步骤 / 验证流程)。
+>
+> **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
+> 被新规划替代(变更原因见归档文档顶部)。sidecar 方法论删前留档见
+> [[dev/archive/sidecar-methodology-extract]]。
 
 ---
 
@@ -61,16 +65,19 @@ status: active
 - [[reflux-signals]] — 🔴 回流信号清单（AI 主动识别用）
 
 ### dev/（进度 + TODO + 启动包）
-- [[idle-task-context]] — 🚨 **当前任务交接文档**（M0 架构清理，闲时任务入口）
-- [[progress]] — 开发进度（状态唯一真相源）
-- [[TODO]] — 全局 TODO
-- [[new-session-starter]] — 新窗口启动包
+- [[dev/m0-plan]] — 🚨 **当前任务规划**(M0 架构清理 + Spotlight UI 骨架)
+- [[dev/progress]] — 开发进度（状态唯一真相源）
+- [[dev/TODO]] — 全局 TODO
+- [[dev/new-session-starter]] — 新窗口启动包
+- [[dev/archive]] — 历史归档(旧规划 / 删前留档)
 
 ## 关键资产优先级
 
 ```
-sidecar.rs（三重兜底进程管理）   > 前后端错误码契约
-> paths.py（frozen 路径解析）    > engineering-principles（20 条工程纪律）
-> database.py（SQLite 加固）     > SetupGate（启动守卫）
-> 会话收尾 8 步清单              > 双工具同步 pre-commit hook
+engineering-principles（20 条工程纪律）> 会话收尾 8 步清单
+> Tauri v2 setup 时序坑（constraints）> 双工具同步 pre-commit hook
+> m0-plan（当前任务规划）
 ```
+
+> ⚠️ sidecar.rs / paths.py / database.py 等 sidecar 时代资产在 M0 后已删,
+> 方法论摘要见 [[dev/archive/sidecar-methodology-extract]](模板母体仍用)。
