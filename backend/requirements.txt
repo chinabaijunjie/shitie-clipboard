@@ -1,9 +1,0 @@
-# FastAPI sidecar 运行时依赖（conda 环境复用，版本对齐 ai-audiobook cosyvoice）
-fastapi>=0.115
-uvicorn>=0.30
-sqlalchemy>=2.0
-aiosqlite>=0.20
-pydantic>=2.5
-alembic>=1.13
-# 凭据加密（core/crypto.py — Fernet 对称加密，存第三方 API key 等敏感凭据）
-cryptography>=42.0
