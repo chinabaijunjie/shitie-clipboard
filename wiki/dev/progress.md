@@ -12,11 +12,28 @@ status: active
 
 ## 当前状态
 
-- **模板版本**：v1.2.0（2026-07-03 新增版本 bump 规则 + 同步锚点机制）
-- **后端测试**：18 passed（unit 4 + integration 6 + api 8)
-- **前端**：tsc 通过 + vite build 通过
-- **Rust**：cargo check 通过 + cargo test 10 passed
-- **打包**：PyInstaller onefile binary 31M，health 200 + items CRUD 通
+- **项目**：Clipboard Manager（剪贴板历史管理应用）
+- **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
+- **当前里程碑**：M0 架构清理（sidecar → 纯 Rust）— **未开始**
+- **架构现状**：仍是模板的 sidecar 架构（Tauri + Python FastAPI 双进程），尚未改造
+- **M0 任务详情**：[[idle-task-context]]
+- **下次目标**：执行 M0 架构清理（详见 [[TODO]]）
+
+## 本工程开发历史
+
+### 工程初始化（2026-08-05）
+
+- 从模板 `tauri-sidecar-template` 通过 `scripts/init-project.sh` 复制创建
+- 占位符替换：tauri-sidecar-template → clipboard-manager（19 个文件）
+- git init + 首次 commit `ac02fed`
+- 规划 M0 架构清理任务，交接文档 [[idle-task-context]] 写入
+- 入口文档（index.md / new-session-starter.md / TODO.md）更新，指向交接文档
+
+---
+
+## 以下为模板母体历史（本工程出身参考，不再维护）
+
+> 本工程从模板复制，模板的开发历史保留如下供追溯。本工程自己的进度在上方维护。
 
 ## 历史版本
 

@@ -15,7 +15,12 @@ status: ready-to-use
 **复制以下整段**到新窗口：
 
 ```
-继续 <项目名> 工作。
+继续 Clipboard Manager 工作。
+
+## 🚨 当前任务入口
+
+先读 wiki/dev/idle-task-context.md —— 它是当前任务（M0 架构清理）的完整交接文档。
+按文档里的「必读文档清单」和「施工步骤」执行。
 
 ## 当前状态 & 下次目标
 
@@ -23,13 +28,11 @@ status: ready-to-use
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
 
 ## 必读文档
-1. AGENTS.md（AI 启动 3 步 + §8 通用工程纪律）
-2. wiki/architecture/engineering-principles.md（20 条通用工程纪律）
-3. wiki/dev/progress.md（当前状态）
-4. wiki/dev/TODO.md（下次目标）
-
-## 本次目标
-<填入本次会话目标>
+1. wiki/dev/idle-task-context.md（🚨 当前任务交接，最重要）
+2. AGENTS.md（AI 启动 3 步 + §8 通用工程纪律）
+3. wiki/architecture/engineering-principles.md（20 条通用工程纪律）
+4. wiki/dev/progress.md（当前状态）
+5. wiki/dev/TODO.md（下次目标）
 ```
 
 ---
