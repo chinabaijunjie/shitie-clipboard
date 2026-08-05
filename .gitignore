@@ -1,35 +1,19 @@
-# 用户数据（运行时生成）
+# 用户数据(运行时生成)
 *.db
 *.db-journal
-sidecar.pid
 
 # macOS
 .DS_Store
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-.eggs/
-venv/
-.venv/
 
 # 构建产物
 dist/
 build/
 !src-tauri/build/
-!backend/build/
-backend/build/*
-!backend/build/*.spec
 
-# 测试产物（pytest-cov 等）
+# 测试产物
 .coverage
 .coverage.*
 htmlcov/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 
 # Node
 node_modules/
@@ -54,9 +38,5 @@ src-tauri/gen/
 *.app
 *.tsbuildinfo
 
-# PyInstaller 产物（构建生成，不入 git，但保留目录结构）
-resources/bin/*
-!resources/bin/.gitkeep
-
-# Git worktrees（多窗口并行开发隔离目录）
+# Git worktrees(多窗口并行开发隔离目录)
 .worktrees/
