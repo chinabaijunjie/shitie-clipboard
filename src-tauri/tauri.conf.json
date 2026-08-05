@@ -12,18 +12,21 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Clipboard Manager",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 1024,
-        "minHeight": 640,
-        "resizable": true,
+        "width": 600,
+        "height": 480,
+        "resizable": false,
         "fullscreen": false,
         "center": true,
-        "titleBarStyle": "Overlay",
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
         "hiddenTitle": true
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     }
@@ -31,9 +34,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": {
-      "../resources/bin/": "resources/bin/"
-    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
