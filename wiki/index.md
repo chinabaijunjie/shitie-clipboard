@@ -32,16 +32,14 @@ status: active
 | 你想做什么 | 用什么文档 |
 |-----------|-----------|
 | 查工程纪律（修 bug / 重构 / 新功能） | [[architecture/engineering-principles]]（20 条）|
-| 查技术红线（端口对齐 / 错误码镜像 / frozen 路径）| [[architecture/constraints]] |
+| 查技术红线（Tauri setup 时序坑 / SQLite / tokio）| [[architecture/constraints]] |
 | 查架构（进程模型 / 分层 / 关键资产）| [[architecture/overview]] |
 | 查 AI 协作风格（"你定吧" / 自动决策）| [[process/ai-collaboration-style]] |
 | commit 前 / Stage 自检 | [[process/code-review-checklist]] |
 | 会话收尾 | [[dev/session-checklist]]（8 步）|
 | 改 AGENTS.md / CLAUDE.md | [[process/dual-tool-sync]] |
 | 写/改 wiki 内容（防膨胀）| [[process/knowledge-base-guide]] |
-| 🔴 剥离 sidecar 改 Rust 原生后端 | [[process/sidecar-to-rust-migration-guide]]（含 Tauri v2 setup 时序坑）|
-| 🔴 模板回流（新工程成果回流模板）| [[process/template-evolution-guide]] |
-| 🔴 开发中怎么发现回流候选（AI 主动识别）| [[process/reflux-signals]] |
+| 查当前任务规划（M0/M1+）| [[dev/m0-plan]] |
 | 查进度 / 下次目标 | [[dev/progress]] + [[dev/TODO]] |
 | 跨会话恢复 | [[dev/new-session-starter]] |
 | 查历史决策案例 | [[architecture/decision-cases]]（生长型）|
@@ -60,9 +58,8 @@ status: active
 - [[knowledge-base-guide]] — 知识库内容规范（防膨胀）
 - [[dual-tool-sync]] — 双工具同步契约
 - [[ai-collaboration-style]] — AI 协作风格（13 条 + 分块逐项决策）
-- [[sidecar-to-rust-migration-guide]] — 🔴 sidecar→Rust 原生迁移指南（回流自 pixel-matrix）
-- [[template-evolution-guide]] — 🔴 模板回流机制（母体进化核心）
-- [[reflux-signals]] — 🔴 回流信号清单（AI 主动识别用）
+- [[sidecar-to-rust-migration-guide]] — sidecar→Rust 原生迁移指南(参考,M0 已执行)
+- [[archive]] — 已归档流程文档(回流机制等模板母体专用)
 
 ### dev/（进度 + TODO + 启动包）
 - [[dev/m0-plan]] — 🚨 **当前任务规划**(M0 架构清理 + Spotlight UI 骨架)

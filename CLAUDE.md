@@ -1,4 +1,4 @@
-# Clipboard Manager — 通用工程模板
+# Clipboard Manager — 剪贴板历史管理工具
 
 > 本文件是 **规则手册 + 知识库入口**。
 >
@@ -7,12 +7,14 @@
 
 ## 项目简介
 
-**Clipboard Manager** 是 Tauri 2 + React 18 + Python FastAPI sidecar 的通用工程模板。
+**Clipboard Manager** 是轻量常驻的剪贴板历史管理桌面应用。
 
-**技术栈**：Tauri 2.x + React 18 + Ant Design 5 + Python 3.10 (FastAPI sidecar)
+**技术栈**：Tauri 2.x(Rust) + React 18 + TypeScript + Tailwind CSS + shadcn/ui
 
-**定位**：持续进化的母体——新工程从模板复制起步，开发成果提炼后回流模板，让模板不断进化。
-详见 `README.md`「进化模式」段 + `wiki/process/template-evolution-guide.md`。
+**架构**：纯 Tauri 单进程(Rust 既是壳也是后端),无 Python sidecar / 无 HTTP / 无独立后端服务。
+前端与 Rust 通过 Tauri invoke 直接通信。
+
+**出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建,M0 已完成架构清理(sidecar→纯 Rust)。
 
 ---
 
@@ -32,12 +34,10 @@
 ```
 clipboard-manager/
 ├── CLAUDE.md / AGENTS.md    ← 工程说明（双工具同步，见 wiki/process/dual-tool-sync.md）
-├── README.md                ← 模板使用说明（含进化模式）
-├── CHANGELOG.md             ← 版本追溯（母体进化记录）
-├── src/                     ← React 前端（pages/modules/components/core）
-├── src-tauri/               ← Tauri 2 Rust 层（sidecar 进程管理）
-├── backend/                 ← Python FastAPI sidecar（api/services/core 四层 + tests）
-├── scripts/                 ← 工具脚本（build-sidecar.sh / hooks/）
+├── README.md                ← 产品说明 + 安装运行
+├── src/                     ← React 前端（components/core/lib + SpotlightPanel）
+├── src-tauri/               ← Tauri 2 Rust 层（commands/ + error.rs + AppState）
+├── scripts/                 ← 工具脚本（hooks/pre-commit 双工具同步检查）
 └── wiki/                    ← 项目知识库（架构 / 决策 / 流程）
 ```
 
@@ -47,11 +47,10 @@ clipboard-manager/
 
 ## 开发环境
 
-- **conda 环境**：复用任意含 FastAPI/uvicorn/sqlalchemy/alembic 的 Python 环境
-  （开发期通过 `SIDECAR_DEV_PYTHON` 环境变量指定解释器，见 `.env.example`）
-- **端口**：sidecar 9880（三处对齐：Rust sidecar.rs + config.py + constants.ts）
+- **Node + Rust**：`npm install` 装前端依赖;Rust 用系统 toolchain(无需 conda/Python 环境)
+- **无端口**：纯 Tauri 单进程,前端与 Rust 通过 invoke 直接通信(无 HTTP / 无 sidecar 端口)
 
-技术红线（端口对齐 / 错误码镜像 / frozen 路径 / SQLite PRAGMA / alembic 适配）详见
+技术红线（Tauri v2 setup 时序坑 / SQLite PRAGMA）详见
 `wiki/architecture/constraints.md`——**开发前必读**。
 
 ---
@@ -74,11 +73,11 @@ clipboard-manager/
 | 你想做什么 | 用什么工具 |
 |-----------|-----------|
 | 查工程纪律：修 bug / 重构 / 新功能 | `wiki/architecture/engineering-principles.md`（20 条）|
-| 查约束：技术红线（端口 / 错误码 / frozen / SQLite）| `wiki/architecture/constraints.md` |
+| 查约束：技术红线（Tauri setup 时序坑 / SQLite）| `wiki/architecture/constraints.md` |
 | 查架构：进程模型 / 分层 / 关键资产 | `wiki/architecture/overview.md` |
 | 查进度：当前 TODO / 历史 | `wiki/dev/TODO.md` + `wiki/dev/progress.md` |
 | 跨会话恢复 | `wiki/dev/new-session-starter.md` |
-| 🔴 模板回流（成果回流模板）| `wiki/process/template-evolution-guide.md` |
+| 查当前任务规划（M0/M1+）| `wiki/dev/m0-plan.md` |
 
 ---
 
@@ -89,15 +88,12 @@ clipboard-manager/
 - **写/改 wiki 内容前**先读 `wiki/process/knowledge-base-guide.md`（防膨胀）
 - **改 AGENTS.md 后必须同步 CLAUDE.md**（除 §8 受保护内容，详见 `wiki/process/dual-tool-sync.md`）
 - **进度追踪**：每完成一个任务项立即更新 `wiki/dev/progress.md` + `wiki/dev/TODO.md`
-- **改动生效验证**（改完代码主动让服务加载新代码，不等用户提醒）：改后端 `.py` → 主动重启 sidecar；改前端 `.ts/.tsx` → 提示用户刷新浏览器；改 `src-tauri/` → 告知需重跑 tauri dev
+- **改动生效验证**（改完代码主动让服务加载新代码，不等用户提醒）：改前端 `.ts/.tsx` → 提示用户刷新浏览器；改 `src-tauri/` → 告知需重跑 tauri dev
 - **会话结束时**（识别到结束信号即启动）：
   - ⚠️ **第一件事：读 `wiki/dev/session-checklist.md` 按清单收尾**
   - 触发词：「存档」「下次继续」「换个新窗口」「今天先到这」「收尾」「结束」等
   - 收尾完成后**主动向用户报告核查结果**
-- **🔴 子工程回流识别**（本工程是模板子工程时）：每次干活多扫一眼当前任务涉及的代码/设计，
-  对照 `wiki/process/reflux-signals.md` 信号清单判断"这块通用吗"。命中信号 → **主动提示用户**
-  并记入 `wiki/dev/REFLUX-CANDIDATES.md`。用户专注业务，AI 负责"盯回流候选"。
 
 ---
 
-_最后更新：2026-06-29（模板 v1.0.0 初始落地）_
+_最后更新：2026-08-05（M0 架构清理完成,定位改为剪贴板应用）_

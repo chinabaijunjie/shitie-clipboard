@@ -1,9 +1,47 @@
 # Changelog
 
-> 模板版本追溯。每次回流记录：日期 + 来源工程 + 回流内容 + 通用化处理。
-> 详见 `wiki/process/template-evolution-guide.md`。
+> 本文件分两部分:
+> - **上方**:本工程(clipboard-manager)自己的变更记录
+> - **下方**(分割线后):模板母体 `tauri-sidecar-template` 的历史版本追溯(本工程出身参考,不再维护)
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [语义化版本](https://semver.org/)。
+
+## [Unreleased] - 2026-08-05
+
+### M0 架构清理 + Spotlight UI 骨架
+
+本工程从模板 `tauri-sidecar-template` 复制创建后,执行的首次架构改造:
+从「Tauri + Python sidecar 双进程模板」改造为「纯 Tauri 单进程剪贴板工具骨架」。
+
+**删除**(sidecar 架构产物):
+- `backend/` 整个目录(35 个 Python 文件:FastAPI + SQLAlchemy + alembic + tests)
+- `src-tauri/src/sidecar.rs`(817 行三重兜底进程管理,方法论已归档)
+- `scripts/build-sidecar.sh` + `scripts/init-project.sh`(模板母体专用脚本)
+- 前端 axios / antd / @ant-design/icons / react-router-dom 依赖
+
+**新增**(剪贴板工具骨架):
+- `src-tauri/src/error.rs` — AppError 错误契约(`{code, message}` 序列化)
+- `src-tauri/src/commands/` — ping 探活 command(M1+ 加 clipboard/storage)
+- `src/components/SpotlightPanel.tsx` — Spotlight 风格主面板(invoke ping 探活)
+- `src/core/api/invoke.ts` — Tauri invoke 通信层封装(call + InvokeError)
+- `tailwind.config.js` + `src/index.css` — Tailwind + shadcn 主题变量
+- `src/lib/utils.ts` — shadcn cn() helper
+
+**改造**:
+- Rust 侧:tokio features 收紧(删 process/fs/io-util)+ Spotlight 窗口配置(无边框/透明/置顶)
+- 前端:换栈 Tailwind + shadcn/ui,删 SetupGate 启动守卫,删 styles 旧样式
+- 文档:定位从「模板母体」改为「剪贴板应用」,回流机制归档
+
+**验证**:cargo check 零 warning + cargo test ping 通过 + npm build 41 modules + npm test 7 passed
+
+详见 `wiki/dev/m0-plan.md` + `wiki/dev/progress.md`。
+
+---
+
+## 以下为模板母体历史(本工程出身参考,不再维护)
+
+> 本工程 2026-08-05 从模板 `tauri-sidecar-template` 复制创建。
+> 下方是模板母体的版本变更记录,保留作为出身参考。本工程自己的变更记录在上方。
 
 ## [1.2.0] - 2026-07-03
 

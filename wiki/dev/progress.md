@@ -2,7 +2,7 @@
 title: 开发进度（状态唯一真相源）
 tags: [进度, 状态]
 created: 2026-06-29
-updated: 2026-07-03
+updated: 2026-08-05
 status: active
 ---
 
@@ -12,22 +12,46 @@ status: active
 
 ## 当前状态
 
-- **项目**：Clipboard Manager（剪贴板历史管理应用）
+- **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M0 架构清理（sidecar → 纯 Rust）— **未开始**
-- **架构现状**：仍是模板的 sidecar 架构（Tauri + Python FastAPI 双进程），尚未改造
-- **M0 任务详情**：[[idle-task-context]]
-- **下次目标**：执行 M0 架构清理（详见 [[TODO]]）
+- **当前里程碑**：M0 架构清理 + Spotlight UI 骨架 — **✅ 完成**(commit `ff3b92d` 等)
+- **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
+- **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
+- **验证基线**：cargo check 零 warning + cargo test ping 通过 + npm build 41 modules + npm test 7 passed
+- **下次目标**：M1 macOS 剪贴板监听 MVP（详见 [[TODO]]）
 
 ## 本工程开发历史
+
+### M0 架构清理 + Spotlight UI 骨架（2026-08-05）
+
+8 阶段施工,从「Tauri + Python sidecar 双进程模板」改造为「纯 Rust 单进程剪贴板工具骨架」:
+
+- **阶段 A**(`06f1892`):归档旧 M0 规划 + 落盘新 M0 规划 + sidecar 方法论删前留档
+- **阶段 B**(`93da773`):删除 backend/ + sidecar.rs + build-sidecar.sh(3409 行)
+- **阶段 C**(`3d30b48`):Rust 侧改造(error.rs + commands/ping + Spotlight 窗口配置)
+  - 踩坑:transparent:true 必须配合 Cargo.toml tauri features=["macos-private-api"]
+  - 踩坑:generate_handler! 宏对模块路径解析有限制,改 use 别名裸名注册
+- **阶段 D+E**(`4a03c33`):前端换栈 Tailwind+shadcn,删 axios/AntD/路由,重建 invoke 通信层
+  - 踩坑:CSS 文件 JSDoc 风格多行注释(含 `bg-*`)让 PostCSS parser 报错,精简单行注释
+- **阶段 F**(`ff3b92d`):清理配置/脚本/环境变量(.env.example + init-project.sh + .gitignore)
+- **阶段 G**:文档同步(AGENTS/CLAUDE/README + wiki 架构文档,定位改为剪贴板应用)
+- **阶段 H**:启动实测验证
+
+**关键技术决策**(产品定位明确后重新规划):
+- UI:Tailwind + shadcn/ui(换掉 AntD,轻量 + 键盘导航友好)
+- 窗口:Spotlight 风格(无边框/透明/置顶/失焦隐藏,600×480)
+- 剪贴板(M1+):平台原生 API(macOS NSPasteboard / Windows Win32)
+- 监听(M1+):原生事件(changeCount / AddClipboardFormatListener)
+- 存储(M1+):rusqlite + refinery
+- 前端通信:Tauri invoke(换掉 axios,无 HTTP)
+- 路由:删除 react-router-dom(单窗口不需要)
 
 ### 工程初始化（2026-08-05）
 
 - 从模板 `tauri-sidecar-template` 通过 `scripts/init-project.sh` 复制创建
 - 占位符替换：tauri-sidecar-template → clipboard-manager（19 个文件）
 - git init + 首次 commit `ac02fed`
-- 规划 M0 架构清理任务，交接文档 [[idle-task-context]] 写入
-- 入口文档（index.md / new-session-starter.md / TODO.md）更新，指向交接文档
+- 规划 M0 架构清理任务
 
 ---
 
