@@ -11,6 +11,13 @@
 //! ⚠️ 容错(spike 实测发现):
 //! - get_text() 在无文本格式时报错(文件 URL 场景),必须先 available_formats() 判断
 //! - 读/写任何一步失败都只 log,不 panic(watcher 崩了监听就断了)
+//!
+//! M2:多格式捕获。on_clipboard_change 流程:
+//! 1. consume_self_write(防反馈循环,M1 机制保留)
+//! 2. available_formats → classify_formats(白/黑名单决策)
+//! 3. capture_multi 读多格式 → classify_content_kind
+//! 4. generate_title 按 kind 生成标题
+//! 5. insert_or_update_multi 写 DB + emit 前端
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -19,31 +26,12 @@ use clipboard_rs::{Clipboard, ClipboardHandler};
 use rusqlite::Connection;
 use tauri::{AppHandle, Emitter};
 
-use crate::storage::items;
-
-/// 纯文本 UTI(白名单:只有含此格式的复制才捕获,M1 只处理文本)。
-pub const UTI_PLAIN_TEXT: &str = "public.utf8-plain-text";
+use crate::clipboard::capture::{self, CaptureDecision};
+use crate::clipboard::title;
+use crate::storage::items::{self, FormatInput};
 
 /// 前端监听的事件名(新增或去重更新一条时推送)。
 pub const CLIPBOARD_ADDED_EVENT: &str = "clipboard://added";
-
-/// 判断是否应该捕获当前剪贴板内容(纯函数,可单测)。
-///
-/// 决策规则(M1):
-/// - 含 `public.utf8-plain-text` 格式 → 捕获(返回 true)
-/// - 不含文本格式(文件/图片等)→ 跳过(M1 不处理)
-///
-/// `available_formats` 为剪贴板当前所有 UTI 列表。
-pub fn should_capture(available_formats: &[String]) -> bool {
-    available_formats.iter().any(|f| f == UTI_PLAIN_TEXT)
-}
-
-/// 判断文本是否值得入库(纯函数,可单测)。
-///
-/// 空文本(用户清空剪贴板等)不入库。
-pub fn is_worth_storing(text: &str) -> bool {
-    !text.is_empty()
-}
 
 /// 消费自身写入标志,决定是否跳过本次剪贴板变化(纯函数,可单测)。
 ///
@@ -55,6 +43,25 @@ pub fn is_worth_storing(text: &str) -> bool {
 /// 这把「反馈循环防护」的核心决策从 handler 的私有方法提升为可测的纯函数。
 pub fn should_skip_by_flag(flag: &std::sync::atomic::AtomicBool) -> bool {
     flag.swap(false, Ordering::SeqCst)
+}
+
+/// 判断是否应跳过空捕获(纯函数,可单测)。
+///
+/// 业务契约:用户清空剪贴板时,clipboard-rs 会触发变化但内容为空。
+/// - 只有纯文本格式 + trim 后为空 → 跳过(空内容不入库)
+/// - 有多种格式(如 rtf + 空 text)→ 不跳过(其他格式可能是有效的)
+/// - 有图片/文件格式 → 不跳过(即使无文本也是有效内容)
+pub fn should_skip_empty_capture(formats: &[crate::clipboard::capture::CapturedFormat]) -> bool {
+    use crate::clipboard::uti::UTI_PLAIN_TEXT;
+    // 只有纯文本格式时才考虑跳过
+    if formats.len() != 1 {
+        return false;
+    }
+    let only = &formats[0];
+    if only.uti != UTI_PLAIN_TEXT {
+        return false;
+    }
+    String::from_utf8_lossy(&only.data).trim().is_empty()
 }
 
 /// 剪贴板变化处理器。
@@ -100,45 +107,66 @@ impl ClipboardChangeHandler {
 impl ClipboardHandler for ClipboardChangeHandler {
     fn on_clipboard_change(&mut self) {
         // 0. 消费自身写入标志:copy_back 刚写过剪贴板,这次变化是自身写入,跳过。
-        //    (防反馈循环:copy_back set_text → changeCount 变 → watcher 捕获 → copy_count 虚高)
+        //    (防反馈循环:copy_back set → changeCount 变 → watcher 捕获 → copy_count 虚高)
         if self.consume_self_write() {
             log::debug!("[clipboard] 跳过自身写入(copy_back 触发)");
             return;
         }
 
-        // 1. 判断是否含纯文本格式(spike 实测:文件场景无文本格式,get_text 会报错)
-        let formats = match self.clipboard.available_formats() {
+        // 1. 读剪贴板所有 UTI
+        let available_formats = match self.clipboard.available_formats() {
             Ok(f) => f,
             Err(e) => {
                 log::warn!("[clipboard] available_formats 失败,跳过: {e}");
                 return;
             }
         };
-        if !should_capture(&formats) {
-            // 非文本内容(文件/图片等),M1 不处理,静默跳过(不是错误)
-            return;
-        }
 
-        // 2. 读纯文本
-        let text = match self.clipboard.get_text() {
-            Ok(t) => t,
+        // 2. 分类:隐私跳过 / 白名单交集(纯函数决策)
+        let decision = capture::classify_formats(&available_formats);
+        let CaptureDecision::Capture(to_capture_utis) = decision else {
+            // 隐私跳过 或 无白名单格式,静默跳过(不是错误)
+            return;
+        };
+
+        // 3. 读多格式内容(阶段 B:文本/富文本/文件;图片留阶段 C)
+        let captured = match capture::capture_multi(&self.clipboard, &to_capture_utis) {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                // 纯图片场景(无文本类格式),阶段 B 不处理,留阶段 C
+                log::debug!("[clipboard] 纯图片内容,阶段 B 跳过(留阶段 C)");
+                return;
+            }
             Err(e) => {
-                log::warn!("[clipboard] get_text 失败,跳过: {e}");
+                log::warn!("[clipboard] capture_multi 失败,跳过 [{}]: {}", e.code, e.message);
                 return;
             }
         };
 
-        // 3. 空文本跳过(用户清空剪贴板等)
-        if !is_worth_storing(&text) {
+        // 4. 空内容跳过(如清空剪贴板):只有纯文本且 trim 后为空时跳过
+        //    (图片/文件即使内容「空」也是有效内容)
+        if should_skip_empty_capture(&captured.formats) {
             return;
         }
 
-        // 4. 写 DB(去重插入或更新)+ emit 前端
-        match items::insert_or_update(&self.db, &text) {
+        // 5. 生成标题 + 转成 FormatInput 写 DB
+        let title_str = title::generate_title(&captured.formats, captured.kind);
+        let format_inputs: Vec<FormatInput<'_>> = captured
+            .formats
+            .iter()
+            .map(|f| FormatInput {
+                uti: &f.uti,
+                data: &f.data,
+                file_path: None, // 阶段 B 无图片,文本类格式不走 file_path
+            })
+            .collect();
+
+        match items::insert_or_update_multi(&self.db, &format_inputs, captured.kind, &title_str) {
             Ok(item) => {
                 log::info!(
-                    "[clipboard] 捕获: id={} title={:?}",
+                    "[clipboard] 捕获: id={} kind={:?} title={:?}",
                     item.id,
+                    item.content_kind,
                     item.title.chars().take(30).collect::<String>()
                 );
                 if let Err(e) = self.app.emit(CLIPBOARD_ADDED_EVENT, &item) {
@@ -146,7 +174,6 @@ impl ClipboardHandler for ClipboardChangeHandler {
                 }
             }
             Err(e) => {
-                // DB 写入失败:log 完整错误码+消息,但不中断监听(让 watcher 继续跑)
                 log::error!("[clipboard] 写 DB 失败 [{}]: {}", e.code, e.message);
             }
         }
@@ -156,57 +183,44 @@ impl ClipboardHandler for ClipboardChangeHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::clipboard::capture::CapturedFormat;
+
+    fn fmt(uti: &str, data: &str) -> CapturedFormat {
+        CapturedFormat {
+            uti: uti.to_string(),
+            data: data.as_bytes().to_vec(),
+        }
+    }
 
     #[test]
-    fn should_capture_true_when_plain_text_present() {
-        // 真实纯文本复制:含 public.utf8-plain-text(spike 实测格式)
+    fn should_skip_empty_capture_skips_empty_text() {
+        // 用户清空剪贴板:只有空文本 → 跳过
+        assert!(should_skip_empty_capture(&[fmt("public.utf8-plain-text", "")]));
+        assert!(should_skip_empty_capture(&[fmt("public.utf8-plain-text", "   ")]));
+        assert!(should_skip_empty_capture(&[fmt("public.utf8-plain-text", "\t\n")]));
+    }
+
+    #[test]
+    fn should_skip_empty_capture_keeps_nonempty_text() {
+        assert!(!should_skip_empty_capture(&[fmt("public.utf8-plain-text", "有内容")]));
+        assert!(!should_skip_empty_capture(&[fmt("public.utf8-plain-text", "  x  ")]));
+    }
+
+    #[test]
+    fn should_skip_empty_capture_keeps_multi_format() {
+        // 多格式(即使 text 为空)不跳过:其他格式可能有效
         let formats = vec![
-            "public.utf8-plain-text".to_string(),
-            "NSStringPboardType".to_string(),
+            fmt("public.utf8-plain-text", ""),
+            fmt("public.rtf", "{\\rtf1 内容}"),
         ];
-        assert!(should_capture(&formats));
+        assert!(!should_skip_empty_capture(&formats));
     }
 
     #[test]
-    fn should_capture_false_when_no_text_format() {
-        // 文件 URL 场景(spike 实测:无文本格式)
-        let formats = vec![
-            "com.apple.alias-record".to_string(),
-            "CorePasteboardFlavorType 0x616C6973".to_string(),
-        ];
-        assert!(!should_capture(&formats));
-    }
-
-    #[test]
-    fn should_capture_false_when_empty_formats() {
-        assert!(!should_capture(&[]));
-    }
-
-    #[test]
-    fn is_worth_storing_rejects_empty() {
-        // 空字符串拒(用户清空剪贴板场景)
-        assert!(!is_worth_storing(""));
-    }
-
-    #[test]
-    fn is_worth_storing_keeps_whitespace() {
-        // 纯空格/制表符:is_empty()=false,会被存储。
-        // M1 有意保留(用户可能真复制了空格/缩进)。若要拒纯空白,M2 加 trim 判断。
-        assert!(is_worth_storing("   "));
-        assert!(is_worth_storing("\t\n"));
-    }
-
-    #[test]
-    fn is_worth_storing_accepts_nonempty() {
-        assert!(is_worth_storing("a"));
-        assert!(is_worth_storing("中文内容"));
-        assert!(is_worth_storing("  有内容的文本  "));
-    }
-
-    #[test]
-    fn plain_text_uti_constant() {
-        // 确保 UTI 字符串与系统一致(spike 实测值)
-        assert_eq!(UTI_PLAIN_TEXT, "public.utf8-plain-text");
+    fn should_skip_empty_capture_keeps_non_text() {
+        // 图片/文件格式即使内容「空」也不跳过(有效内容)
+        assert!(!should_skip_empty_capture(&[fmt("public.png", "")]));
+        assert!(!should_skip_empty_capture(&[fmt("public.file-url", "")]));
     }
 
     #[test]

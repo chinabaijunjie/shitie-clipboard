@@ -15,7 +15,10 @@
 //! ⚠️ 平台边界:clipboard-rs 屏蔽平台差异(M1 macOS 轮询 / M3 Windows 原生事件),
 //! 本模块代码平台无关,M3 加 Windows 时此处零改动。
 
+pub mod capture;
 pub mod handler;
+pub mod title;
+pub mod uti;
 
 use std::{
     path::Path,
