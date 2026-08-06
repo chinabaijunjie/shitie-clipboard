@@ -22,6 +22,7 @@ mod storage;
 
 use std::sync::Mutex;
 
+use commands::clipboard::{copy_back, delete_item, list_items};
 use commands::ping::ping;
 use tauri::Manager;
 
@@ -92,7 +93,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ping,
-            // 阶段 C 追加:list_items / copy_back / delete_item
+            list_items,
+            copy_back,
+            delete_item,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

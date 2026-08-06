@@ -31,8 +31,10 @@ pub mod codes {
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
     /// 资源不存在(M1:剪贴板条目 id 查不到)
     pub const NOT_FOUND: &str = "NOT_FOUND";
+    /// 写剪贴板失败(M1:copy_back 写回失败)
+    pub const CLIPBOARD_WRITE_FAILED: &str = "CLIPBOARD_WRITE_FAILED";
     // M1 起按剪贴板业务追加:
-    //   CLIPBOARD_READ_FAILED — 读剪贴板失败(阶段 B)
+    //   CLIPBOARD_READ_FAILED — 读剪贴板失败(若需与 handler 的 warn 区分)
     //   DATABASE_ERROR — DB 操作失败(若需与 INTERNAL_ERROR 区分)
 }
 

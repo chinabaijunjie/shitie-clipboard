@@ -32,6 +32,10 @@ export const InvokeErrorCode = {
   UNKNOWN: 'UNKNOWN',
   /** 内部错误(服务端异常) */
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  /** 资源不存在(M1:剪贴板条目 id 查不到) */
+  NOT_FOUND: 'NOT_FOUND',
+  /** 写剪贴板失败(M1:copy_back 写回失败) */
+  CLIPBOARD_WRITE_FAILED: 'CLIPBOARD_WRITE_FAILED',
 } as const
 
 export type InvokeErrorCode = (typeof InvokeErrorCode)[keyof typeof InvokeErrorCode]
