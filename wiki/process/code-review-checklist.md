@@ -10,8 +10,13 @@ status: active
 
 > **触发场景**：commit 前 / 每个 Stage 完成后自检。
 >
-> **两道防线**：本清单（第一道，自检）+ 深度 review（第二道，feature 分支合并 master 前用
-> 多 agent 并行深度 review）。
+> **两道防线**：本清单（第一道，自检）+ 深度 review（第二道，合并前强制用
+> `zcode-pr-review` Skill 跑多 agent 并行深度 review）。
+>
+> 🔒 **第二道防线是强制的**：任何「一批改动准备合并/收尾」前(里程碑结束、feature 分支合 master、
+> 或会话结束前的代码冻结),**必须**用 `zcode-pr-review` Skill 跑深度 review,**不允许**用单个
+> 轻量 reviewer 糊弄(那达不到深度审查效果)。历史教训:M1 收尾时这个 review 发现了置信 92 的
+> Critical bug(copy_back 反馈循环),单靠自检清单发现不了。
 
 ## Python 后端检查清单
 

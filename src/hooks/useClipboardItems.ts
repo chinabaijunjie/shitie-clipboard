@@ -15,6 +15,7 @@ import { listen } from '@tauri-apps/api/event'
 
 import { call } from '@core/api'
 import { TAURI_EVENTS } from '@core/events'
+import { ClipboardItemListSchema, ClipboardItemSchema } from '@core/types'
 import type { ClipboardItem } from '@core/types'
 
 /** 列表默认拉取条数(与 Rust DEFAULT_LIST_LIMIT 对齐) */
@@ -57,7 +58,9 @@ export function useClipboardItems(): UseClipboardItemsResult {
 
     const load = async () => {
       try {
-        const list = await call<ClipboardItem[]>('list_items', { limit: DEFAULT_LIMIT })
+        const raw = await call<unknown>('list_items', { limit: DEFAULT_LIMIT })
+        // §8 边界校验:后端响应进入即用 Zod 校验,畸形数据快速失败
+        const list = ClipboardItemListSchema.parse(raw)
         if (!cancelled) {
           setItems(list)
           setLoading(false)
@@ -73,20 +76,28 @@ export function useClipboardItems(): UseClipboardItemsResult {
     void load()
 
     // 监听后端新增/更新事件
-    const unlisten = listen<ClipboardItem>(TAURI_EVENTS.CLIPBOARD_ADDED, (event) => {
+    const unlistenPromise = listen<unknown>(TAURI_EVENTS.CLIPBOARD_ADDED, (event) => {
       if (cancelled) return
-      setItems((prev) => applyAddedItem(prev, event.payload))
+      try {
+        // §8 边界校验:事件 payload 同样经 Zod 校验
+        const item = ClipboardItemSchema.parse(event.payload)
+        setItems((prev) => applyAddedItem(prev, item))
+      } catch (e) {
+        console.error('[clipboard] added 事件 payload 校验失败:', e)
+      }
     })
 
     return () => {
       cancelled = true
-      void unlisten.then((fn) => fn())
+      // 处理 listen Promise rejection(注册失败时),避免 unhandled rejection
+      unlistenPromise.catch((e) => console.error('[clipboard] listen 注册失败:', e))
+      void unlistenPromise.then((fn) => fn())
     }
   }, [])
 
   const deleteItem = async (id: number) => {
     await call('delete_item', { id })
-    // 乐观更新:先移除本地(不可变)
+    // 后端确认成功后,移除本地(不可变更新)
     setItems((prev) => removeItem(prev, id))
   }
 

@@ -9,9 +9,6 @@
 // M1 阶段 A:存储层先建,阶段 B(watcher)/C(command)接线前公开 API 暂未使用。
 // 阶段 B/C 接线后移除此 allow。
 #![allow(dead_code)]
-//!
-//! 数据库 schema 见 storage/mod.rs。本类型是「列表展示用」的精简视图,
-//! 不直接映射整张表(formats 走独立的 storage 层读写)。
 
 use serde::{Deserialize, Serialize};
 
@@ -37,8 +34,12 @@ impl ContentKind {
     pub fn from_db_str(s: &str) -> Self {
         match s {
             "text" => ContentKind::Text,
-            // M2 起会对未知值返回错误或扩展更多变体
-            _ => ContentKind::Text,
+            // M2 起会对未知值返回错误或扩展更多变体。
+            // 当前静默回退为 Text,但 log 让回退可观测(避免掩盖 DB 数据问题)。
+            unknown => {
+                log::warn!("[models] 未知 content_kind 值 {:?},回退为 text", unknown);
+                ContentKind::Text
+            }
         }
     }
 }

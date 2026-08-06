@@ -24,9 +24,10 @@ status: active
 ### 0. 检查分支状态 + 合并 + 清理
 
 - [ ] 检查当前分支（`git branch --show-current`）+ 有无未提交代码
-- [ ] feature 分支合并 master 前**必须做 code review**（多 agent 并行深度 review）
+- [ ] feature 分支合并 master 前 / 里程碑代码冻结前,**必须用 `zcode-pr-review` Skill 跑深度 review**
+  (多 agent 并行,不允许用单个轻量 reviewer 替代;历史教训:M1 收尾时它发现了置信 92 的 Critical bug)
+  - master 上的小改动(纯文档/单行修复)可豁免
 - [ ] 已合并的 feature 分支清理删除
-- [ ] master 上的小改动（文档/单行修复）可豁免 review
 
 ### 1. 进度记录 → `progress.md`
 

@@ -45,6 +45,18 @@ pub fn is_worth_storing(text: &str) -> bool {
     !text.is_empty()
 }
 
+/// 消费自身写入标志,决定是否跳过本次剪贴板变化(纯函数,可单测)。
+///
+/// 业务契约(copy_back 反馈循环防护):
+/// - 标志被置位(copy_back 写剪贴板前 mark)→ 返回 true(跳过本次,这是自身写入)
+/// - 标志未置位(用户真实复制)→ 返回 false(正常捕获)
+///
+/// 用 swap(false) 消费:保证只跳过一次,下一次变化(真实复制)正常处理。
+/// 这把「反馈循环防护」的核心决策从 handler 的私有方法提升为可测的纯函数。
+pub fn should_skip_by_flag(flag: &std::sync::atomic::AtomicBool) -> bool {
+    flag.swap(false, Ordering::SeqCst)
+}
+
 /// 剪贴板变化处理器。
 ///
 /// 持有独立的 DB 连接(本线程创建,WAL 模式下与其他连接并发安全)
@@ -81,7 +93,7 @@ impl ClipboardChangeHandler {
     /// 消费自身写入标志。返回 true 表示「这是 copy_back 自身写入,应跳过」。
     /// 用 swap 而非 load+store,保证只消费一次(避免并发竞态)。
     fn consume_self_write(&self) -> bool {
-        self.self_write_flag.swap(false, Ordering::SeqCst)
+        should_skip_by_flag(&self.self_write_flag)
     }
 }
 
@@ -198,22 +210,25 @@ mod tests {
     }
 
     #[test]
-    fn self_write_flag_consume_once_semantics() {
-        // 防反馈循环的核心机制:标志位只能被消费一次
-        // (copy_back 置 true → watcher 第一次 on_clipboard_change 消费返回 true 跳过
-        //  → 标志清零,后续真实复制正常捕获)
-        let flag = Arc::new(AtomicBool::new(false));
+    fn should_skip_by_flag_skips_when_marked() {
+        // 业务契约:copy_back 置位后,handler 应跳过本次变化(防反馈循环)
+        let flag = AtomicBool::new(false);
+        flag.store(true, Ordering::SeqCst); // 模拟 copy_back mark_self_write
+        assert!(should_skip_by_flag(&flag), "置位后应跳过(自身写入)");
+    }
 
-        // 初始:false(不跳过)
-        assert!(!flag.swap(false, Ordering::SeqCst));
+    #[test]
+    fn should_skip_by_flag_captures_when_not_marked() {
+        // 业务契约:未置位时(用户真实复制),不跳过,正常捕获
+        let flag = AtomicBool::new(false);
+        assert!(!should_skip_by_flag(&flag), "未置位应正常捕获");
+    }
 
-        // copy_back 置位
-        flag.store(true, Ordering::SeqCst);
-
-        // watcher 第一次消费:返回 true(跳过自身写入),并清零
-        assert!(flag.swap(false, Ordering::SeqCst));
-
-        // 第二次消费(真实复制):返回 false(不跳过,正常捕获)
-        assert!(!flag.swap(false, Ordering::SeqCst));
+    #[test]
+    fn should_skip_by_flag_consumes_once() {
+        // 业务契约:标志只跳过一次(消费语义),下一次变化正常捕获
+        let flag = AtomicBool::new(true);
+        assert!(should_skip_by_flag(&flag), "第一次:跳过自身写入");
+        assert!(!should_skip_by_flag(&flag), "第二次:已消费,正常捕获真实复制");
     }
 }

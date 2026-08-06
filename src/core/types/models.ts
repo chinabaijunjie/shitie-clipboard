@@ -3,17 +3,35 @@
  *
  * 与 Rust 侧 serde 序列化输出对齐(m1-plan.md 第三节)。
  * Rust: src-tauri/src/models.rs ClipboardItem。
+ *
+ * 字段全 readonly:编译期阻止 mutate(§8 不可变性原则)。
+ * 后端响应经 Zod schema 校验后才赋值(§8 边界校验,见 ClipboardItemSchema)。
  */
+import { z } from 'zod'
+
+/** ClipboardItem 的 Zod schema(校验后端 invoke 返回,§8 边界校验) */
+export const ClipboardItemSchema = z.object({
+  id: z.number(),
+  firstCopiedAt: z.number(),
+  lastCopiedAt: z.number(),
+  copyCount: z.number(),
+  title: z.string(),
+  contentKind: z.literal('text'), // M1 固定,M2 扩展为 enum
+})
+
+/** 列表的 Zod schema */
+export const ClipboardItemListSchema = z.array(ClipboardItemSchema)
+
 export interface ClipboardItem {
-  id: number
+  readonly id: number
   /** 首次复制时间(unix epoch ms) */
-  firstCopiedAt: number
+  readonly firstCopiedAt: number
   /** 最近复制时间(unix epoch ms) */
-  lastCopiedAt: number
+  readonly lastCopiedAt: number
   /** 复制次数(去重时累加) */
-  copyCount: number
+  readonly copyCount: number
   /** 列表预览文本 */
-  title: string
+  readonly title: string
   /** 内容类型(M1 固定 text,M2 扩展为联合类型) */
-  contentKind: 'text'
+  readonly contentKind: 'text'
 }
