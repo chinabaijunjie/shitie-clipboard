@@ -2,8 +2,8 @@
 title: M1 规划 — macOS 剪贴板监听 MVP
 tags: [M1, 规划, 剪贴板, 监听, rusqlite, 历史列表, 回填]
 created: 2026-08-05
-updated: 2026-08-05
-status: active
+updated: 2026-08-06
+status: done
 tech_base: ./m1-research.md
 ---
 

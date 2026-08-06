@@ -13,14 +13,14 @@ status: active
 
 ---
 
-## 🚨 当前状态(M1 进行中)
+## 🚨 当前状态(M1 完成,下一步 M2)
 
-> **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架。详见 [[dev/progress]]。
+> **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架。
+> **M1 已完成**(2026-08-06):macOS 剪贴板监听 MVP,端到端实测 6 项全通过。
+> 详见 [[dev/progress]] + [[dev/m1-plan]](done)+ [[dev/m1-research]](技术依据)。
 >
-> **M1 进行中**:macOS 剪贴板监听 MVP。
-> - 技术调研 + spike 已完成 → [[dev/m1-research]](clipboard-rs 选定,线程崩溃坑已验证不触发)
-> - 规划已落盘 → [[dev/m1-plan]](5 阶段:存储/监听/命令/UI/实测)
-> - 下一步:阶段 A rusqlite 存储层。详见 [[dev/TODO]]。
+> **下一步:M2** 搜索 + 富文本/图片支持(SQLite FTS5 + 多格式)。
+> M3 常驻体验(快捷键唤起/托盘/自启/Windows)交互已确认:唤起+回车回填。详见 [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
 > sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。

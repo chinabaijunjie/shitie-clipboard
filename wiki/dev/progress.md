@@ -2,7 +2,7 @@
 title: 开发进度（状态唯一真相源）
 tags: [进度, 状态]
 created: 2026-06-29
-updated: 2026-08-05
+updated: 2026-08-06
 status: active
 ---
 
@@ -14,12 +14,12 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M1 macOS 剪贴板监听 MVP — **进行中**(调研 + spike 完成,规划已落盘)
+- **当前里程碑**：M1 macOS 剪贴板监听 MVP — **✅ 完成**(2026-08-06,端到端实测 6 项全通过)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
-  + clipboard-rs 0.3(剪贴板读写/监听,M1 引入)
-- **验证基线**：cargo check 零 warning + cargo test ping 通过 + npm build 43 modules + npm test 7 passed
-- **下一步**：M1 阶段 A — rusqlite 存储层(详见 [[m1-plan]] 七、施工阶段)
+  + clipboard-rs 0.3(剪贴板读写/监听)+ rusqlite 0.31(存储,bundled)
+- **验证基线**：cargo test 27 passed + npm test 20 passed + npm build 43 modules,全绿零 warning
+- **下一步**：M2 搜索 + 富文本/图片支持(SQLite FTS5 + 多格式);M3 常驻体验(快捷键唤起/托盘/自启/Windows)
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -33,6 +33,34 @@ status: active
   - 实测发现:`get_text()` 无文本格式时报错(文件场景),正式实现需 `available_formats()` 容错
 - **M1 规划落盘**(见 [[m1-plan]]):5 阶段(存储/监听/命令/UI/实测)
 - **Spike 代码**:`spike_clipboard.rs` + `SpikeClipboardProbe.tsx` 临时验证,阶段 B 演化删除
+
+## M1 实施完成记录(2026-08-06)
+
+5 阶段施工,全链路打通:复制文字 → 监听捕获 → 存 DB → 列表展示 → 上下键 → 回车回填。
+
+- **阶段 A**(`1c41df7`):rusqlite 存储层(items/formats 两表 + CRUD + 15 单测)
+  - 决策调整(动态校准):migration 用手写 `CREATE TABLE IF NOT EXISTS`,不引 refinery(过重)
+  - 踩坑:`execute_batch` 的反斜杠续行让 SQL `--` 注释吞掉建表语句,改 raw string 修复
+- **阶段 B**(`08e230b`):剪贴板监听层(clipboard-rs watcher 后台线程 → DB → emit 前端)
+  - 模块化:`clipboard/mod.rs`(生命周期)+ `handler.rs`(捕获逻辑),平台无关
+  - watcher 线程内开独立 DB 连接(Connection 非 Send;WAL 模式并发安全)
+  - 删 spike 临时代码,演化成正式模块
+- **随写随测纪律落地**(`63ac4ea`):用户强调最高优先级工程纪律,补 handler 7 单测 + 写进核心原则 8 / §1.22
+- **阶段 C**(`2c40f58`):command 接口(list_items / copy_back / delete_item)+ 错误码两端同步
+  - 两层结构:核心逻辑函数(接 &Connection,可测)+ command 包装(接 State)
+- **阶段 D**(`edbe2b0`):前端历史列表 UI(types/hook/ClipboardList/SpotlightPanel)
+  - 键盘交互:↑↓ 循环导航 / ⏎ 回填 / ⌫ 删除
+  - 踩坑:vite/tsconfig/vitest 三处别名要同步加 @hooks(vitest 有独立 config 不读 vite)
+- **阶段 E**:端到端实测 6 项全通过(复制实时更新 / 导航循环 / 回车回填 / 去重 ×N / 删除 / 中文代码)
+
+**M1 期间确立的两条核心工程纪律**(用户强调,已进跨会话必读):
+- 核心原则 7 / §1.21:模块化·高内聚低耦合(大模型开发复杂度控制根基)
+- 核心原则 8 / §1.22:随写随测(写完+测完+通过才算闭环)
+
+**M1 遗留 → M3 决策**(用户确认):
+- 窗口常驻问题(visible:true)→ M3 做全局快捷键唤起/隐藏
+- 交互方案:唤起 + 回车回填(主流方案,Maccy/Flycut 同款)
+- ⚠️ 「松手回填」做不到:Tauri 全局快捷键只支持 keydown 不支持 keyup([文档](https://v2.tauri.app/reference/javascript/global-shortcut/)),要松手检测需 OS hook(rdev/Carbon)+ 触发辅助功能权限,工程量大,M3 不做
 
 ## 本工程开发历史
 
