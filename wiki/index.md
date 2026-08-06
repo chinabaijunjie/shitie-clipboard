@@ -31,7 +31,7 @@ status: active
 
 | 你想做什么 | 用什么文档 |
 |-----------|-----------|
-| 查工程纪律（修 bug / 重构 / 新功能） | [[architecture/engineering-principles]]（21 条）|
+| 查工程纪律（修 bug / 重构 / 新功能） | [[architecture/engineering-principles]]（22 条）|
 | 查技术红线（Tauri setup 时序坑 / SQLite / tokio）| [[architecture/constraints]] |
 | 查架构（进程模型 / 分层 / 关键资产）| [[architecture/overview]] |
 | 查 AI 协作风格（"你定吧" / 自动决策）| [[process/ai-collaboration-style]] |
@@ -48,7 +48,7 @@ status: active
 ## 分类导航
 
 ### architecture/（架构 + 约束 + 决策原则）
-- [[engineering-principles]] — ⭐ 21 条通用工程纪律（核心）
+- [[engineering-principles]] — ⭐ 22 条通用工程纪律（核心）
 - [[constraints]] — 技术硬约束（红线）
 - [[overview]] — 架构概述（进程模型 / 分层 / 关键资产）
 - [[decision-cases]] — 历史决策案例（生长型）
@@ -74,7 +74,7 @@ status: active
 ## 关键资产优先级
 
 ```
-engineering-principles（21 条工程纪律）> 会话收尾 8 步清单
+engineering-principles（22 条工程纪律）> 会话收尾 8 步清单
 > Tauri v2 setup 时序坑（constraints）> 双工具同步 pre-commit hook
 > m1-plan（当前任务规划）+ m1-research（技术依据）
 ```
