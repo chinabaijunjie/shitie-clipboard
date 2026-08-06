@@ -9,7 +9,9 @@
 
 mod commands;
 mod error;
+mod models;
 mod spike_clipboard; // 🔬 M1 spike,验证完演化为正式模块或删除
+mod storage;
 
 // 把 command 函数 use 到当前作用域,generate_handler! 直接用裸名注册。
 // (宏对模块路径解析有限制,use 别名最可靠)

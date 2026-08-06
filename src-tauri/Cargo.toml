@@ -30,6 +30,10 @@ tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread", "time"
 # 选型决策见 wiki/dev/m1-research.md。
 clipboard-rs = { version = "0.3", features = ["image"] }
 
+# M1 存储:rusqlite。bundled = 静态编译 SQLite,不依赖系统 libsqlite3(桌面应用跨机一致)。
+# migration:M1 用手写 CREATE TABLE IF NOT EXISTS(幂等);长期演进再引 rusqlite_migration。
+rusqlite = { version = "0.31", features = ["bundled"] }
+
 [features]
 # 默认特性
 default = []

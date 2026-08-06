@@ -29,6 +29,11 @@ pub mod codes {
     pub const UNKNOWN: &str = "UNKNOWN";
     /// 内部错误(服务端异常,日志排查用)
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
+    /// 资源不存在(M1:剪贴板条目 id 查不到)
+    pub const NOT_FOUND: &str = "NOT_FOUND";
+    // M1 起按剪贴板业务追加:
+    //   CLIPBOARD_READ_FAILED — 读剪贴板失败(阶段 B)
+    //   DATABASE_ERROR — DB 操作失败(若需与 INTERNAL_ERROR 区分)
 }
 
 /// Tauri command 统一错误类型,序列化为 `{ code, message }` 给前端。
