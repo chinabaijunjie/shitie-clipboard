@@ -19,7 +19,6 @@ import { useEffect, useState } from 'react'
 
 import { call } from '@core/api'
 import { cn } from '@lib/utils'
-import { SpikeClipboardProbe } from '@components/SpikeClipboardProbe'
 
 type ProbeStatus = 'checking' | 'ready' | 'timeout'
 
@@ -87,8 +86,6 @@ export function SpotlightPanel() {
           <p className="text-xs text-muted-foreground/70">
             (M0 占位 · 等待 M1 剪贴板功能)
           </p>
-          {/* 🔬 M1 spike 临时验证区,验证完删除 */}
-          <SpikeClipboardProbe />
         </>
       )}
 
