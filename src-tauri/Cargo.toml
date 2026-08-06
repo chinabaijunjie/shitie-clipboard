@@ -26,6 +26,10 @@ tauri-plugin-log = "2"
 # ❌ 禁止引 fs feature:文件 IO 走 spawn_blocking(constraints.md)
 tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread", "time"] }
 
+# M1 spike:剪贴板读写 + 监听。image feature 启用 ContentFormat::Image / ClipboardContent::Image。
+# 选型决策见 wiki/dev/m1-research.md。
+clipboard-rs = { version = "0.3", features = ["image"] }
+
 [features]
 # 默认特性
 default = []

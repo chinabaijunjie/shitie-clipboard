@@ -14,11 +14,25 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M0 架构清理 + Spotlight UI 骨架 — **✅ 完成**(commit `ff3b92d` 等)
+- **当前里程碑**：M1 macOS 剪贴板监听 MVP — **进行中**(调研 + spike 完成,规划已落盘)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
-- **验证基线**：cargo check 零 warning + cargo test ping 通过 + npm build 41 modules + npm test 7 passed
-- **下次目标**：M1 macOS 剪贴板监听 MVP（详见 [[TODO]]）
+  + clipboard-rs 0.3(剪贴板读写/监听,M1 引入)
+- **验证基线**：cargo check 零 warning + cargo test ping 通过 + npm build 43 modules + npm test 7 passed
+- **下一步**：M1 阶段 A — rusqlite 存储层(详见 [[m1-plan]] 七、施工阶段)
+
+## M1 调研 + Spike 记录(2026-08-05)
+
+- **技术调研**(见 [[m1-research]]):三块并行调研
+  - 监听机制:macOS 无原生通知,只能轮询 changeCount(500ms 共识值)
+  - crate 选型:**clipboard-rs**(用户决策:功能全 + 后期可 fork;放弃 arboard 因能力受限)
+  - 多格式存储:items + formats 一对多两表(照搬 Maccy/Ditto),图片混合存储(Raycast 方案)
+- **Spike 验证**(见 [[m1-research]] 第四节):
+  - 🔴 核心验证:**clipboard-rs watcher 在 Tauri 后台线程不触发 NSPasteboard 崩溃**(5 次实测通过)
+  - → M1 监听架构定:后台线程 + clipboard-rs watcher,无需 dispatch 主线程
+  - 实测发现:`get_text()` 无文本格式时报错(文件场景),正式实现需 `available_formats()` 容错
+- **M1 规划落盘**(见 [[m1-plan]]):5 阶段(存储/监听/命令/UI/实测)
+- **Spike 代码**:`spike_clipboard.rs` + `SpikeClipboardProbe.tsx` 临时验证,阶段 B 演化删除
 
 ## 本工程开发历史
 

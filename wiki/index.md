@@ -13,13 +13,14 @@ status: active
 
 ---
 
-## 🚨 当前状态(M0 完成,下一步 M1)
+## 🚨 当前状态(M1 进行中)
 
-> **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架,8 阶段 7 commit。
-> 详见 [[dev/m0-plan]](规划)+ [[dev/progress]](完成记录)。
+> **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架。详见 [[dev/progress]]。
 >
-> **下一步:M1 macOS 剪贴板监听 MVP**(NSPasteboard.changeCount + rusqlite + 历史列表 + 回填)。
-> M1 启动前需先做技术 spike + 规划文档(§1.16)。详见 [[dev/TODO]]。
+> **M1 进行中**:macOS 剪贴板监听 MVP。
+> - 技术调研 + spike 已完成 → [[dev/m1-research]](clipboard-rs 选定,线程崩溃坑已验证不触发)
+> - 规划已落盘 → [[dev/m1-plan]](5 阶段:存储/监听/命令/UI/实测)
+> - 下一步:阶段 A rusqlite 存储层。详见 [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
 > sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。
@@ -38,7 +39,8 @@ status: active
 | 会话收尾 | [[dev/session-checklist]]（8 步）|
 | 改 AGENTS.md / CLAUDE.md | [[process/dual-tool-sync]] |
 | 写/改 wiki 内容（防膨胀）| [[process/knowledge-base-guide]] |
-| 查当前任务规划（M0/M1+）| [[dev/m0-plan]] |
+| 查当前任务规划（M1）| [[dev/m1-plan]] |
+| 查 M1 技术调研/spike | [[dev/m1-research]] |
 | 查进度 / 下次目标 | [[dev/progress]] + [[dev/TODO]] |
 | 跨会话恢复 | [[dev/new-session-starter]] |
 | 查历史决策案例 | [[architecture/decision-cases]]（生长型）|
@@ -61,7 +63,9 @@ status: active
 - [[archive]] — 已归档流程文档(回流机制等模板母体专用)
 
 ### dev/（进度 + TODO + 启动包）
-- [[dev/m0-plan]] — 🚨 **当前任务规划**(M0 架构清理 + Spotlight UI 骨架)
+- [[dev/m1-plan]] — 🚨 **当前任务规划**(M1 macOS 剪贴板监听 MVP)
+- [[dev/m1-research]] — M1 技术调研 + spike(clipboard-rs 选型依据)
+- [[dev/m0-plan]] — M0 规划(已完成,架构清理 + Spotlight UI 骨架)
 - [[dev/progress]] — 开发进度（状态唯一真相源）
 - [[dev/TODO]] — 全局 TODO
 - [[dev/new-session-starter]] — 新窗口启动包
@@ -72,7 +76,7 @@ status: active
 ```
 engineering-principles（20 条工程纪律）> 会话收尾 8 步清单
 > Tauri v2 setup 时序坑（constraints）> 双工具同步 pre-commit hook
-> m0-plan（当前任务规划）
+> m1-plan（当前任务规划）+ m1-research（技术依据）
 ```
 
 > ⚠️ sidecar.rs / paths.py / database.py 等 sidecar 时代资产在 M0 后已删,
