@@ -1,60 +1,68 @@
 /**
- * SpotlightPanel — Spotlight 风格主面板(M0 占位)
+ * SpotlightPanel — Spotlight 风格主面板(M1 历史列表)
  *
- * 窗口形态:无边框 + 透明 + 圆角 + 阴影(由 tauri.conf.json 配置 + index.css 适配)。
- * 本组件是 #root 内的实体面板容器。
+ * 窗口形态:无边框 + 透明 + 圆角 + 阴影(tauri.conf.json + index.css)。
  *
- * M0 职责:
- * - 调 invoke('ping') 探活,验证前后端通信链路
- * - 显示「后端就绪 / 等待 M1 剪贴板功能」占位
+ * M1 职责(容器):
+ * - 装配 useClipboardItems(数据)+ ClipboardList(展示)
+ * - 键盘交互:↑↓ 导航 / ⏎ 回填 / ⌫ 删除
+ * - 探活:M0 遗留的 ping 探活(列表加载成功即代表就绪)
  *
- * M1 起此组件改为剪贴板历史列表(上下键导航 + 点击回填)。
+ * 探活机制(constraints.md「Tauri v2 setup 时序坑」):用 invoke 调通即就绪。
  *
- * 探活机制(constraints.md「Tauri v2 setup 时序坑」):
- * - setup 不 emit 事件(早于 WebView JS,即发即弃)
- * - 组件 mount 时 invoke ping,带重试 + 超时兜底
- * - 调通 = 后端就绪(invoke 本身就是答案)
+ * 模块化(§1.21):本组件是容器,数据逻辑在 hook,展示在 ClipboardList,键盘导航
+ * 边界计算在 nextIndex 纯函数(可单测)。
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { call } from '@core/api'
+import { useClipboardItems } from '@hooks/useClipboardItems'
 import { cn } from '@lib/utils'
+import { ClipboardList } from '@components/ClipboardList'
 
 type ProbeStatus = 'checking' | 'ready' | 'timeout'
 
-/** 探活重试间隔(ms)—— invoke 早期偶发失败时重试 */
-const PROBE_INTERVAL_MS = 100
-/** 探活总超时(ms)—— 超过判定后端异常 */
+/** 探活超时(ms) */
 const PROBE_TIMEOUT_MS = 5000
 
-export function SpotlightPanel() {
-  const [status, setStatus] = useState<ProbeStatus>('checking')
+/**
+ * 计算键盘导航后的新索引(纯函数,可单测)。
+ *
+ * - 方向 -1 = 上,方向 +1 = 下
+ * - 循环:到顶按上 → 跳到底;到底按下 → 跳到顶
+ * - 空列表 → 始终 -1
+ */
+export function nextIndex(current: number, direction: -1 | 1, length: number): number {
+  if (length === 0) return -1
+  // (current + direction) 模 length,处理负数(上到顶循环到底)
+  return ((current + direction) % length + length) % length
+}
 
+export function SpotlightPanel() {
+  const { items, loading, error, deleteItem } = useClipboardItems()
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [probe, setProbe] = useState<ProbeStatus>('checking')
+
+  // 探活:M0 遗留逻辑,列表加载成功即代表后端就绪
   useEffect(() => {
     let cancelled = false
     const deadline = window.setTimeout(() => {
-      if (!cancelled) setStatus('timeout')
+      if (!cancelled) setProbe('timeout')
     }, PROBE_TIMEOUT_MS)
 
-    const probe = async () => {
+    const probeOnce = async () => {
       if (cancelled) return
       try {
         await call<string>('ping')
         if (!cancelled) {
-          // ⚠️ 成功后必须清除 deadline,否则 5 秒后 setTimeout 会用 'timeout' 覆盖 'ready'。
-          // 实测发现的竞态 bug:StrictMode 双渲染时两个 probe 竞争,deadline 覆盖 ready。
           window.clearTimeout(deadline)
-          setStatus('ready')
+          setProbe('ready')
         }
-      } catch (e) {
-        // invoke 失败(后端未就绪 / 序列化失败),重试。日志暴露根因(不静默吞错)
-        console.error('[probe] ping 失败,将重试:', e)
-        if (!cancelled) {
-          window.setTimeout(probe, PROBE_INTERVAL_MS)
-        }
+      } catch {
+        if (!cancelled) window.setTimeout(probeOnce, 100)
       }
     }
-    void probe()
+    void probeOnce()
 
     return () => {
       cancelled = true
@@ -62,38 +70,109 @@ export function SpotlightPanel() {
     }
   }, [])
 
+  // 选中索引边界保护:items 变化时不能越界
+  useEffect(() => {
+    if (selectedIndex >= items.length) {
+      setSelectedIndex(items.length > 0 ? 0 : -1)
+    }
+  }, [items.length, selectedIndex])
+
+  // 回填选中条目
+  const handleCopyBack = useCallback(
+    async (index: number) => {
+      const item = items[index]
+      if (!item) return
+      try {
+        await call<string>('copy_back', { id: item.id })
+      } catch (e) {
+        console.error('[copy_back] 失败:', e)
+      }
+    },
+    [items],
+  )
+
+  // 删除选中条目
+  const handleDelete = useCallback(
+    async (index: number) => {
+      const item = items[index]
+      if (!item) return
+      try {
+        await deleteItem(item.id)
+      } catch (e) {
+        console.error('[delete] 失败:', e)
+      }
+    },
+    [items, deleteItem],
+  )
+
+  // 键盘交互
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (items.length === 0) return
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault()
+          setSelectedIndex((i) => nextIndex(i, -1, items.length))
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          setSelectedIndex((i) => nextIndex(i, 1, items.length))
+          break
+        case 'Enter':
+          e.preventDefault()
+          void handleCopyBack(selectedIndex)
+          break
+        case 'Backspace':
+        case 'Delete':
+          e.preventDefault()
+          void handleDelete(selectedIndex)
+          break
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [items.length, selectedIndex, handleCopyBack, handleDelete])
+
   return (
     <div
       data-tauri-drag-region
       className={cn(
-        'flex h-full w-full flex-col items-center justify-center gap-3',
-        'rounded-lg border border-border bg-background text-foreground shadow-2xl',
+        'flex h-full w-full flex-col rounded-lg border border-border bg-background text-foreground shadow-2xl',
       )}
     >
-      <h1 className="text-sm font-semibold tracking-wide text-foreground">
-        Clipboard Manager
-      </h1>
+      {/* 顶栏:标题 + 状态 */}
+      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+        <span className="text-xs font-semibold tracking-wide">Clipboard Manager</span>
+        <span className="text-[10px] text-muted-foreground">
+          {probe === 'ready' ? (
+            <span className="text-primary">●</span>
+          ) : probe === 'checking' ? (
+            '连接中…'
+          ) : (
+            <span className="text-destructive">● 超时</span>
+          )}
+        </span>
+      </div>
 
-      {status === 'checking' && (
-        <p className="text-xs text-muted-foreground">正在连接后端…</p>
-      )}
+      {/* 列表区 */}
+      <div className="flex-1 overflow-hidden">
+        {error ? (
+          <p className="py-8 text-center text-xs text-destructive">加载失败:{error}</p>
+        ) : loading ? (
+          <p className="py-8 text-center text-xs text-muted-foreground">加载中…</p>
+        ) : (
+          <ClipboardList
+            items={items}
+            selectedIndex={selectedIndex}
+            onSelect={setSelectedIndex}
+          />
+        )}
+      </div>
 
-      {status === 'ready' && (
-        <>
-          <p className="text-xs text-muted-foreground">
-            <span className="text-primary">●</span> 后端就绪
-          </p>
-          <p className="text-xs text-muted-foreground/70">
-            (M0 占位 · 等待 M1 剪贴板功能)
-          </p>
-        </>
-      )}
-
-      {status === 'timeout' && (
-        <p className="text-xs text-destructive">
-          后端连接超时,请重启应用
-        </p>
-      )}
+      {/* 底栏:快捷键提示 */}
+      <div className="border-t border-border/50 px-3 py-1.5 text-[10px] text-muted-foreground/70">
+        ↑↓ 导航 · ⏎ 回填 · ⌫ 删除
+      </div>
     </div>
   )
 }

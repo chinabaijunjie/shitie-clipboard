@@ -58,3 +58,12 @@ export const eventBus = new EventBus()
 export const EVENTS = {
   THEME_CHANGED: 'theme:changed',
 } as const
+
+// ============================================================
+// Tauri 事件名(后端 emit → 前端 listen,与 Rust 侧重名)
+// 与 clipboard/handler.rs CLIPBOARD_ADDED_EVENT 对齐
+// ============================================================
+export const TAURI_EVENTS = {
+  /** 新增或去重更新一条剪贴板记录(watcher 捕获后 emit) */
+  CLIPBOARD_ADDED: 'clipboard://added',
+} as const

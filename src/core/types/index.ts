@@ -1,6 +1,6 @@
 /**
  * 业务类型出口
  *
- * M0 阶段无业务实体类型(M1 起定义 ClipboardItem 等)。
+ * 与 Rust 侧 serde 序列化输出对齐。
  */
-export {}
+export type { ClipboardItem } from './models'

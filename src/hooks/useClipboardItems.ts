@@ -1,0 +1,94 @@
+/**
+ * useClipboardItems — 剪贴板历史列表数据 hook
+ *
+ * 职责(单一):管理剪贴板列表数据状态。
+ * - 初次加载:invoke('list_items')
+ * - 实时更新:listen('clipboard://added') → 把新条目前置(去重)
+ * - 删除:invoke('delete_item') → 从列表移除
+ *
+ * 不关心 UI 怎么展示(那是 ClipboardList 的事),不关心键盘交互(那是 SpotlightPanel 的事)。
+ *
+ * 随写随测(§1.22):列表更新逻辑抽成纯函数 applyAddedItem / removeItem,可单测。
+ */
+import { useEffect, useState } from 'react'
+import { listen } from '@tauri-apps/api/event'
+
+import { call } from '@core/api'
+import { TAURI_EVENTS } from '@core/events'
+import type { ClipboardItem } from '@core/types'
+
+/** 列表默认拉取条数(与 Rust DEFAULT_LIST_LIMIT 对齐) */
+const DEFAULT_LIMIT = 50
+
+/**
+ * 把新增/更新的条目前置到列表(不可变更新)。
+ *
+ * - 若已存在同 id → 移到最前,更新字段(copy_count/lastCopiedAt 等)
+ * - 若不存在 → 放到最前
+ *
+ * 纯函数,可单测。
+ */
+export function applyAddedItem(items: ClipboardItem[], added: ClipboardItem): ClipboardItem[] {
+  const filtered = items.filter((it) => it.id !== added.id)
+  return [added, ...filtered]
+}
+
+/** 从列表移除指定 id(不可变更新)。纯函数,可单测。 */
+export function removeItem(items: ClipboardItem[], id: number): ClipboardItem[] {
+  return items.filter((it) => it.id !== id)
+}
+
+export interface UseClipboardItemsResult {
+  items: ClipboardItem[]
+  loading: boolean
+  error: string | null
+  /** 删除一条(同步更新本地列表)。失败抛错给调用方处理。 */
+  deleteItem: (id: number) => Promise<void>
+}
+
+export function useClipboardItems(): UseClipboardItemsResult {
+  const [items, setItems] = useState<ClipboardItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // 初次加载 + 监听实时更新
+  useEffect(() => {
+    let cancelled = false
+
+    const load = async () => {
+      try {
+        const list = await call<ClipboardItem[]>('list_items', { limit: DEFAULT_LIMIT })
+        if (!cancelled) {
+          setItems(list)
+          setLoading(false)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e))
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    // 监听后端新增/更新事件
+    const unlisten = listen<ClipboardItem>(TAURI_EVENTS.CLIPBOARD_ADDED, (event) => {
+      if (cancelled) return
+      setItems((prev) => applyAddedItem(prev, event.payload))
+    })
+
+    return () => {
+      cancelled = true
+      void unlisten.then((fn) => fn())
+    }
+  }, [])
+
+  const deleteItem = async (id: number) => {
+    await call('delete_item', { id })
+    // 乐观更新:先移除本地(不可变)
+    setItems((prev) => removeItem(prev, id))
+  }
+
+  return { items, loading, error, deleteItem }
+}
