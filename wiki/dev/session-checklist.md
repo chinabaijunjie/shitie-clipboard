@@ -19,7 +19,7 @@ status: active
 
 ## 检查清单
 
-> 8 步(0-7)。
+> 8 步(0-7)。子工程多一步回流处理(5.5)。
 
 ### 0. 检查分支状态 + 合并 + 清理
 
@@ -55,6 +55,19 @@ status: active
 - [ ] 若用 CodeGraph：`codegraph sync`
 - [ ] 若用其他索引工具：对应 sync 命令
 - [ ] 无索引工具则跳过
+
+### 5.5 🔴 回流候选处理（子工程专属）
+
+> **本工程是模板的子工程时才做**（模板自身无此步骤）。
+> 子工程职责是**识别 + 记录 + 整理提案**，不直接改母工程仓库。详见 `wiki/process/template-evolution-guide.md`。
+
+- [ ] 读 `wiki/dev/REFLUX-CANDIDATES.md`「待评估」，逐条过
+- [ ] 每条判定：回流 / 留子工程 / 丢弃
+- [ ] 对确认回流的：整理「回流提案文档」落盘到 `wiki/dev/reflux-proposals/<主题>.md`
+      （模板见 `wiki/dev/reflux-proposals/README.md` 或 `template-evolution-guide.md`）
+- [ ] 处理完的候选条目移到「已处理」，保留追溯
+- [ ] **问自己一句**：这次开发有没有长出什么通用的东西没记进候选池？（对照 `reflux-signals.md` 信号清单再扫一遍）
+- [ ] 提示用户：提案文档已就绪，请带到母工程会话执行回流
 
 ### 6. 核查 + 显式报告用户
 

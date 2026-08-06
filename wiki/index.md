@@ -60,7 +60,8 @@ status: active
 - [[dual-tool-sync]] — 双工具同步契约
 - [[ai-collaboration-style]] — AI 协作风格（13 条 + 分块逐项决策）
 - [[sidecar-to-rust-migration-guide]] — sidecar→Rust 原生迁移指南(参考,M0 已执行)
-- [[archive]] — 已归档流程文档(回流机制等模板母体专用)
+- [[template-evolution-guide]] — 🔴 模板回流机制（母/子职责分离 + 提案文档交接）
+- [[reflux-signals]] — 🔴 回流信号清单（AI 主动识别用）
 
 ### dev/（进度 + TODO + 启动包）
 - [[dev/m1-plan]] — 🚨 **当前任务规划**(M1 macOS 剪贴板监听 MVP)
@@ -69,6 +70,8 @@ status: active
 - [[dev/progress]] — 开发进度（状态唯一真相源）
 - [[dev/TODO]] — 全局 TODO
 - [[dev/new-session-starter]] — 新窗口启动包
+- `dev/REFLUX-CANDIDATES.md` — 🔴 回流候选池（开发中随记）
+- `dev/reflux-proposals/` — 🔴 **回流提案文档存放点**（子工程产出 → 母工程消费，详见文件夹 README）
 - [[dev/archive]] — 历史归档(旧规划 / 删前留档)
 
 ## 关键资产优先级

@@ -102,6 +102,10 @@ clipboard-manager/
   - ⚠️ **第一件事：读 `wiki/dev/session-checklist.md` 按清单收尾**
   - 触发词：「存档」「下次继续」「换个新窗口」「今天先到这」「收尾」「结束」等
   - 收尾完成后**主动向用户报告核查结果**
+- **🔴 子工程回流职责**（本工程是模板子工程时）：
+  ① 开发中识别回流候选（对照 `wiki/process/reflux-signals.md`）→ 记 `wiki/dev/REFLUX-CANDIDATES.md`
+  ② 收尾时（session-checklist 5.5）整理「回流提案文档」落盘 `wiki/dev/reflux-proposals/<主题>.md`，交给用户转达母工程
+  ⚠️ **不直接改母工程仓库**（母工程读提案文档执行合并）。详见 `wiki/process/template-evolution-guide.md`
 
 ---
 
