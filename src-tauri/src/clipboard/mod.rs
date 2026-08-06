@@ -17,7 +17,12 @@
 
 pub mod handler;
 
-use std::{path::Path, time::Duration};
+use std::{
+    path::Path,
+    sync::atomic::AtomicBool,
+    sync::Arc,
+    time::Duration,
+};
 
 use clipboard_rs::{ClipboardWatcher as _, ClipboardWatcherContext, WatcherShutdown};
 use tauri::AppHandle;
@@ -37,18 +42,22 @@ pub struct ClipboardWatcherHandle {
 impl ClipboardWatcherHandle {
     /// 启动剪贴板监听后台线程。
     ///
-    /// `db_path`:数据库文件路径(handler 在 watcher 线程内开独立连接,
-    ///           WAL 模式下与主连接并发安全)。
+    /// `db_path`:数据库文件路径(handler 在 watcher 线程内开独立连接,WAL 模式并发安全)。
+    /// `self_write_flag`:自身写入标志(与 copy_back 共享;copy_back 置位,handler 消费跳过)。
     ///
     /// 返回的 handle drop 时自动停止监听(通过 WatcherShutdown 的 Drop 语义)。
-    pub fn start(app: AppHandle, db_path: &Path) -> Result<Self, String> {
+    pub fn start(
+        app: AppHandle,
+        db_path: &Path,
+        self_write_flag: Arc<AtomicBool>,
+    ) -> Result<Self, String> {
         let (tx_shutdown, rx_shutdown) = std::sync::mpsc::channel::<WatcherShutdown>();
         let db_path = db_path.to_path_buf();
         let app_for_thread = app;
 
         std::thread::Builder::new()
             .name("clipboard-watcher".into())
-            .spawn(move || run_watcher(app_for_thread, &db_path, tx_shutdown))
+            .spawn(move || run_watcher(app_for_thread, &db_path, self_write_flag, tx_shutdown))
             .map_err(|e| format!("spawn clipboard-watcher 线程失败: {e}"))?;
 
         // 等待线程内把 shutdown channel 发回来。
@@ -70,6 +79,7 @@ impl ClipboardWatcherHandle {
 fn run_watcher(
     app: AppHandle,
     db_path: &Path,
+    self_write_flag: Arc<AtomicBool>,
     tx_shutdown: std::sync::mpsc::Sender<WatcherShutdown>,
 ) {
     log::info!("[clipboard] 监听线程启动");
@@ -83,8 +93,8 @@ fn run_watcher(
         }
     };
 
-    // 线程内构造 handler
-    let handler = match ClipboardChangeHandler::new(app, db) {
+    // 线程内构造 handler(传入 self_write_flag 用于跳过自身写入)
+    let handler = match ClipboardChangeHandler::new(app, db, self_write_flag) {
         Ok(h) => h,
         Err(e) => {
             log::error!("[clipboard] 构造 handler 失败: {e}");

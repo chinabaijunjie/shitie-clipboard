@@ -12,6 +12,9 @@
 //! - get_text() 在无文本格式时报错(文件 URL 场景),必须先 available_formats() 判断
 //! - 读/写任何一步失败都只 log,不 panic(watcher 崩了监听就断了)
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use clipboard_rs::{Clipboard, ClipboardHandler};
 use rusqlite::Connection;
 use tauri::{AppHandle, Emitter};
@@ -45,32 +48,52 @@ pub fn is_worth_storing(text: &str) -> bool {
 /// 剪贴板变化处理器。
 ///
 /// 持有独立的 DB 连接(本线程创建,WAL 模式下与其他连接并发安全)
-/// + ClipboardContext(读剪贴板)+ AppHandle(emit 前端)。
+/// + ClipboardContext(读剪贴板)+ AppHandle(emit 前端)
+/// + self_write_flag(检测并跳过 copy_back 自身写入,防反馈循环)。
 pub struct ClipboardChangeHandler {
     app: AppHandle,
     /// 本线程独立的 DB 连接(在 start_watcher 里于 watcher 线程内创建)。
     db: Connection,
     /// 剪贴板读取上下文(clipboard-rs)。
     clipboard: clipboard_rs::ClipboardContext,
+    /// 自身写入标志(与 copy_back 共享):true 表示下一次变化是自身写入,应跳过。
+    /// on_clipboard_change 开头消费(置 false),若原为 true 则跳过本次捕获。
+    self_write_flag: Arc<AtomicBool>,
 }
 
 impl ClipboardChangeHandler {
     /// 在 watcher 线程内创建(handler 必须在线程内构造,Connection 不能跨线程发送)。
-    ///
-    /// `db_path`:数据库文件路径(WAL 模式,与主连接并发安全)。
-    pub fn new(app: AppHandle, db: Connection) -> Result<Self, String> {
+    pub fn new(
+        app: AppHandle,
+        db: Connection,
+        self_write_flag: Arc<AtomicBool>,
+    ) -> Result<Self, String> {
         let clipboard = clipboard_rs::ClipboardContext::new()
             .map_err(|e| format!("ClipboardContext::new 失败: {e}"))?;
         Ok(Self {
             app,
             db,
             clipboard,
+            self_write_flag,
         })
+    }
+
+    /// 消费自身写入标志。返回 true 表示「这是 copy_back 自身写入,应跳过」。
+    /// 用 swap 而非 load+store,保证只消费一次(避免并发竞态)。
+    fn consume_self_write(&self) -> bool {
+        self.self_write_flag.swap(false, Ordering::SeqCst)
     }
 }
 
 impl ClipboardHandler for ClipboardChangeHandler {
     fn on_clipboard_change(&mut self) {
+        // 0. 消费自身写入标志:copy_back 刚写过剪贴板,这次变化是自身写入,跳过。
+        //    (防反馈循环:copy_back set_text → changeCount 变 → watcher 捕获 → copy_count 虚高)
+        if self.consume_self_write() {
+            log::debug!("[clipboard] 跳过自身写入(copy_back 触发)");
+            return;
+        }
+
         // 1. 判断是否含纯文本格式(spike 实测:文件场景无文本格式,get_text 会报错)
         let formats = match self.clipboard.available_formats() {
             Ok(f) => f,
@@ -172,5 +195,25 @@ mod tests {
     fn plain_text_uti_constant() {
         // 确保 UTI 字符串与系统一致(spike 实测值)
         assert_eq!(UTI_PLAIN_TEXT, "public.utf8-plain-text");
+    }
+
+    #[test]
+    fn self_write_flag_consume_once_semantics() {
+        // 防反馈循环的核心机制:标志位只能被消费一次
+        // (copy_back 置 true → watcher 第一次 on_clipboard_change 消费返回 true 跳过
+        //  → 标志清零,后续真实复制正常捕获)
+        let flag = Arc::new(AtomicBool::new(false));
+
+        // 初始:false(不跳过)
+        assert!(!flag.swap(false, Ordering::SeqCst));
+
+        // copy_back 置位
+        flag.store(true, Ordering::SeqCst);
+
+        // watcher 第一次消费:返回 true(跳过自身写入),并清零
+        assert!(flag.swap(false, Ordering::SeqCst));
+
+        // 第二次消费(真实复制):返回 false(不跳过,正常捕获)
+        assert!(!flag.swap(false, Ordering::SeqCst));
     }
 }

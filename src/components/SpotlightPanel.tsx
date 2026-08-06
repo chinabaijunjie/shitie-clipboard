@@ -42,6 +42,13 @@ export function SpotlightPanel() {
   const { items, loading, error, deleteItem } = useClipboardItems()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [probe, setProbe] = useState<ProbeStatus>('checking')
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  /** 设置操作错误(回填/删除失败时),3 秒后自动清除 */
+  const showActionError = useCallback((msg: string) => {
+    setActionError(msg)
+    window.setTimeout(() => setActionError(null), 3000)
+  }, [])
 
   // 探活:M0 遗留逻辑,列表加载成功即代表后端就绪
   useEffect(() => {
@@ -85,10 +92,12 @@ export function SpotlightPanel() {
       try {
         await call<string>('copy_back', { id: item.id })
       } catch (e) {
+        // UI 层给用户友好提示(§8「绝不静默吞错」),保留 console.error 供调试
         console.error('[copy_back] 失败:', e)
+        showActionError(`回填失败:${e instanceof Error ? e.message : String(e)}`)
       }
     },
-    [items],
+    [items, showActionError],
   )
 
   // 删除选中条目
@@ -100,9 +109,10 @@ export function SpotlightPanel() {
         await deleteItem(item.id)
       } catch (e) {
         console.error('[delete] 失败:', e)
+        showActionError(`删除失败:${e instanceof Error ? e.message : String(e)}`)
       }
     },
-    [items, deleteItem],
+    [items, deleteItem, showActionError],
   )
 
   // 键盘交互
@@ -169,9 +179,13 @@ export function SpotlightPanel() {
         )}
       </div>
 
-      {/* 底栏:快捷键提示 */}
-      <div className="border-t border-border/50 px-3 py-1.5 text-[10px] text-muted-foreground/70">
-        ↑↓ 导航 · ⏎ 回填 · ⌫ 删除
+      {/* 底栏:快捷键提示 / 操作错误(有错误时覆盖显示) */}
+      <div className="border-t border-border/50 px-3 py-1.5 text-[10px]">
+        {actionError ? (
+          <span className="text-destructive">{actionError}</span>
+        ) : (
+          <span className="text-muted-foreground/70">↑↓ 导航 · ⏎ 回填 · ⌫ 删除</span>
+        )}
       </div>
     </div>
   )

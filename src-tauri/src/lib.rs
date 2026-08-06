@@ -20,7 +20,8 @@ mod error;
 mod models;
 mod storage;
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use commands::clipboard::{copy_back, delete_item, list_items};
 use commands::ping::ping;
@@ -31,6 +32,7 @@ use tauri::Manager;
 /// 持有:
 /// - 主 DB 连接(给 command 读列表/回填用,Mutex 包,command handler 短时持锁)
 /// - 剪贴板监听句柄(drop 即停止监听)
+/// - 自身写入标志(copy_back 写剪贴板前置位,watcher 检测到则跳过,避免反馈循环)
 ///
 /// ⚠️ watcher 线程有自己独立的 DB 连接(WAL 模式下并发安全),与这里的 db 互不干扰。
 pub struct AppState {
@@ -38,6 +40,10 @@ pub struct AppState {
     db: Mutex<rusqlite::Connection>,
     /// 剪贴板监听句柄。drop 即停止监听(app 退出时随 AppState 自动清理)。
     _watcher: clipboard::ClipboardWatcherHandle,
+    /// 自身写入待跳过标志(防 copy_back 反馈循环)。
+    /// copy_back 写剪贴板前置 true;watcher on_clipboard_change 开头消费(置 false),
+    /// 若检测到 true 则跳过本次捕获(这是自身写入,不是用户复制)。
+    self_write_flag: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -49,6 +55,12 @@ impl AppState {
         self.db
             .lock()
             .expect("DB Mutex 中毒(持有者 panic)")
+    }
+
+    /// 标记「下一次剪贴板变化是自身写入,watcher 应跳过」。
+    /// copy_back 写剪贴板前调用。
+    pub fn mark_self_write(&self) {
+        self.self_write_flag.store(true, Ordering::SeqCst);
     }
 }
 
@@ -81,12 +93,18 @@ pub fn run() {
             // ⚠️ 不在这里 emit 任何事件:setup 早于 WebView JS,emit 即发即弃无缓冲
             //    (constraints.md「Tauri v2 setup 时序坑」)。
             //    事件在 watcher 回调里发(那时 WebView 已就绪,且由用户复制触发,时序天然正确)。
-            let watcher = clipboard::ClipboardWatcherHandle::start(app.handle().clone(), &db_path)
-                .expect("剪贴板监听启动失败");
+            let self_write_flag = Arc::new(AtomicBool::new(false));
+            let watcher = clipboard::ClipboardWatcherHandle::start(
+                app.handle().clone(),
+                &db_path,
+                self_write_flag.clone(),
+            )
+            .expect("剪贴板监听启动失败");
 
             app.manage(AppState {
                 db: Mutex::new(main_conn),
                 _watcher: watcher,
+                self_write_flag,
             });
 
             Ok(())

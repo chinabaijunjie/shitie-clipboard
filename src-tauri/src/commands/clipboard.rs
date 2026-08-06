@@ -82,11 +82,15 @@ pub fn delete_item(
 ///
 /// ⚠️ ClipboardContext 在 command 里现造一个(短生命周期,用完即弃)。
 /// M1 每次回填新建 Context 无性能问题(复制操作低频)。
+/// ⚠️ 写剪贴板前置 self_write 标志,watcher 会跳过这次自身写入(防反馈循环)。
 #[tauri::command]
 pub fn copy_back(
     state: State<'_, crate::AppState>,
     id: i64,
 ) -> Result<String, AppError> {
+    // 先置标志(必须在 set_text 前;watcher 500ms 后轮询到变化时消费此标志)
+    state.mark_self_write();
+
     let conn = state.db();
     let clipboard = ClipboardContext::new()
         .map_err(|e| AppError::new(
@@ -104,7 +108,11 @@ mod tests {
     fn db_with_sample_data() -> Connection {
         let conn = init_db_in_memory().expect("内存 DB");
         items::insert_or_update(&conn, "第一条").unwrap();
+        // 每条插入间隔 sleep,确保 last_copied_at 毫秒级时间戳递增
+        // (否则同毫秒插入导致 DESC 排序不确定)
+        std::thread::sleep(std::time::Duration::from_millis(10));
         items::insert_or_update(&conn, "第二条").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
         items::insert_or_update(&conn, "第三条").unwrap();
         conn
     }
