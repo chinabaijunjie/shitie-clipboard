@@ -1,25 +1,28 @@
-//! 存储层 — rusqlite 数据库初始化 + items/formats 表
+//! 存储层 — rusqlite 数据库初始化 + items/formats 表 + migration + FTS 搜索
 //!
-//! M1 决策(m1-plan.md):migration 用手写 `CREATE TABLE IF NOT EXISTS`(幂等),
-//! 不引 refinery/rusqlite_migration(长期 ALTER TABLE 时再引,见 m1-research.md)。
+//! M0/M1:migration 用手写 `CREATE TABLE IF NOT EXISTS`(幂等),无版本号。
+//! M2 起 schema 需结构性变更(`ALTER TABLE ADD COLUMN` 不幂等),改用手写版本号
+//! (`PRAGMA user_version`),见 migration.rs。
 //!
 //! 表结构照搬 Maccy/Ditto 的「items(元数据)+ formats(type+value,一对多)」设计
 //! (m1-research.md 第三节)。M1 只写 text 一行,M2 富文本/图片加行。
 //!
 //! ⚠️ PRAGMA 红线(constraints.md):foreign_keys=ON + WAL + busy_timeout=5000。
 
-// M1 阶段 A:存储层先建,阶段 B(watcher)/C(command)接线前公开 API 暂未使用。
 // 阶段 B/C 接线后移除此 allow。
 #![allow(dead_code)]
 
+pub mod fts;
 pub mod items;
+pub mod migration;
+pub mod search;
 
 use rusqlite::Connection;
 use std::path::Path;
 
 use crate::error::AppError;
 
-/// 初始化数据库:打开连接 → 开 PRAGMA → 建表。
+/// 初始化数据库:打开连接 → 开 PRAGMA → 建表 → 跑 migration。
 ///
 /// `db_path` 为应用数据目录下的 db 文件路径(由 lib.rs 传入 `app_data_dir()/clipboard.db`)。
 /// 测试时可传 `:memory:` 路径(但 rusqlite 用 `:memory:` 要走 `Connection::open_in_memory`)。
@@ -29,16 +32,29 @@ pub fn init_db(db_path: &Path) -> Result<Connection, AppError> {
 
     apply_pragmas(&conn)?;
     create_schema(&conn)?;
+    migration::migrate(&conn)?;
     Ok(conn)
 }
 
-/// 初始化内存数据库(测试用)。
+/// 初始化内存数据库(测试用,跑完 migration 到最新版本)。
 #[cfg(test)]
 pub fn init_db_in_memory() -> Result<Connection, AppError> {
     let conn = Connection::open_in_memory()
         .map_err(|e| AppError::internal(format!("打开内存 DB 失败: {e}")))?;
     apply_pragmas(&conn)?;
     create_schema(&conn)?;
+    migration::migrate(&conn)?;
+    Ok(conn)
+}
+
+/// 初始化内存数据库但**不跑 migration**(停在 v0/M1 schema,测试 migration 升级用)。
+#[cfg(test)]
+pub fn init_db_in_memory_v1() -> Result<Connection, AppError> {
+    let conn = Connection::open_in_memory()
+        .map_err(|e| AppError::internal(format!("打开内存 DB 失败: {e}")))?;
+    apply_pragmas(&conn)?;
+    create_schema(&conn)?;
+    // 故意不 migrate:user_version 保持 0(M0/M1 库的初始状态)
     Ok(conn)
 }
 

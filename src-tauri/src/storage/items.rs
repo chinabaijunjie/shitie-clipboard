@@ -4,6 +4,9 @@
 //! - 去重:formats 表里已有相同文本 → UPDATE items(last_copied_at + copy_count)
 //! - 新增:INSERT items + INSERT formats(一行 text)
 //!
+//! M2 扩展:`insert_or_update_multi` 支持一次写入多格式(RTF/HTML/图片等),
+//! content_kind 分类,并写 search_text(FTS 索引用)。M1 的单文本入口保留(handler 仍在用)。
+//!
 //! 去重用 data_blob 内容比对(M1 数据量小,全表扫可接受;M4 加 hash 索引优化)。
 
 // M1 阶段 A:存储层先建,阶段 B(watcher)/C(command)接线前公开 API 暂未使用。
@@ -14,21 +17,37 @@ use rusqlite::{params, Connection};
 
 use crate::error::AppError;
 use crate::models::{truncate_title, ClipboardItem, ContentKind};
+use crate::storage::search::bigram_cjk;
 
-/// 纯文本的 UTI(M1 唯一处理的格式)。
+/// 纯文本的 UTI。
 pub const UTI_PLAIN_TEXT: &str = "public.utf8-plain-text";
 
-/// 插入或更新剪贴板条目(去重)。
+/// 一个格式的写入数据(uti + 字节内容)。
+///
+/// M2 多格式捕获时,一次复制会产生多个 FormatInput(text/rtf/html/image...),
+/// 统一用这个结构传给 `insert_or_update_multi`。
+/// 图片格式的 data 为空(图片走文件系统,data 在 file_path,见 image_store)。
+#[derive(Debug, Clone)]
+pub struct FormatInput<'a> {
+    pub uti: &'a str,
+    /// 文本类格式的字节内容(RTF/HTML/text 等)。图片格式为空(走 file_path)。
+    pub data: &'a [u8],
+    /// 图片格式的磁盘相对路径(file_path)。文本类格式为 None。
+    pub file_path: Option<&'a str>,
+}
+
+/// 插入或更新剪贴板条目(去重,纯文本入口,M1 handler 用)。
 ///
 /// 返回最终的 ClipboardItem(新增或更新后的)。调用方据此 emit 前端。
 ///
 /// 去重逻辑:formats 表里查找 uti=PLAIN_TEXT 且 data_blob == text 的 item。
 /// - 找到:UPDATE 该 item 的 last_copied_at + copy_count
-/// - 没找到:INSERT items + INSERT formats(text)
+/// - 没找到:INSERT items(含 search_text)+ INSERT formats(text)
 pub fn insert_or_update(conn: &Connection, text: &str) -> Result<ClipboardItem, AppError> {
     let now = now_epoch_ms();
     let title = truncate_title(text);
     let text_bytes = text.as_bytes();
+    let search_text = bigram_cjk(text);
 
     // 先查是否已存在相同文本的条目
     let existing_id: Option<i64> = conn
@@ -43,7 +62,7 @@ pub fn insert_or_update(conn: &Connection, text: &str) -> Result<ClipboardItem, 
 
     let item_id = match existing_id {
         Some(id) => {
-            // 已存在:更新时间 + 次数
+            // 已存在:更新时间 + 次数(search_text 不变,文本没变)
             conn.execute(
                 "UPDATE clipboard_items SET last_copied_at = ?1, copy_count = copy_count + 1 WHERE id = ?2",
                 params![now, id],
@@ -52,12 +71,12 @@ pub fn insert_or_update(conn: &Connection, text: &str) -> Result<ClipboardItem, 
             id
         }
         None => {
-            // 不存在:INSERT items
+            // 不存在:INSERT items(含 search_text,触发器自动索引 FTS)
             conn.execute(
                 "INSERT INTO clipboard_items \
-                 (first_copied_at, last_copied_at, copy_count, title, content_kind) \
-                 VALUES (?1, ?2, 1, ?3, ?4)",
-                params![now, now, title, ContentKind::Text.as_db_str()],
+                 (first_copied_at, last_copied_at, copy_count, title, content_kind, search_text) \
+                 VALUES (?1, ?2, 1, ?3, ?4, ?5)",
+                params![now, now, title, ContentKind::Text.as_db_str(), &search_text],
             )
             .map_err(|e| AppError::internal(format!("INSERT items 失败: {e}")))?;
             let new_id = conn.last_insert_rowid();
@@ -68,6 +87,95 @@ pub fn insert_or_update(conn: &Connection, text: &str) -> Result<ClipboardItem, 
                 params![new_id, UTI_PLAIN_TEXT, text_bytes, text_bytes.len() as i64],
             )
             .map_err(|e| AppError::internal(format!("INSERT formats 失败: {e}")))?;
+
+            new_id
+        }
+    };
+
+    get_item(conn, item_id)
+}
+
+/// 插入或更新剪贴板条目(多格式入口,M2 捕获层用)。
+///
+/// 与 `insert_or_update`(单文本)的区别:
+/// - 支持一次写多个 formats(RTF/HTML/text/image/file-url 等)
+/// - content_kind 由调用方根据捕获格式分类
+/// - 标题由调用方生成(富文本提取纯文本 / 图片尺寸 / 文件名)
+///
+/// 去重:基于纯文本格式的 data_blob 比对(与 M1 一致)。
+/// 若 formats 里没有纯文本(纯图片/纯文件),不做去重(每次都新增)。
+///
+/// 返回最终的 ClipboardItem。
+pub fn insert_or_update_multi(
+    conn: &Connection,
+    formats: &[FormatInput<'_>],
+    kind: ContentKind,
+    title: &str,
+) -> Result<ClipboardItem, AppError> {
+    let now = now_epoch_ms();
+    let title = truncate_title(title);
+
+    // search_text:从纯文本格式提取 → bigram;无文本格式则空
+    let plain_text = formats
+        .iter()
+        .find(|f| f.uti == UTI_PLAIN_TEXT)
+        .map(|f| f.data);
+    let search_text = match plain_text {
+        Some(bytes) => {
+            let text = String::from_utf8_lossy(bytes);
+            bigram_cjk(&text)
+        }
+        None => String::new(),
+    };
+
+    // 去重:有纯文本格式才比对(与 M1 一致)
+    let existing_id: Option<i64> = match plain_text {
+        Some(bytes) => conn
+            .query_row(
+                "SELECT item_id FROM clipboard_formats \
+                 WHERE uti = ?1 AND data_blob = ?2 LIMIT 1",
+                params![UTI_PLAIN_TEXT, bytes],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| AppError::internal(format!("多格式查询去重失败: {e}")))?,
+        None => None,
+    };
+
+    let item_id = match existing_id {
+        Some(id) => {
+            conn.execute(
+                "UPDATE clipboard_items SET last_copied_at = ?1, copy_count = copy_count + 1 WHERE id = ?2",
+                params![now, id],
+            )
+            .map_err(|e| AppError::internal(format!("更新 copy_count 失败: {e}")))?;
+            id
+        }
+        None => {
+            conn.execute(
+                "INSERT INTO clipboard_items \
+                 (first_copied_at, last_copied_at, copy_count, title, content_kind, search_text) \
+                 VALUES (?1, ?2, 1, ?3, ?4, ?5)",
+                params![now, now, &title, kind.as_db_str(), &search_text],
+            )
+            .map_err(|e| AppError::internal(format!("INSERT items 失败: {e}")))?;
+            let new_id = conn.last_insert_rowid();
+
+            // INSERT 所有 formats 行
+            for fmt in formats {
+                conn.execute(
+                    "INSERT INTO clipboard_formats (item_id, uti, data_blob, file_path, size) \
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        new_id,
+                        fmt.uti,
+                        fmt.data,
+                        fmt.file_path,
+                        fmt.data.len() as i64,
+                    ],
+                )
+                .map_err(|e| AppError::internal(format!("INSERT formats ({}) 失败: {e}", fmt.uti)))?;
+            }
 
             new_id
         }
@@ -134,7 +242,36 @@ pub fn get_text(conn: &Connection, id: i64) -> Result<String, AppError> {
         .map_err(|e| AppError::internal(format!("文本非 UTF-8: {}", e)))
 }
 
+/// 一个格式行的读取结果(uti + data_blob + file_path)。
+pub type FormatRow = (String, Option<Vec<u8>>, Option<String>);
+
+/// 读某条的所有格式行(给 M2 多格式回填用)。
+///
+/// 返回每个格式的 (uti, data_blob, file_path)。
+pub fn get_formats(conn: &Connection, id: i64) -> Result<Vec<FormatRow>, AppError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT uti, data_blob, file_path FROM clipboard_formats WHERE item_id = ?1",
+        )
+        .map_err(|e| AppError::internal(format!("prepare get_formats 失败: {e}")))?;
+
+    let rows = stmt
+        .query_map(params![id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, Option<Vec<u8>>>(1)?, r.get::<_, Option<String>>(2)?))
+        })
+        .map_err(|e| AppError::internal(format!("query get_formats 失败: {e}")))?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| AppError::internal(format!("读 formats 行失败: {e}")))?);
+    }
+    Ok(result)
+}
+
 /// 删除某条(ON DELETE CASCADE 自动清 formats)。
+///
+/// ⚠️ M2 图片场景:删 item 前要处理图片文件引用计数(阶段 C 的 image_store 负责),
+/// 这里只管 DB。M1 纯文本场景无图片文件,直接删即可。
 pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
     conn.execute("DELETE FROM clipboard_items WHERE id = ?1", params![id])
         .map_err(|e| AppError::internal(format!("删除条目 {} 失败: {}", id, e)))?;
@@ -155,7 +292,9 @@ fn now_epoch_ms() -> i64 {
 }
 
 /// DB 行 → ClipboardItem。
-fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardItem> {
+///
+/// `pub(crate)` 供 search.rs 复用(FTS 查询也返回相同结构的 ClipboardItem)。
+pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardItem> {
     Ok(ClipboardItem {
         id: row.get(0)?,
         first_copied_at: row.get(1)?,
@@ -278,5 +417,130 @@ mod tests {
         let conn = db();
         let err = get_item(&conn, 9999).unwrap_err();
         assert_eq!(err.code, crate::error::codes::NOT_FOUND);
+    }
+
+    // ===== M2 多格式写入测试 =====
+
+    #[test]
+    fn insert_multi_writes_all_formats() {
+        // 一次复制产生多格式(text + rtf + html),全部写入 formats 表
+        let conn = db();
+        let text = b"Hello world".to_vec();
+        let rtf = b"{\\rtf1 Hello}".to_vec();
+        let html = b"<p>Hello</p>".to_vec();
+        let formats = vec![
+            FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
+            FormatInput { uti: "public.rtf", data: &rtf, file_path: None },
+            FormatInput { uti: "public.html", data: &html, file_path: None },
+        ];
+        let item = insert_or_update_multi(&conn, &formats, ContentKind::Rich, "Hello world")
+            .expect("多格式插入应成功");
+
+        // formats 表应有 3 行
+        let fmt_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM clipboard_formats WHERE item_id = ?1",
+                params![item.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(fmt_count, 3, "应写入 3 个格式行");
+
+        // content_kind 应为 rich
+        assert_eq!(item.content_kind, ContentKind::Rich);
+
+        // get_formats 能读回 3 个格式
+        let read_back = get_formats(&conn, item.id).unwrap();
+        assert_eq!(read_back.len(), 3);
+        let utis: Vec<&str> = read_back.iter().map(|(u, _, _)| u.as_str()).collect();
+        assert!(utis.contains(&"public.utf8-plain-text"));
+        assert!(utis.contains(&"public.rtf"));
+        assert!(utis.contains(&"public.html"));
+    }
+
+    #[test]
+    fn insert_multi_writes_search_text_from_plain_text() {
+        // search_text 从纯文本格式提取 → bigram
+        let conn = db();
+        let text = "你好世界".as_bytes().to_vec();
+        let rtf = "{\\rtf1 你好世界}".as_bytes().to_vec();
+        let formats = vec![
+            FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
+            FormatInput { uti: "public.rtf", data: &rtf, file_path: None },
+        ];
+        let item = insert_or_update_multi(&conn, &formats, ContentKind::Rich, "你好世界").unwrap();
+
+        // search_text 应为 bigram(你好世界 → " 你好 好世 世界 ")
+        let st: String = conn
+            .query_row(
+                "SELECT search_text FROM clipboard_items WHERE id = ?1",
+                params![item.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(st, crate::storage::search::bigram_cjk("你好世界"));
+
+        // FTS 触发器应已索引(搜「你好」能命中)
+        let hit: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM clipboard_fts WHERE clipboard_fts MATCH ?1",
+                params!["\"你好\""],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hit, 1, "多格式写入后 FTS 应能搜到");
+    }
+
+    #[test]
+    fn insert_multi_dedup_by_plain_text() {
+        // 去重:基于纯文本格式比对,相同文本不新增
+        let conn = db();
+        let text = "重复内容".as_bytes().to_vec();
+        let formats = vec![
+            FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
+        ];
+        let first = insert_or_update_multi(&conn, &formats, ContentKind::Text, "重复内容").unwrap();
+        let second = insert_or_update_multi(&conn, &formats, ContentKind::Text, "重复内容").unwrap();
+
+        assert_eq!(first.id, second.id, "相同纯文本应命中同一条");
+        assert_eq!(second.copy_count, 2);
+    }
+
+    #[test]
+    fn insert_multi_no_plain_text_no_dedup() {
+        // 纯图片(无纯文本格式)不去重,每次新增
+        let conn = db();
+        let formats = vec![
+            FormatInput { uti: "public.png", data: &[], file_path: Some("ab/1234.png") },
+        ];
+        let first = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图片 100×100").unwrap();
+        let second = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图片 100×100").unwrap();
+
+        assert_ne!(first.id, second.id, "无纯文本格式不去重");
+    }
+
+    #[test]
+    fn single_text_insert_indexes_fts() {
+        // M1 单文本入口(insert_or_update)也应写 search_text + 索引 FTS
+        let conn = db();
+        let item = insert_or_update(&conn, "搜索测试文本").unwrap();
+
+        let hit: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM clipboard_fts WHERE clipboard_fts MATCH ?1",
+                params!["\"搜索\""],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hit, 1, "M1 单文本入口也应索引 FTS");
+        // search_text 写入了
+        let st: String = conn
+            .query_row(
+                "SELECT search_text FROM clipboard_items WHERE id = ?1",
+                params![item.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(st, crate::storage::search::bigram_cjk("搜索测试文本"));
     }
 }

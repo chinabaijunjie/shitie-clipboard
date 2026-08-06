@@ -14,12 +14,12 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M1 macOS 剪贴板监听 MVP — **✅ 完成**(2026-08-06,端到端实测 6 项全通过)
+- **当前里程碑**：M2 搜索 + 富文本/图片支持 — **调研 + spike 完成,规划落盘待施工**
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
-  + clipboard-rs 0.3(剪贴板读写/监听)+ rusqlite 0.31(存储,bundled)
-- **验证基线**：cargo test 27 passed + npm test 20 passed + npm build 43 modules,全绿零 warning
-- **下一步**：M2 搜索 + 富文本/图片支持(SQLite FTS5 + 多格式);M3 常驻体验(快捷键唤起/托盘/自启/Windows)
+  + clipboard-rs 0.3(剪贴板读写/监听)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
+- **验证基线**：cargo test 35 passed(含 FTS5 spike 8)+ npm test 20 passed + npm build 43 modules,全绿零 warning
+- **下一步**：按 m2-plan 五阶段施工(A schema/migration → B 多格式捕获回填 → C 图片 → D 搜索 → E 实测)
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -69,6 +69,19 @@ status: active
 - **附带修**:commands 测试时序竞态(同毫秒插入导致 DESC 排序不确定)
 - **不修(过度设计/刻意权衡)**:AppError.code 改枚举(前端字符串比对设计)、AppState.db() 改 Result、UseClipboardItemsResult 改 discriminated union
 - **价值印证**:review 发现了置信 92 的 Critical bug(单靠自检清单发现不了),已据此把 `zcode-pr-review` 写进 code-review-checklist + session-checklist 步骤 0 强制使用
+
+## M2 调研 + Spike 记录(2026-08-06)
+
+- **技术调研**(见 [[m2-research]]):两块并行调研
+  - FTS5 中文搜索:🔴 决定性发现 —— **`bundled` feature 已无条件编译 FTS5**(libsqlite3-sys build.rs),
+    Cargo.toml 零改动。P0 = unicode61 + 应用层 bigram 预处理 + 单字 LIKE 兜底;P1 留 jieba。
+  - 图片存储 + 多格式:混合方案(文本进 BLOB,图片进文件系统 sha256 分桶 + 引用计数);
+    白名单(照搬 Maccy)+ 隐私黑名单(`ConcealedType`/`TransientType`);
+    ⚠️ 密码管理器**浏览器扩展**是盲区(只防住桌面 app,README 告知)。
+- **Spike 验证**(FTS5 + bigram,8 测试全绿):bundled 含 FTS5 实测确认 / bigram 中文召回 / 英文代码 /
+  BM25 排序 / LIKE 兜底 / rebuild / 触发器同步 全通过。spike 代码 `fts_spike.rs` 待 M2 施工演化后删。
+- **M2 规划落盘**(见 [[m2-plan]]):5 阶段(A schema/migration → B 多格式捕获回填 → C 图片 → D 搜索 → E 实测)。
+  用户决策:migration 手写版本号 / 施工顺序多格式→搜索→图片 / 范围全做。
 
 ## 本工程开发历史
 

@@ -39,7 +39,7 @@ status: active
 | 会话收尾 | [[dev/session-checklist]]（8 步）|
 | 改 AGENTS.md / CLAUDE.md | [[process/dual-tool-sync]] |
 | 写/改 wiki 内容（防膨胀）| [[process/knowledge-base-guide]] |
-| 查当前任务规划（M1）| [[dev/m1-plan]] |
+| 查当前任务规划（M1/M2）| [[dev/m2-plan]](当前)/ [[dev/m1-plan]](done) |
 | 查 M1 技术调研/spike | [[dev/m1-research]] |
 | 查进度 / 下次目标 | [[dev/progress]] + [[dev/TODO]] |
 | 跨会话恢复 | [[dev/new-session-starter]] |
@@ -64,7 +64,9 @@ status: active
 - [[reflux-signals]] — 🔴 回流信号清单（AI 主动识别用）
 
 ### dev/（进度 + TODO + 启动包）
-- [[dev/m1-plan]] — 🚨 **当前任务规划**(M1 macOS 剪贴板监听 MVP)
+- [[dev/m2-plan]] — 🚨 **当前任务规划**(M2 搜索 + 富文本/图片支持)
+- [[dev/m2-research]] — M2 技术调研 + spike(FTS5 bigram / 图片存储 / 多格式)
+- [[dev/m1-plan]] — M1 规划(已完成)
 - [[dev/m1-research]] — M1 技术调研 + spike(clipboard-rs 选型依据)
 - [[dev/m0-plan]] — M0 规划(已完成,架构清理 + Spotlight UI 骨架)
 - [[dev/progress]] — 开发进度（状态唯一真相源）

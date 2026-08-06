@@ -12,30 +12,44 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 剪贴板内容类型(M1 只有 Text,M2 扩展)。
+/// 剪贴板内容类型。
 ///
 /// 序列化为小写字符串,与前端 contentKind 联合类型对齐。
+/// - Text:纯文本(public.utf8-plain-text)
+/// - Rich:富文本(含 RTF/HTML,且不含图片/文件)
+/// - Image:图片(PNG/TIFF)
+/// - File:文件 URL(public.file-url)
+/// - Mixed:混合(含多种主要类型,如同时有图片和文本)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ContentKind {
     Text,
-    // M2: Image, File, Mixed
+    Rich,
+    Image,
+    File,
+    Mixed,
 }
 
 impl ContentKind {
-    /// 数据库存储用的字符串(M1 固定 "text")。
+    /// 数据库存储用的字符串。
     pub fn as_db_str(&self) -> &'static str {
         match self {
             ContentKind::Text => "text",
+            ContentKind::Rich => "rich",
+            ContentKind::Image => "image",
+            ContentKind::File => "file",
+            ContentKind::Mixed => "mixed",
         }
     }
 
-    /// 从数据库字符串解析(M1 容错:未知值回退为 Text)。
+    /// 从数据库字符串解析(容错:未知值回退为 Text)。
     pub fn from_db_str(s: &str) -> Self {
         match s {
             "text" => ContentKind::Text,
-            // M2 起会对未知值返回错误或扩展更多变体。
-            // 当前静默回退为 Text,但 log 让回退可观测(避免掩盖 DB 数据问题)。
+            "rich" => ContentKind::Rich,
+            "image" => ContentKind::Image,
+            "file" => ContentKind::File,
+            "mixed" => ContentKind::Mixed,
             unknown => {
                 log::warn!("[models] 未知 content_kind 值 {:?},回退为 text", unknown);
                 ContentKind::Text
@@ -81,11 +95,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn content_kind_serializes_lowercase() {
-        assert_eq!(serde_json::to_string(&ContentKind::Text).unwrap(), "\"text\"");
-    }
-
-    #[test]
     fn truncate_title_handles_multibyte() {
         // 中文按 char 截断,不切坏字节
         let long: String = "你".repeat(2000);
@@ -101,8 +110,31 @@ mod tests {
 
     #[test]
     fn content_kind_db_roundtrip() {
-        assert_eq!(ContentKind::from_db_str(ContentKind::Text.as_db_str()), ContentKind::Text);
-        // 未知值容错回退
-        assert_eq!(ContentKind::from_db_str("image"), ContentKind::Text);
+        // 所有变体 round-trip
+        for kind in [
+            ContentKind::Text,
+            ContentKind::Rich,
+            ContentKind::Image,
+            ContentKind::File,
+            ContentKind::Mixed,
+        ] {
+            assert_eq!(
+                ContentKind::from_db_str(kind.as_db_str()),
+                kind,
+                "{:?} round-trip 失败",
+                kind
+            );
+        }
+        // 未知值容错回退为 Text
+        assert_eq!(ContentKind::from_db_str("unknown_kind"), ContentKind::Text);
+    }
+
+    #[test]
+    fn content_kind_serializes_lowercase() {
+        assert_eq!(serde_json::to_string(&ContentKind::Text).unwrap(), "\"text\"");
+        assert_eq!(serde_json::to_string(&ContentKind::Rich).unwrap(), "\"rich\"");
+        assert_eq!(serde_json::to_string(&ContentKind::Image).unwrap(), "\"image\"");
+        assert_eq!(serde_json::to_string(&ContentKind::File).unwrap(), "\"file\"");
+        assert_eq!(serde_json::to_string(&ContentKind::Mixed).unwrap(), "\"mixed\"");
     }
 }
