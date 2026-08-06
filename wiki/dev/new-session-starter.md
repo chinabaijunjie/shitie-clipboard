@@ -21,10 +21,10 @@ status: ready-to-use
 
 > 当前状态(版本/测试数/架构) → 见 wiki/dev/progress.md「当前状态」段
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
-> 当前任务规划 → wiki/dev/m0-plan.md(M0 已完成,M1 待规划)
+> 当前任务规划 → wiki/dev/m1-plan.md(M1 已完成,M2 待规划,启动前需技术 spike §1.16)
 
 ## 必读文档
-1. AGENTS.md(AI 启动 3 步 + §8 通用工程纪律)
+1. AGENTS.md(AI 启动 3 步 + 核心原则 7 模块化 / 8 随写随测 / §8 通用工程纪律)
 2. wiki/index.md(知识库总索引,场景驱动速查)
 3. wiki/dev/progress.md(当前状态 — 唯一真相源)
 4. wiki/dev/TODO.md(下次目标 + 待办)
@@ -32,6 +32,7 @@ status: ready-to-use
 ## 工作模式
 - 遇到决策点先跟我确认,不要自己拍板
 - 每完成一个阶段 commit + 汇报,等我确认再进下一阶段
+- 里程碑收尾/合并前强制用 zcode-pr-review Skill 跑深度 review(session-checklist 步骤 0)
 ```
 
 ---

@@ -62,6 +62,14 @@ status: active
 - 交互方案:唤起 + 回车回填(主流方案,Maccy/Flycut 同款)
 - ⚠️ 「松手回填」做不到:Tauri 全局快捷键只支持 keydown 不支持 keyup([文档](https://v2.tauri.app/reference/javascript/global-shortcut/)),要松手检测需 OS hook(rdev/Carbon)+ 触发辅助功能权限,工程量大,M3 不做
 
+**M1 收尾 PR review**(用 `zcode-pr-review` Skill,两批 4 agent 并行,commit `995d0f3` + `726a9fe`):
+- 🔴 **Critical(置信92)已修**:copy_back 回填触发监听反馈循环(copy_count 虚高 + 列表顺序错乱)。修复:共享 `Arc<AtomicBool>` 标志位,copy_back 写剪贴板前置位,handler `should_skip_by_flag` 消费跳过。实测验证:回填后 copy_count 不再虚高。
+- 🟡 **Important 已修**:前端 handleCopyBack/handleDelete 错误反馈缺失(违反 §8)→ 加 actionError 状态,底栏显示失败提示(3 秒清除)
+- 🟡 **第二批修复**:TS 加 Zod 校验(§8 边界校验)+ ClipboardItem readonly + self_write 测试质量(抽 should_skip_by_flag 纯函数测业务契约)+ from_db_str 未知值加 log + 注释/文档清理 + listen Promise rejection 处理
+- **附带修**:commands 测试时序竞态(同毫秒插入导致 DESC 排序不确定)
+- **不修(过度设计/刻意权衡)**:AppError.code 改枚举(前端字符串比对设计)、AppState.db() 改 Result、UseClipboardItemsResult 改 discriminated union
+- **价值印证**:review 发现了置信 92 的 Critical bug(单靠自检清单发现不了),已据此把 `zcode-pr-review` 写进 code-review-checklist + session-checklist 步骤 0 强制使用
+
 ## 本工程开发历史
 
 ### M0 架构清理 + Spotlight UI 骨架（2026-08-05）
