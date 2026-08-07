@@ -2,7 +2,7 @@
 title: 知识库总索引（门面）
 tags: [索引, 门面, 导航]
 created: 2026-06-29
-updated: 2026-08-06
+updated: 2026-08-07
 status: active
 ---
 
@@ -40,6 +40,7 @@ status: active
 | 改 AGENTS.md / CLAUDE.md | [[process/dual-tool-sync]] |
 | 写/改 wiki 内容（防膨胀）| [[process/knowledge-base-guide]] |
 | 查当前任务规划（M1/M2）| [[dev/m2-plan]](当前)/ [[dev/m1-plan]](done) |
+| 查 UI 审美改造规划（M2 后执行）| [[dev/ui-redesign-plan]] |
 | 查 M1 技术调研/spike | [[dev/m1-research]] |
 | 查进度 / 下次目标 | [[dev/progress]] + [[dev/TODO]] |
 | 跨会话恢复 | [[dev/new-session-starter]] |
@@ -65,6 +66,7 @@ status: active
 
 ### dev/（进度 + TODO + 启动包）
 - [[dev/m2-plan]] — 🚨 **当前任务规划**(M2 搜索 + 富文本/图片支持)
+- [[dev/ui-redesign-plan]] — UI 苹果审美改造规划(M2 完成后执行,emilkowalski/skills 规则)
 - [[dev/m2-research]] — M2 技术调研 + spike(FTS5 bigram / 图片存储 / 多格式)
 - [[dev/m1-plan]] — M1 规划(已完成)
 - [[dev/m1-research]] — M1 技术调研 + spike(clipboard-rs 选型依据)

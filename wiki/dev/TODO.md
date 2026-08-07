@@ -24,6 +24,7 @@ status: active
 - [ ] **M2**:搜索 + 富文本/图片支持(SQLite FTS5 + 多格式)— **调研/spike 完成,待施工**
 - [ ] **M3**:常驻体验(全局快捷键唤起 + 托盘 + 自启 + Windows 平台补全)
 - [ ] **M4**:生产化(打包 dmg/exe + 去重 + 容量上限 + 敏感过滤)
+- [ ] **UI 苹果审美改造**(M2 完成后执行,见 [[ui-redesign-plan]])
 
 ## 待办
 
@@ -52,6 +53,21 @@ status: active
 - 全局快捷键唤起/隐藏窗口(M1 遗留:窗口目前 visible:true 常驻)
 - 交互:**唤起 + ↑↓ 导航 + 回车回填**(主流方案,Maccy/Flycut 同款)
 - ⚠️ 不做「松手回填」:Tauri 全局快捷键只支持 keydown(见 progress M1 记录)
+
+### UI 苹果审美改造(M2 完成后执行,见 [[ui-redesign-plan]])
+
+> ⏳ 触发条件:M2 五阶段(A-E)全部 ✅。基于 emilkowalski/skills 设计规则 + 苹果 WWDC 原则。
+> 高频常驻工具,审美改造排 M2 之后避免返工。
+
+- [ ] **Token 层** — `index.css` 加缓动/颜色/圆角/阴影 token,`tailwind.config.ts` 接线
+- [ ] **毛玻璃外壳** — SpotlightPanel 根容器改 `backdrop-filter: blur()`(窗口已 transparent)
+- [ ] **配色替换** — 换苹果系统色(暗色深灰蓝 #1C1C1E 而非纯黑),亮/暗模式校对
+- [ ] **列表项重做** — 胶囊选中态 + hover 过渡 + 按压反馈 + 字距分级
+- [ ] **顶/底栏** — 硬边框 `border-b` 改渐变蒙版
+- [ ] **动效(克制)** — 只加 hover/按压/新增项/错误提示,高频操作不加动画(频率闸门)
+- [ ] **滚动条** — 隐形细滚动条
+- [ ] **自检** — emilkowalski Never Ship 清单 + `review-animations` 标准
+- [ ] **实测** — macOS 实机看毛玻璃质感
 
 ## 想法池
 

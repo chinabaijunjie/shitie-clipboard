@@ -2,7 +2,7 @@
 title: 新窗口启动包
 tags: [启动, 跨会话]
 created: 2026-06-29
-updated: 2026-08-05
+updated: 2026-08-07
 status: ready-to-use
 ---
 
@@ -28,6 +28,10 @@ status: ready-to-use
 2. wiki/index.md(知识库总索引,场景驱动速查)
 3. wiki/dev/progress.md(当前状态 — 唯一真相源)
 4. wiki/dev/TODO.md(下次目标 + 待办)
+
+## ⏰ 待触发任务提醒
+- **M2 五阶段(A-E)全部 ✅ 后** → 启动 UI 苹果审美改造(见 wiki/dev/ui-redesign-plan.md)。
+  这是高频常驻工具,审美改造排 M2 之后避免返工。触发时提醒用户确认。
 
 ## 工作模式
 - 遇到决策点先跟我确认,不要自己拍板
