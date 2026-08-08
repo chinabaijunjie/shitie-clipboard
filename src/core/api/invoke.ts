@@ -38,6 +38,12 @@ export const InvokeErrorCode = {
   CLIPBOARD_WRITE_FAILED: 'CLIPBOARD_WRITE_FAILED',
   /** 读剪贴板失败(M2:多格式捕获读剪贴板失败) */
   CLIPBOARD_READ_FAILED: 'CLIPBOARD_READ_FAILED',
+  /** 设置加载失败(M3:读 settings.json 失败) */
+  SETTINGS_LOAD_FAILED: 'SETTINGS_LOAD_FAILED',
+  /** 设置更新失败(M3:写 settings.json 失败) */
+  SETTINGS_UPDATE_FAILED: 'SETTINGS_UPDATE_FAILED',
+  /** 快捷键注册失败(M3:global-shortcut register 失败) */
+  SHORTCUT_REGISTER_FAILED: 'SHORTCUT_REGISTER_FAILED',
 } as const
 
 export type InvokeErrorCode = (typeof InvokeErrorCode)[keyof typeof InvokeErrorCode]

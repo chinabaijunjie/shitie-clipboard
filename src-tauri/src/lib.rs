@@ -18,6 +18,7 @@ mod clipboard;
 mod commands;
 mod error;
 mod models;
+mod settings;
 mod storage;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,6 +26,7 @@ use std::sync::{Arc, Mutex};
 
 use commands::clipboard::{copy_back, delete_item, list_items, search_items};
 use commands::ping::ping;
+use commands::settings::{get_settings, update_settings};
 use tauri::Manager;
 
 /// 应用全局状态。
@@ -46,6 +48,9 @@ pub struct AppState {
     self_write_flag: Arc<AtomicBool>,
     /// 图片存储根目录(<app_data_dir>/images/)。copy_back/delete 图片时用。
     images_dir: std::path::PathBuf,
+    /// 用户设置(M3:快捷键/自启/历史上限/保留天数/容量上限/失焦隐藏)。
+    /// Mutex 因 update_settings 写 / get_settings / window_event 读 并发。
+    settings: Mutex<settings::Settings>,
 }
 
 impl AppState {
@@ -62,6 +67,11 @@ impl AppState {
     /// 图片存储根目录(delete 图片引用计数删除 / copy_back 图片回填用)。
     pub fn images_dir(&self) -> &std::path::Path {
         &self.images_dir
+    }
+
+    /// 用户设置的 Mutex 引用(get_settings / update_settings / window_event 用)。
+    pub fn settings(&self) -> &Mutex<settings::Settings> {
+        &self.settings
     }
 
     /// 标记「下一次剪贴板变化是自身写入,watcher 应跳过」。
@@ -82,6 +92,16 @@ pub fn run() {
                     .level(log::LevelFilter::Info)
                     .build(),
             )?;
+
+            // M3:Store 插件(设置持久化,settings.json in app_data_dir)
+            app.handle().plugin(tauri_plugin_store::Builder::default().build())?;
+
+            // M3:读取用户设置(首次启动写默认值)
+            let user_settings = settings::load_settings(app.handle())
+                .unwrap_or_else(|e| {
+                    log::warn!("[settings] 加载设置失败,使用默认值: {}", e.message);
+                    settings::Settings::default()
+                });
 
             // DB 路径:app_data_dir/clipboard.db
             let data_dir = app
@@ -119,6 +139,7 @@ pub fn run() {
                 _watcher: watcher,
                 self_write_flag,
                 images_dir,
+                settings: Mutex::new(user_settings),
             });
 
             Ok(())
@@ -129,6 +150,8 @@ pub fn run() {
             copy_back,
             delete_item,
             search_items,
+            get_settings,
+            update_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -35,6 +35,12 @@ pub mod codes {
     pub const CLIPBOARD_WRITE_FAILED: &str = "CLIPBOARD_WRITE_FAILED";
     /// 读剪贴板失败(M2:capture_multi 读多格式失败)
     pub const CLIPBOARD_READ_FAILED: &str = "CLIPBOARD_READ_FAILED";
+    /// 设置加载失败(M3:读 settings.json 失败)
+    pub const SETTINGS_LOAD_FAILED: &str = "SETTINGS_LOAD_FAILED";
+    /// 设置更新失败(M3:写 settings.json 失败)
+    pub const SETTINGS_UPDATE_FAILED: &str = "SETTINGS_UPDATE_FAILED";
+    /// 快捷键注册失败(M3:global-shortcut register 失败)
+    pub const SHORTCUT_REGISTER_FAILED: &str = "SHORTCUT_REGISTER_FAILED";
 }
 
 /// Tauri command 统一错误类型,序列化为 `{ code, message }` 给前端。

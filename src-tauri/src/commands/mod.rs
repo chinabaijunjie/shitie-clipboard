@@ -8,3 +8,4 @@
 
 pub mod clipboard;
 pub mod ping;
+pub mod settings;
