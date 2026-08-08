@@ -10,6 +10,7 @@
 // 阶段 B/C 接线后移除此 allow。
 #![allow(dead_code)]
 
+use crate::clipboard::types::AbsPath;
 use serde::{Deserialize, Serialize};
 
 /// 剪贴板内容类型。
@@ -76,10 +77,14 @@ pub struct ClipboardItem {
     pub title: String,
     /// 内容类型
     pub content_kind: ContentKind,
-    /// 图片缩略图相对路径(仅 image/mixed 类型有,前端用 convertFileSrc 显示)。
+    /// 图片缩略图绝对路径(仅 image/mixed 类型有,前端用 convertFileSrc 显示)。
     /// None = 非图片或无缩略图。
+    ///
+    /// 类型为 [`AbsPath`](crate::clipboard::types::AbsPath):`fill_image_fields` 填相对路径,
+    /// `resolve_thumb_absolute`(handler/command)转成绝对路径后赋值。
+    /// 序列化为裸 String(AbsPath serde transparent),前端只认字符串。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub thumb_path: Option<String>,
+    pub thumb_path: Option<AbsPath>,
 }
 
 /// 标题(列表预览)的最大字符数。

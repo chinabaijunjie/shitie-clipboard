@@ -14,7 +14,6 @@ use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext};
 use rusqlite::Connection;
 use tauri::State;
 
-use crate::clipboard::uti;
 use crate::error::{codes, AppError};
 use crate::models::ClipboardItem;
 use crate::storage::items;
@@ -34,15 +33,8 @@ pub fn list_items_with_conn(
     limit: i64,
     images_dir: &std::path::Path,
 ) -> Result<Vec<ClipboardItem>, AppError> {
-    let mut list = items::list(conn, limit)?;
-    // 把缩略图相对路径转绝对路径(前端 convertFileSrc 需要绝对路径)
-    for item in &mut list {
-        item.thumb_path = crate::clipboard::image_store::resolve_thumb_absolute(
-            &item.thumb_path,
-            images_dir,
-        );
-    }
-    Ok(list)
+    // items::list 已通过 fill_image_fields 把 thumb_path 填为绝对路径
+    items::list(conn, limit, images_dir)
 }
 
 /// 删除单条(含图片引用计数删除)。
@@ -63,15 +55,8 @@ pub fn search_items_with_conn(
     limit: i64,
     images_dir: &std::path::Path,
 ) -> Result<Vec<ClipboardItem>, AppError> {
-    let mut list = crate::storage::search::search(conn, query, limit)?;
-    // 搜索结果也转缩略图绝对路径(与 list_items 一致)
-    for item in &mut list {
-        item.thumb_path = crate::clipboard::image_store::resolve_thumb_absolute(
-            &item.thumb_path,
-            images_dir,
-        );
-    }
-    Ok(list)
+    // search::search 内部已通过 fill_image_fields 把 thumb_path 填为绝对路径
+    crate::storage::search::search(conn, query, limit, images_dir)
 }
 
 /// 回填:读 DB 该条所有格式 → 组装 Vec<ClipboardContent> → set 原子写回剪贴板。
@@ -103,8 +88,13 @@ pub fn copy_back_with_conn(
     let mut title_for_return = String::new();
     let mut image_read_error: Option<String> = None; // 图片读盘失败(若导致 contents 空则用于明确报错)
     for (uti_str, blob, file_path) in &formats {
-        match uti_str.as_str() {
-            uti::UTI_PLAIN_TEXT => {
+        // WhitelistUti::from_str 把 UTI 字符串解析成穷尽 enum(非白名单 → None → 跳过)
+        let Some(white_uti) = crate::clipboard::types::WhitelistUti::from_str(uti_str.as_str()) else {
+            log::debug!("[copy_back] 未知格式 {} 跳过", uti_str);
+            continue;
+        };
+        match white_uti {
+            crate::clipboard::types::WhitelistUti::PlainText => {
                 if let Ok(text) = String::from_utf8(blob.clone().unwrap_or_default()) {
                     if title_for_return.is_empty() {
                         title_for_return.clone_from(&text);
@@ -112,15 +102,15 @@ pub fn copy_back_with_conn(
                     contents.push(ClipboardContent::Text(text));
                 }
             }
-            uti::UTI_RTF => {
+            crate::clipboard::types::WhitelistUti::Rich => {
                 let rtf = String::from_utf8_lossy(&blob.clone().unwrap_or_default()).into_owned();
                 contents.push(ClipboardContent::Rtf(rtf));
             }
-            uti::UTI_HTML => {
+            crate::clipboard::types::WhitelistUti::Html => {
                 let html = String::from_utf8_lossy(&blob.clone().unwrap_or_default()).into_owned();
                 contents.push(ClipboardContent::Html(html));
             }
-            uti::UTI_FILE_URL => {
+            crate::clipboard::types::WhitelistUti::FileUrl => {
                 let blob_data = blob.clone().unwrap_or_default();
                 let urls = String::from_utf8_lossy(&blob_data);
                 let files: Vec<String> = urls.lines().map(String::from).collect();
@@ -129,7 +119,7 @@ pub fn copy_back_with_conn(
                 }
                 contents.push(ClipboardContent::Files(files));
             }
-            uti::UTI_PNG | uti::UTI_TIFF => {
+            crate::clipboard::types::WhitelistUti::Png | crate::clipboard::types::WhitelistUti::Tiff => {
                 // 图片:从磁盘读原图 → RustImageData
                 if let Some(fp) = file_path {
                     match read_image_content(images_dir, fp) {
@@ -145,9 +135,6 @@ pub fn copy_back_with_conn(
                         }
                     }
                 }
-            }
-            other => {
-                log::debug!("[copy_back] 未知格式 {} 跳过", other);
             }
         }
     }
@@ -173,10 +160,10 @@ pub fn copy_back_with_conn(
 /// 从磁盘读图片 → ClipboardContent::Image。
 fn read_image_content(
     images_dir: &std::path::Path,
-    rel_path: &str,
+    rel_path: &crate::clipboard::types::RelPath,
 ) -> Result<ClipboardContent, AppError> {
     use clipboard_rs::common::RustImage;
-    let full = images_dir.join(rel_path);
+    let full = images_dir.join(rel_path.as_str());
     // 路径非 UTF-8 时显式报错(而非 unwrap_or("") 用空串兜底,误导排查)
     let path_str = full.to_str().ok_or_else(|| {
         AppError::internal(format!("图片路径含非 UTF-8 字符: {}", full.display()))
@@ -248,18 +235,20 @@ pub fn copy_back(
 mod tests {
     use super::*;
     use crate::clipboard::capture::CapturedFormat;
+    use crate::clipboard::uti;
     use crate::models::ContentKind;
     use crate::storage::init_db_in_memory;
 
     fn db_with_sample_data() -> Connection {
         let conn = init_db_in_memory().expect("内存 DB");
-        items::insert_or_update(&conn, "第一条").unwrap();
+        let dir = test_images_dir();
+        items::insert_or_update(&conn, "第一条", &dir).unwrap();
         // 每条插入间隔 sleep,确保 last_copied_at 毫秒级时间戳递增
         // (否则同毫秒插入导致 DESC 排序不确定)
         std::thread::sleep(std::time::Duration::from_millis(10));
-        items::insert_or_update(&conn, "第二条").unwrap();
+        items::insert_or_update(&conn, "第二条", &dir).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        items::insert_or_update(&conn, "第三条").unwrap();
+        items::insert_or_update(&conn, "第三条", &dir).unwrap();
         conn
     }
 
@@ -352,7 +341,7 @@ mod tests {
             })
             .collect();
         let item =
-            items::insert_or_update_multi(&conn, &format_inputs, ContentKind::Rich, "Hello").unwrap();
+            items::insert_or_update_multi(&conn, &format_inputs, ContentKind::Rich, "Hello", &test_images_dir()).unwrap();
 
         // 验证 DB 里确实有 3 个格式行(copy_back 会读这些)
         let read_formats = items::get_formats(&conn, item.id).unwrap();

@@ -12,6 +12,7 @@
 //!    只切一边会导致全部查不到。
 
 use rusqlite::{params, Connection};
+use std::path::Path;
 
 use crate::error::AppError;
 use crate::models::ClipboardItem;
@@ -114,7 +115,12 @@ fn escape_fts_phrase(token: &str) -> String {
 /// - 多字查询 → bigram 预处理 → FTS MATCH + BM25 排序
 ///
 /// 返回的 ClipboardItem 不含 search_text(那是内部索引列,不暴露给前端)。
-pub fn search(conn: &Connection, query: &str, limit: i64) -> Result<Vec<ClipboardItem>, AppError> {
+pub fn search(
+    conn: &Connection,
+    query: &str,
+    limit: i64,
+    images_dir: &Path,
+) -> Result<Vec<ClipboardItem>, AppError> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
         return Ok(Vec::new());
@@ -127,7 +133,7 @@ pub fn search(conn: &Connection, query: &str, limit: i64) -> Result<Vec<Clipboar
     };
     // 补充图片类条目的缩略图路径(与 list/get_item 保持一致,否则搜索命中的图片无缩略图)
     for item in &mut results {
-        crate::storage::items::fill_image_fields(conn, item)?;
+        crate::storage::items::fill_image_fields(conn, item, images_dir)?;
     }
     Ok(results)
 }
@@ -191,6 +197,19 @@ fn collect_items(
 mod tests {
     use super::*;
     use crate::storage::init_db_in_memory;
+
+    /// 测试用 images_dir(临时目录,搜索测试不实际写图,但 fill_image_fields 签名要求传)。
+    fn test_images_dir() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "clipboard-search-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
 
     /// 准备带 search_text + FTS 的测试 DB,并插入若干条目。
     fn setup_with_data() -> Connection {
@@ -268,7 +287,7 @@ mod tests {
     #[test]
     fn search_empty_query_returns_empty() {
         let conn = setup_with_data();
-        let r = search(&conn, "", 50).unwrap();
+        let r = search(&conn, "", 50, &test_images_dir()).unwrap();
         assert!(r.is_empty());
     }
 
@@ -276,7 +295,7 @@ mod tests {
     fn search_chinese_bigram_recall() {
         let conn = setup_with_data();
         // 搜「你好」→ 命中「你好世界」
-        let r = search(&conn, "你好", 50).unwrap();
+        let r = search(&conn, "你好", 50, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].title, "你好世界");
     }
@@ -285,7 +304,7 @@ mod tests {
     fn search_chinese_partial_recall() {
         let conn = setup_with_data();
         // 搜「你好世」→ MATCH "你好" OR "好世" → 命中「你好世界」
-        let r = search(&conn, "你好世", 50).unwrap();
+        let r = search(&conn, "你好世", 50, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].title, "你好世界");
     }
@@ -293,7 +312,7 @@ mod tests {
     #[test]
     fn search_english_token() {
         let conn = setup_with_data();
-        let r = search(&conn, "async", 50).unwrap();
+        let r = search(&conn, "async", 50, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].title, "rust async await");
     }
@@ -301,7 +320,7 @@ mod tests {
     #[test]
     fn search_code_url() {
         let conn = setup_with_data();
-        let r = search(&conn, "github", 50).unwrap();
+        let r = search(&conn, "github", 50, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert!(r[0].title.contains("github"));
     }
@@ -310,7 +329,7 @@ mod tests {
     fn search_single_char_like_fallback() {
         let conn = setup_with_data();
         // 搜「你」(单字)→ LIKE 兜底,命中含「你」的
-        let r = search(&conn, "你", 50).unwrap();
+        let r = search(&conn, "你", 50, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].title, "你好世界");
     }
@@ -333,7 +352,7 @@ mod tests {
         )
         .unwrap();
 
-        let r = search(&conn, "rust", 50).unwrap();
+        let r = search(&conn, "rust", 50, &test_images_dir()).unwrap();
         assert_eq!(r[0].title, "rust x3", "词频高的应排前(BM25)");
         assert_eq!(r[1].title, "rust x1");
     }

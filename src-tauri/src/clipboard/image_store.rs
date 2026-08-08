@@ -20,6 +20,7 @@ use std::path::Path;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
+use crate::clipboard::types::{AbsPath, RelPath};
 use crate::error::AppError;
 
 /// 缩略图最长边像素(保比例)。
@@ -29,11 +30,11 @@ const THUMB_MAX_SIZE: u32 = 200;
 #[derive(Debug, Clone)]
 pub struct ImageMeta {
     /// 原图相对路径(相对 images_dir,如 `ab/abcdef....png`)。
-    pub rel_path: String,
+    pub rel_path: RelPath,
     /// 缩略图相对路径(如 `thumb/abcdef....png`)。
     /// 前端列表渲染缩略图用;当前 fill_image_fields 从 file_path(rel_path)推导等价值。
     #[allow(dead_code)]
-    pub thumb_rel_path: String,
+    pub thumb_rel_path: RelPath,
     /// 图片宽度(像素)。
     pub width: u32,
     /// 图片高度(像素)。
@@ -61,8 +62,8 @@ pub fn save_image(png_bytes: &[u8], images_dir: &Path) -> Result<ImageMeta, AppE
     let rel_path = relative_image_path(&hash);
     let thumb_rel_path = relative_thumb_path(&hash);
 
-    let orig_full = images_dir.join(&rel_path);
-    let thumb_full = images_dir.join(&thumb_rel_path);
+    let orig_full = images_dir.join(rel_path.as_str());
+    let thumb_full = images_dir.join(thumb_rel_path.as_str());
 
     // 原图:若已存在(sha256 去重命中)则跳过写入
     if !orig_full.exists() {
@@ -95,10 +96,10 @@ pub fn save_image(png_bytes: &[u8], images_dir: &Path) -> Result<ImageMeta, AppE
 }
 
 /// 查某 file_path 在 clipboard_formats 表里的引用数(引用计数删除用)。
-pub fn count_references(conn: &Connection, file_path: &str) -> Result<i64, AppError> {
+pub fn count_references(conn: &Connection, file_path: &RelPath) -> Result<i64, AppError> {
     conn.query_row(
         "SELECT COUNT(*) FROM clipboard_formats WHERE file_path = ?1",
-        rusqlite::params![file_path],
+        rusqlite::params![file_path.as_str()],
         |r| r.get(0),
     )
     .map_err(|e| AppError::internal(format!("查图片引用数失败: {e}")))
@@ -114,13 +115,13 @@ pub fn count_references(conn: &Connection, file_path: &str) -> Result<i64, AppEr
 /// 删磁盘失败只 log 不阻断(DB 行照删,磁盘文件成孤儿,后续可加清理任务)。
 pub fn delete_if_last_reference(
     conn: &Connection,
-    file_path: &str,
+    file_path: &RelPath,
     images_dir: &Path,
 ) -> Result<(), AppError> {
     let count = count_references(conn, file_path)?;
     if count <= 1 {
-        let orig = images_dir.join(file_path);
-        let thumb = images_dir.join(relative_thumb_path_from_image(file_path));
+        let orig = images_dir.join(file_path.as_str());
+        let thumb = images_dir.join(relative_thumb_path_from_image(file_path).as_str());
         // 删原图
         if let Err(e) = std::fs::remove_file(&orig) {
             if !matches!(e.kind(), std::io::ErrorKind::NotFound) {
@@ -149,28 +150,28 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 /// 从 sha256 生成原图相对路径:`<前2位>/<完整hash>.png`(分桶防单目录文件膨胀)。
-fn relative_image_path(hash: &str) -> String {
+fn relative_image_path(hash: &str) -> RelPath {
     let (bucket, rest) = hash.split_at(2);
-    format!("{}/{}.png", bucket, rest)
+    RelPath::new(format!("{}/{}.png", bucket, rest))
 }
 
 /// 从 sha256 生成缩略图相对路径:`thumb/<完整hash>.png`。
-fn relative_thumb_path(hash: &str) -> String {
-    format!("thumb/{}.png", hash)
+fn relative_thumb_path(hash: &str) -> RelPath {
+    RelPath::new(format!("thumb/{}.png", hash))
 }
 
 /// 从原图相对路径推缩略图相对路径(pub 版本,供 storage 层填 thumb_path 用)。
-pub fn relative_thumb_path_from_image_pub(image_rel: &str) -> String {
+pub fn relative_thumb_path_from_image_pub(image_rel: &RelPath) -> RelPath {
     relative_thumb_path_from_image(image_rel)
 }
 
-/// 把缩略图相对路径转成绝对路径字符串(给前端 convertFileSrc 用)。
+/// 把缩略图相对路径转成绝对路径(给前端 convertFileSrc 用)。
 ///
 /// handler emit / command 返回前调用。None 或转失败时返回 None。
-pub fn resolve_thumb_absolute(thumb_rel: &Option<String>, images_dir: &Path) -> Option<String> {
+pub fn resolve_thumb_absolute(thumb_rel: &Option<RelPath>, images_dir: &Path) -> Option<AbsPath> {
     let rel = thumb_rel.as_ref()?;
-    let abs = images_dir.join(rel);
-    abs.to_str().map(|s| s.to_string())
+    let abs = images_dir.join(rel.as_str());
+    abs.to_str().map(|s| AbsPath::new(s.to_string()))
 }
 
 /// 从原图相对路径反推缩略图相对路径。
@@ -179,8 +180,8 @@ pub fn resolve_thumb_absolute(thumb_rel: &Option<String>, images_dir: &Path) -> 
 /// 缩略图:`thumb/<完整hash>.png`(完整 hash = bucket + rest 不含扩展名)
 ///
 /// 所以要把 bucket 加回到 basename 前面,组成完整 hash。
-fn relative_thumb_path_from_image(image_rel: &str) -> String {
-    let p = Path::new(image_rel);
+fn relative_thumb_path_from_image(image_rel: &RelPath) -> RelPath {
+    let p = Path::new(image_rel.as_str());
     let bucket = p.parent().and_then(|s| s.to_str()).unwrap_or("");
     let stem = p
         .file_stem()
@@ -188,7 +189,7 @@ fn relative_thumb_path_from_image(image_rel: &str) -> String {
         .unwrap_or("");
     // 完整 hash = bucket + stem(如 "ab" + "cdef..." )
     let full_hash = format!("{}{}", bucket, stem);
-    format!("thumb/{}.png", full_hash)
+    RelPath::new(format!("thumb/{}.png", full_hash))
 }
 
 /// 读 PNG 字节的宽高(用 clipboard-rs 的 RustImageData 解码)。
@@ -259,33 +260,33 @@ mod tests {
     fn relative_image_path_uses_bucket() {
         // sha256 前 2 位分桶
         let path = relative_image_path("abcdef1234567890");
-        assert_eq!(path, "ab/cdef1234567890.png");
+        assert_eq!(path.as_str(), "ab/cdef1234567890.png");
     }
 
     #[test]
     fn relative_thumb_path_format() {
         let path = relative_thumb_path("abcdef1234567890");
-        assert_eq!(path, "thumb/abcdef1234567890.png");
+        assert_eq!(path.as_str(), "thumb/abcdef1234567890.png");
     }
 
     #[test]
     fn thumb_path_from_image_reconstructs_full_hash() {
         // 原图 ab/cdef...png(bucket=ab, stem=cdef...) → 缩略图 thumb/abcdef...png(完整 hash)
-        let thumb = relative_thumb_path_from_image("ab/cdef1234567890.png");
-        assert_eq!(thumb, "thumb/abcdef1234567890.png");
+        let thumb = relative_thumb_path_from_image(&RelPath::from_str("ab/cdef1234567890.png"));
+        assert_eq!(thumb.as_str(), "thumb/abcdef1234567890.png");
     }
 
     #[test]
     fn thumb_path_from_image_no_bucket() {
         // 容错:无分桶目录(bucket 为空)→ 缩略图 thumb/<stem>.png
-        let thumb = relative_thumb_path_from_image("cdef.png");
-        assert_eq!(thumb, "thumb/cdef.png");
+        let thumb = relative_thumb_path_from_image(&RelPath::from_str("cdef.png"));
+        assert_eq!(thumb.as_str(), "thumb/cdef.png");
     }
 
     #[test]
     fn count_references_empty_db() {
         let conn = init_db_in_memory().unwrap();
-        assert_eq!(count_references(&conn, "ab/xyz.png").unwrap(), 0);
+        assert_eq!(count_references(&conn, &RelPath::from_str("ab/xyz.png")).unwrap(), 0);
     }
 
     #[test]
@@ -307,15 +308,15 @@ mod tests {
         .unwrap();
         let id2 = conn.last_insert_rowid();
 
-        let fp = "ab/shared.png";
+        let fp = RelPath::from_str("ab/shared.png");
         for id in [id1, id2] {
             conn.execute(
                 "INSERT INTO clipboard_formats (item_id, uti, file_path, size) VALUES (?1,'public.png',?2,0)",
-                rusqlite::params![id, fp],
+                rusqlite::params![id, fp.as_str()],
             )
             .unwrap();
         }
-        assert_eq!(count_references(&conn, fp).unwrap(), 2, "两行指向同一文件应计数 2");
+        assert_eq!(count_references(&conn, &fp).unwrap(), 2, "两行指向同一文件应计数 2");
     }
 
     #[test]
@@ -328,9 +329,9 @@ mod tests {
         let meta = save_image(&png, &images_dir).expect("存图应成功");
 
         // 原图文件存在
-        assert!(images_dir.join(&meta.rel_path).exists(), "原图应存在");
+        assert!(images_dir.join(meta.rel_path.as_str()).exists(), "原图应存在");
         // 缩略图文件存在
-        assert!(images_dir.join(&meta.thumb_rel_path).exists(), "缩略图应存在");
+        assert!(images_dir.join(meta.thumb_rel_path.as_str()).exists(), "缩略图应存在");
         // 尺寸 2x2(TEST_PNG_BASE64 是 2x2 红色图)
         assert_eq!(meta.width, 2);
         assert_eq!(meta.height, 2);
@@ -368,15 +369,15 @@ mod tests {
         let id = conn.last_insert_rowid();
         conn.execute(
             "INSERT INTO clipboard_formats (item_id, uti, file_path, size) VALUES (?1,'public.png',?2,0)",
-            rusqlite::params![id, &meta.rel_path],
+            rusqlite::params![id, meta.rel_path.as_str()],
         )
         .unwrap();
 
         // 引用数 1 → 删除应移除磁盘文件
-        assert!(images_dir.join(&meta.rel_path).exists());
+        assert!(images_dir.join(meta.rel_path.as_str()).exists());
         delete_if_last_reference(&conn, &meta.rel_path, &images_dir).unwrap();
-        assert!(!images_dir.join(&meta.rel_path).exists(), "引用数 1 应删磁盘文件");
-        assert!(!images_dir.join(&meta.thumb_rel_path).exists(), "缩略图也应删");
+        assert!(!images_dir.join(meta.rel_path.as_str()).exists(), "引用数 1 应删磁盘文件");
+        assert!(!images_dir.join(meta.thumb_rel_path.as_str()).exists(), "缩略图也应删");
     }
 
     #[test]
@@ -397,14 +398,14 @@ mod tests {
             let id = conn.last_insert_rowid();
             conn.execute(
                 "INSERT INTO clipboard_formats (item_id, uti, file_path, size) VALUES (?1,'public.png',?2,0)",
-                rusqlite::params![id, &meta.rel_path],
+                rusqlite::params![id, meta.rel_path.as_str()],
             )
             .unwrap();
         }
 
         // 引用数 2 → 删除应保留磁盘文件
         delete_if_last_reference(&conn, &meta.rel_path, &images_dir).unwrap();
-        assert!(images_dir.join(&meta.rel_path).exists(), "引用数 2 应保留磁盘文件");
+        assert!(images_dir.join(meta.rel_path.as_str()).exists(), "引用数 2 应保留磁盘文件");
     }
 
     // ===== 测试辅助 =====

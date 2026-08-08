@@ -162,7 +162,7 @@ pub fn capture_multi(
             formats.push(CapturedFormat {
                 uti: uti::UTI_PNG.to_string(),
                 data: Vec::new(),
-                file_path: Some(img_fmt.rel_path),
+                file_path: Some(img_fmt.rel_path.as_str().to_string()),
             });
         }
     }
@@ -179,7 +179,7 @@ pub fn capture_multi(
 
 /// 图片捕获 + 存盘的中间结果。
 struct StoredImage {
-    rel_path: String,
+    rel_path: crate::clipboard::types::RelPath,
     image_w: u32,
     image_h: u32,
 }

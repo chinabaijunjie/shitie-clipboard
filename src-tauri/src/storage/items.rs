@@ -12,6 +12,7 @@
 use rusqlite::{params, Connection};
 use std::path::Path;
 
+use crate::clipboard::types::RelPath;
 use crate::error::AppError;
 use crate::models::{truncate_title, ClipboardItem, ContentKind};
 use crate::storage::search::bigram_cjk;
@@ -44,7 +45,11 @@ pub struct FormatInput<'a> {
 /// 去重逻辑:formats 表里查找 uti=PLAIN_TEXT 且 data_blob == text 的 item。
 /// - 找到:UPDATE 该 item 的 last_copied_at + copy_count
 /// - 没找到:INSERT items(含 search_text)+ INSERT formats(text)
-pub fn insert_or_update(conn: &Connection, text: &str) -> Result<ClipboardItem, AppError> {
+pub fn insert_or_update(
+    conn: &Connection,
+    text: &str,
+    images_dir: &Path,
+) -> Result<ClipboardItem, AppError> {
     let now = now_epoch_ms();
     let title = truncate_title(text);
     let text_bytes = text.as_bytes();
@@ -93,7 +98,7 @@ pub fn insert_or_update(conn: &Connection, text: &str) -> Result<ClipboardItem, 
         }
     };
 
-    get_item(conn, item_id)
+    get_item(conn, item_id, images_dir)
 }
 
 /// 去重的判定 key(纯函数,可测)。
@@ -146,6 +151,7 @@ pub fn insert_or_update_multi(
     formats: &[FormatInput<'_>],
     kind: ContentKind,
     title: &str,
+    images_dir: &Path,
 ) -> Result<ClipboardItem, AppError> {
     let now = now_epoch_ms();
     let title = truncate_title(title);
@@ -225,11 +231,13 @@ pub fn insert_or_update_multi(
         }
     };
 
-    get_item(conn, item_id)
+    get_item(conn, item_id, images_dir)
 }
 
 /// 按 id 查单条(返回 ClipboardItem 元数据视图)。
-pub fn get_item(conn: &Connection, id: i64) -> Result<ClipboardItem, AppError> {
+///
+/// `images_dir`:图片存储根目录,用于把缩略图相对路径转绝对路径。
+pub fn get_item(conn: &Connection, id: i64, images_dir: &Path) -> Result<ClipboardItem, AppError> {
     let mut item = conn
         .query_row(
             "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind \
@@ -243,12 +251,14 @@ pub fn get_item(conn: &Connection, id: i64) -> Result<ClipboardItem, AppError> {
             }
             other => AppError::internal(format!("查条目 {} 失败: {}", id, other)),
         })?;
-    fill_image_fields(conn, &mut item)?;
+    fill_image_fields(conn, &mut item, images_dir)?;
     Ok(item)
 }
 
 /// 查列表(按 last_copied_at DESC)。
-pub fn list(conn: &Connection, limit: i64) -> Result<Vec<ClipboardItem>, AppError> {
+///
+/// `images_dir`:图片存储根目录,用于把缩略图相对路径转绝对路径。
+pub fn list(conn: &Connection, limit: i64, images_dir: &Path) -> Result<Vec<ClipboardItem>, AppError> {
     let mut stmt = conn
         .prepare(
             "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind \
@@ -266,7 +276,7 @@ pub fn list(conn: &Connection, limit: i64) -> Result<Vec<ClipboardItem>, AppErro
     }
     // 补充图片类条目的缩略图路径
     for item in &mut result {
-        fill_image_fields(conn, item)?;
+        fill_image_fields(conn, item, images_dir)?;
     }
     Ok(result)
 }
@@ -296,11 +306,14 @@ pub fn get_text(conn: &Connection, id: i64) -> Result<String, AppError> {
 }
 
 /// 一个格式行的读取结果(uti + data_blob + file_path)。
-pub type FormatRow = (String, Option<Vec<u8>>, Option<String>);
+///
+/// `file_path` 为 [`RelPath`]:图片格式的磁盘相对路径;文本类格式为 None。
+pub type FormatRow = (String, Option<Vec<u8>>, Option<RelPath>);
 
 /// 读某条的所有格式行(给 M2 多格式回填用)。
 ///
 /// 返回每个格式的 (uti, data_blob, file_path)。
+/// file_path 从 DB 读出的裸 String 包装成 [`RelPath`]。
 pub fn get_formats(conn: &Connection, id: i64) -> Result<Vec<FormatRow>, AppError> {
     let mut stmt = conn
         .prepare(
@@ -310,7 +323,12 @@ pub fn get_formats(conn: &Connection, id: i64) -> Result<Vec<FormatRow>, AppErro
 
     let rows = stmt
         .query_map(params![id], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, Option<Vec<u8>>>(1)?, r.get::<_, Option<String>>(2)?))
+            let file_path: Option<String> = r.get(2)?;
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<Vec<u8>>>(1)?,
+                file_path.map(RelPath::new),
+            ))
         })
         .map_err(|e| AppError::internal(format!("query get_formats 失败: {e}")))?;
 
@@ -327,10 +345,13 @@ pub fn get_formats(conn: &Connection, id: i64) -> Result<Vec<FormatRow>, AppErro
 /// (引用数 == 1 时删磁盘原图 + 缩略图)。`images_dir` 为图片根目录。
 pub fn delete(conn: &Connection, id: i64, images_dir: &Path) -> Result<(), AppError> {
     // 删 DB 前:查该 item 的图片格式 file_path,引用计数删除磁盘文件
-    let image_paths: Vec<String> = conn
+    let image_paths: Vec<RelPath> = conn
         .prepare("SELECT file_path FROM clipboard_formats WHERE item_id = ?1 AND file_path IS NOT NULL")
         .map_err(|e| AppError::internal(format!("prepare 查图片 file_path 失败: {e}")))?
-        .query_map(params![id], |r| r.get::<_, String>(0))
+        .query_map(params![id], |r| {
+            let s: String = r.get(0)?;
+            Ok(RelPath::new(s))
+        })
         .map_err(|e| AppError::internal(format!("查图片 file_path 失败: {e}")))?
         .filter_map(Result::ok)
         .collect();
@@ -380,14 +401,19 @@ pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clipboard
 ///
 /// 非 image/mixed 类型不处理。图片格式(public.png/public.tiff)的 file_path 存的是
 /// 原图相对路径,缩略图路径由 image_store::relative_thumb_path_from_image 推导。
+/// 推导出相对路径后,用 `images_dir` 转成绝对路径填入 `ClipboardItem.thumb_path`。
 ///
 /// `pub(crate)`:list/get_item(本文件)+ search.rs(搜索结果)都要调用,
 /// 保证所有返回前端的路径都填了 thumb_path(否则搜索命中的图片无缩略图)。
-pub(crate) fn fill_image_fields(conn: &Connection, item: &mut ClipboardItem) -> Result<(), AppError> {
+pub(crate) fn fill_image_fields(
+    conn: &Connection,
+    item: &mut ClipboardItem,
+    images_dir: &Path,
+) -> Result<(), AppError> {
     if !matches!(item.content_kind, ContentKind::Image | ContentKind::Mixed) {
         return Ok(());
     }
-    // 查图片格式的 file_path
+    // 查图片格式的 file_path(相对路径)
     let file_path: Option<String> = conn
         .query_row(
             "SELECT file_path FROM clipboard_formats \
@@ -399,7 +425,11 @@ pub(crate) fn fill_image_fields(conn: &Connection, item: &mut ClipboardItem) -> 
         .optional()
         .map_err(|e| AppError::internal(format!("查图片 file_path 失败: {e}")))?;
     if let Some(fp) = file_path {
-        item.thumb_path = Some(crate::clipboard::image_store::relative_thumb_path_from_image_pub(&fp));
+        let image_rel = RelPath::new(fp);
+        let thumb_rel = crate::clipboard::image_store::relative_thumb_path_from_image_pub(&image_rel);
+        // 相对路径 → 绝对路径(给前端 convertFileSrc)
+        item.thumb_path =
+            crate::clipboard::image_store::resolve_thumb_absolute(&Some(thumb_rel), images_dir);
     }
     Ok(())
 }
@@ -444,7 +474,7 @@ mod tests {
     #[test]
     fn insert_new_item() {
         let conn = db();
-        let item = insert_or_update(&conn, "第一条").expect("插入应成功");
+        let item = insert_or_update(&conn, "第一条", &test_images_dir()).expect("插入应成功");
         assert_eq!(item.title, "第一条");
         assert_eq!(item.copy_count, 1);
         assert_eq!(item.content_kind, ContentKind::Text);
@@ -453,9 +483,9 @@ mod tests {
     #[test]
     fn duplicate_updates_count() {
         let conn = db();
-        let first = insert_or_update(&conn, "重复内容").unwrap();
+        let first = insert_or_update(&conn, "重复内容", &test_images_dir()).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let second = insert_or_update(&conn, "重复内容").unwrap();
+        let second = insert_or_update(&conn, "重复内容", &test_images_dir()).unwrap();
 
         assert_eq!(first.id, second.id, "相同文本应命中同一条");
         assert_eq!(second.copy_count, 2);
@@ -465,19 +495,19 @@ mod tests {
     #[test]
     fn different_text_creates_separate_items() {
         let conn = db();
-        let a = insert_or_update(&conn, "AAA").unwrap();
-        let b = insert_or_update(&conn, "BBB").unwrap();
+        let a = insert_or_update(&conn, "AAA", &test_images_dir()).unwrap();
+        let b = insert_or_update(&conn, "BBB", &test_images_dir()).unwrap();
         assert_ne!(a.id, b.id);
     }
 
     #[test]
     fn list_orders_by_last_copied_desc() {
         let conn = db();
-        insert_or_update(&conn, "旧").unwrap();
+        insert_or_update(&conn, "旧", &test_images_dir()).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        insert_or_update(&conn, "新").unwrap();
+        insert_or_update(&conn, "新", &test_images_dir()).unwrap();
 
-        let list = list(&conn, 10).unwrap();
+        let list = list(&conn, 10, &test_images_dir()).unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].title, "新", "最新复制应排第一");
     }
@@ -485,7 +515,7 @@ mod tests {
     #[test]
     fn get_text_returns_stored_content() {
         let conn = db();
-        let item = insert_or_update(&conn, "要回填的内容").unwrap();
+        let item = insert_or_update(&conn, "要回填的内容", &test_images_dir()).unwrap();
         let text = get_text(&conn, item.id).unwrap();
         assert_eq!(text, "要回填的内容");
     }
@@ -493,7 +523,7 @@ mod tests {
     #[test]
     fn delete_removes_item_and_cascades_formats() {
         let conn = db();
-        let item = insert_or_update(&conn, "待删除").unwrap();
+        let item = insert_or_update(&conn, "待删除", &test_images_dir()).unwrap();
 
         // 删除前 formats 有行
         let fmt_count: i64 = conn
@@ -525,7 +555,7 @@ mod tests {
     #[test]
     fn get_nonexistent_item_returns_not_found() {
         let conn = db();
-        let err = get_item(&conn, 9999).unwrap_err();
+        let err = get_item(&conn, 9999, &test_images_dir()).unwrap_err();
         assert_eq!(err.code, crate::error::codes::NOT_FOUND);
     }
 
@@ -543,7 +573,7 @@ mod tests {
             FormatInput { uti: "public.rtf", data: &rtf, file_path: None },
             FormatInput { uti: "public.html", data: &html, file_path: None },
         ];
-        let item = insert_or_update_multi(&conn, &formats, ContentKind::Rich, "Hello world")
+        let item = insert_or_update_multi(&conn, &formats, ContentKind::Rich, "Hello world", &test_images_dir())
             .expect("多格式插入应成功");
 
         // formats 表应有 3 行
@@ -578,7 +608,7 @@ mod tests {
             FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
             FormatInput { uti: "public.rtf", data: &rtf, file_path: None },
         ];
-        let item = insert_or_update_multi(&conn, &formats, ContentKind::Rich, "你好世界").unwrap();
+        let item = insert_or_update_multi(&conn, &formats, ContentKind::Rich, "你好世界", &test_images_dir()).unwrap();
 
         // search_text 应为 bigram(你好世界 → " 你好 好世 世界 ")
         let st: String = conn
@@ -609,8 +639,8 @@ mod tests {
         let formats = vec![
             FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
         ];
-        let first = insert_or_update_multi(&conn, &formats, ContentKind::Text, "重复内容").unwrap();
-        let second = insert_or_update_multi(&conn, &formats, ContentKind::Text, "重复内容").unwrap();
+        let first = insert_or_update_multi(&conn, &formats, ContentKind::Text, "重复内容", &test_images_dir()).unwrap();
+        let second = insert_or_update_multi(&conn, &formats, ContentKind::Text, "重复内容", &test_images_dir()).unwrap();
 
         assert_eq!(first.id, second.id, "相同纯文本应命中同一条");
         assert_eq!(second.copy_count, 2);
@@ -623,8 +653,8 @@ mod tests {
         let formats = vec![
             FormatInput { uti: "public.png", data: &[], file_path: Some("ab/1234.png") },
         ];
-        let first = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图片 100×100").unwrap();
-        let second = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图片 100×100").unwrap();
+        let first = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图片 100×100", &test_images_dir()).unwrap();
+        let second = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图片 100×100", &test_images_dir()).unwrap();
 
         assert_eq!(first.id, second.id, "相同图片(file_path 相同)应去重命中同一条");
         assert_eq!(second.copy_count, 2);
@@ -636,8 +666,8 @@ mod tests {
         let conn = db();
         let f1 = vec![FormatInput { uti: "public.png", data: &[], file_path: Some("ab/1111.png") }];
         let f2 = vec![FormatInput { uti: "public.png", data: &[], file_path: Some("cd/2222.png") }];
-        let first = insert_or_update_multi(&conn, &f1, ContentKind::Image, "图1").unwrap();
-        let second = insert_or_update_multi(&conn, &f2, ContentKind::Image, "图2").unwrap();
+        let first = insert_or_update_multi(&conn, &f1, ContentKind::Image, "图1", &test_images_dir()).unwrap();
+        let second = insert_or_update_multi(&conn, &f2, ContentKind::Image, "图2", &test_images_dir()).unwrap();
         assert_ne!(first.id, second.id, "不同图片应各自入库");
     }
 
@@ -675,7 +705,7 @@ mod tests {
     fn single_text_insert_indexes_fts() {
         // M1 单文本入口(insert_or_update)也应写 search_text + 索引 FTS
         let conn = db();
-        let item = insert_or_update(&conn, "搜索测试文本").unwrap();
+        let item = insert_or_update(&conn, "搜索测试文本", &test_images_dir()).unwrap();
 
         let hit: i64 = conn
             .query_row(
@@ -720,16 +750,17 @@ mod tests {
 
         // 存图(sha256 决定 file_path)
         let meta = crate::clipboard::image_store::save_image(&png, &images_dir).unwrap();
-        let orig_path = images_dir.join(&meta.rel_path);
+        let orig_path = images_dir.join(meta.rel_path.as_str());
         assert!(orig_path.exists(), "原图应存在");
 
         // 两个 item 都引用同一图片 file_path(模拟同一张图被两次复制)
+        let rel_path_str = meta.rel_path.as_str();
         let formats = vec![FormatInput {
             uti: crate::clipboard::uti::UTI_PNG,
             data: &[],
-            file_path: Some(&meta.rel_path),
+            file_path: Some(rel_path_str),
         }];
-        let item1 = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图1").unwrap();
+        let item1 = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图1", &images_dir).unwrap();
         // 第二个 item:insert_or_update_multi 会按 Image file_path 去重命中 item1,
         // 所以直接插第二个真实 item + formats 行(模拟两条历史引用同一张图)。
         let item2_id: i64 = conn
@@ -742,7 +773,7 @@ mod tests {
             .unwrap();
         conn.execute(
             "INSERT INTO clipboard_formats (item_id, uti, file_path, size) VALUES (?1,'public.png',?2,0)",
-            params![item2_id, &meta.rel_path],
+            params![item2_id, meta.rel_path.as_str()],
         )
         .unwrap();
 
@@ -772,7 +803,7 @@ mod tests {
             data: &[],
             file_path: Some("ab/nonexistent.png"),
         }];
-        let item = insert_or_update_multi(&conn, &formats, ContentKind::Image, "孤儿图").unwrap();
+        let item = insert_or_update_multi(&conn, &formats, ContentKind::Image, "孤儿图", &images_dir).unwrap();
         // delete 应成功(磁盘文件不存在不算错误)
         delete(&conn, item.id, &images_dir).unwrap();
     }

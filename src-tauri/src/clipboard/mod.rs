@@ -19,6 +19,7 @@ pub mod capture;
 pub mod handler;
 pub mod image_store;
 pub mod title;
+pub mod types;
 pub mod uti;
 
 use std::{

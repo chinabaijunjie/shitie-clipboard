@@ -164,13 +164,15 @@ impl ClipboardHandler for ClipboardChangeHandler {
             })
             .collect();
 
-        match items::insert_or_update_multi(&self.db, &format_inputs, captured.kind, &title_str) {
-            Ok(mut item) => {
-                // 缩略图相对路径 → 绝对路径(前端 convertFileSrc 需要绝对路径)
-                item.thumb_path = crate::clipboard::image_store::resolve_thumb_absolute(
-                    &item.thumb_path,
-                    &self.images_dir,
-                );
+        match items::insert_or_update_multi(
+            &self.db,
+            &format_inputs,
+            captured.kind,
+            &title_str,
+            &self.images_dir,
+        ) {
+            Ok(item) => {
+                // insert_or_update_multi 已通过 fill_image_fields 把 thumb_path 填为绝对路径
                 log::info!(
                     "[clipboard] 捕获: id={} kind={:?} title={:?}",
                     item.id,
