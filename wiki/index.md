@@ -83,7 +83,7 @@ status: active
 ```
 engineering-principles（22 条工程纪律）> 会话收尾 8 步清单
 > Tauri v2 setup 时序坑（constraints）> 双工具同步 pre-commit hook
-> m1-plan（当前任务规划）+ m1-research（技术依据）
+> m2-plan/m2-research（M2 完成规划+依据）+ constraints（M2 沉淀的 FTS5/migration/asset 约束）
 ```
 
 > ⚠️ sidecar.rs / paths.py / database.py 等 sidecar 时代资产在 M0 后已删,
