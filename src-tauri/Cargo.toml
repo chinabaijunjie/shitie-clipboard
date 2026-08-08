@@ -37,6 +37,8 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # M2 图片存储:sha256 做图片文件名(天然去重,Raycast 生产验证方案)。
 # RustCrypto 维护,生态最标准的 SHA256 实现。
 sha2 = "0.10"
+# M4 敏感信息过滤:正则匹配 API key/token/私钥(显式声明,虽已通过传递依赖存在)。
+regex = "1"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-store = "2"

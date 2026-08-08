@@ -239,6 +239,14 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
             onChange={(v) => void save({ hideOnBlur: v })}
           />
         </SettingRow>
+
+        {/* 敏感内容过滤 */}
+        <SettingRow label="敏感内容过滤" desc="自动拦截 API key / Token / 私钥等敏感信息">
+          <Toggle
+            checked={settings.enableSensitiveFilter}
+            onChange={(v) => void save({ enableSensitiveFilter: v })}
+          />
+        </SettingRow>
       </div>
 
       {/* 底栏:错误提示 */}

@@ -27,6 +27,7 @@ use rusqlite::Connection;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::clipboard::capture::{self, CaptureDecision};
+use crate::clipboard::filter;
 use crate::clipboard::title;
 use crate::storage::items::{self, FormatInput};
 
@@ -150,6 +151,22 @@ impl ClipboardHandler for ClipboardChangeHandler {
         //    (图片/文件即使内容「空」也是有效内容)
         if should_skip_empty_capture(&captured.formats) {
             return;
+        }
+
+        // 4.5 敏感信息过滤(M4):读设置决定是否启用,检测纯文本是否含已知敏感模式
+        if let Some(state) = self.app.try_state::<crate::AppState>() {
+            let enable_filter = {
+                let guard = state.settings().lock().expect("Settings Mutex 中毒");
+                guard.enable_sensitive_filter
+            };
+            if enable_filter {
+                if let Some(text) = filter::extract_plain_text(&captured.formats) {
+                    if filter::is_sensitive(&text) {
+                        log::info!("[clipboard] 跳过敏感内容(API key/token/私钥)");
+                        return;
+                    }
+                }
+            }
         }
 
         // 5. 生成标题(图片用尺寸)+ 转成 FormatInput 写 DB

@@ -3,13 +3,14 @@
 //! M3 新增。使用 tauri-plugin-store(settings.json in app_data_dir)持久化。
 //! 与 rusqlite(历史数据)职责分离。
 //!
-//! 配置项(7 项):
+//! 配置项(8 项):
 //! - shortcut:全局唤起快捷键(默认 "Cmd+Shift+V")
 //! - launch_visible:启动时打开窗口(默认 true)
 //! - max_items:历史记录上限(默认 50)
 //! - retention_days:保留天数,0=不限(默认 0)
 //! - max_storage_mb:容量上限 MB,0=不限(默认 0)
 //! - hide_on_blur:失焦自动隐藏(默认 true)
+//! - enable_sensitive_filter:敏感内容过滤(默认 true,M4 新增)
 //!
 //! autostart 状态由 tauri-plugin-autostart 管理(写 LaunchAgent plist),不进 settings.json。
 //!
@@ -53,6 +54,9 @@ pub struct Settings {
     /// 失焦自动隐藏窗口(Spotlight 标准行为)。
     #[serde(rename = "hideOnBlur", default = "default_hide_on_blur")]
     pub hide_on_blur: bool,
+    /// 敏感内容过滤(检测 API key/token/私钥,命中则跳过入库)。
+    #[serde(rename = "enableSensitiveFilter", default = "default_true")]
+    pub enable_sensitive_filter: bool,
 }
 
 fn default_shortcut() -> String {
@@ -67,6 +71,9 @@ fn default_max_items() -> i64 {
 fn default_hide_on_blur() -> bool {
     true
 }
+fn default_true() -> bool {
+    true
+}
 
 impl Default for Settings {
     fn default() -> Self {
@@ -77,6 +84,7 @@ impl Default for Settings {
             retention_days: 0,
             max_storage_mb: 0,
             hide_on_blur: default_hide_on_blur(),
+            enable_sensitive_filter: default_true(),
         }
     }
 }
@@ -160,6 +168,7 @@ mod tests {
         assert_eq!(s.retention_days, 0);
         assert_eq!(s.max_storage_mb, 0);
         assert!(s.hide_on_blur);
+        assert!(s.enable_sensitive_filter);
     }
 
     #[test]
@@ -171,6 +180,7 @@ mod tests {
             retention_days: 30,
             max_storage_mb: 200,
             hide_on_blur: false,
+            enable_sensitive_filter: false,
         };
         let json = serde_json::to_string(&s).unwrap();
         let decoded: Settings = serde_json::from_str(&json).unwrap();
@@ -188,9 +198,11 @@ mod tests {
         assert!(obj.contains_key("retentionDays"));
         assert!(obj.contains_key("maxStorageMb"));
         assert!(obj.contains_key("hideOnBlur"));
+        assert!(obj.contains_key("enableSensitiveFilter"));
         // 不含 snake_case
         assert!(!obj.contains_key("launch_visible"));
         assert!(!obj.contains_key("max_items"));
+        assert!(!obj.contains_key("enable_sensitive_filter"));
     }
 
     #[test]
@@ -202,6 +214,7 @@ mod tests {
         assert!(s.launch_visible);
         assert_eq!(s.max_items, 50);
         assert!(s.hide_on_blur);
+        assert!(s.enable_sensitive_filter);
     }
 
     #[test]
@@ -214,6 +227,7 @@ mod tests {
         // 其余字段用默认值
         assert!(s.launch_visible);
         assert!(s.hide_on_blur);
+        assert!(s.enable_sensitive_filter);
         assert_eq!(s.retention_days, 0);
     }
 
@@ -235,6 +249,7 @@ mod tests {
             retention_days: 7,
             max_storage_mb: 50,
             hide_on_blur: false,
+            enable_sensitive_filter: false,
         };
         let merged = merge_settings(&base, &patch);
         assert_eq!(merged, patch);

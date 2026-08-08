@@ -20,6 +20,7 @@ export const SettingsSchema = z.object({
   retentionDays: z.number().int().nonnegative(),
   maxStorageMb: z.number().int().nonnegative(),
   hideOnBlur: z.boolean(),
+  enableSensitiveFilter: z.boolean(),
 })
 
 export interface Settings {
@@ -34,4 +35,6 @@ export interface Settings {
   readonly maxStorageMb: number
   /** 失焦自动隐藏 */
   readonly hideOnBlur: boolean
+  /** 敏感内容过滤(API key/token/私钥自动拦截) */
+  readonly enableSensitiveFilter: boolean
 }

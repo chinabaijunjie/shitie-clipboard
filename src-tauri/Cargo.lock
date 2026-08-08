@@ -577,6 +577,7 @@ dependencies = [
  "clipboard-rs",
  "image",
  "log",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
