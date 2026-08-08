@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use clipboard_rs::{Clipboard, ClipboardHandler};
 use rusqlite::Connection;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::clipboard::capture::{self, CaptureDecision};
 use crate::clipboard::title;
@@ -181,6 +181,26 @@ impl ClipboardHandler for ClipboardChangeHandler {
                 );
                 if let Err(e) = self.app.emit(CLIPBOARD_ADDED_EVENT, &item) {
                     log::warn!("[clipboard] emit 前端失败: {e}");
+                }
+
+                // M3:自动清理(保留天数 + 容量上限)
+                // 每次 insert 后触发,从 AppState 读设置决定是否清理
+                if let Some(state) = self.app.try_state::<crate::AppState>() {
+                    let (retention_days, max_storage_mb) = {
+                        let guard = state.settings();
+                        let s = guard.lock().expect("Settings Mutex 中毒");
+                        (s.retention_days, s.max_storage_mb)
+                    };
+                    if retention_days > 0 || max_storage_mb > 0 {
+                        if let Err(e) = crate::storage::cleanup::run_cleanup(
+                            &self.db,
+                            retention_days,
+                            max_storage_mb,
+                            &self.images_dir,
+                        ) {
+                            log::warn!("[clipboard] 自动清理失败: {} {}", e.code, e.message);
+                        }
+                    }
                 }
             }
             Err(e) => {

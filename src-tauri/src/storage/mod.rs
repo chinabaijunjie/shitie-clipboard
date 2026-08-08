@@ -9,6 +9,7 @@
 //!
 //! ⚠️ PRAGMA 红线(constraints.md):foreign_keys=ON + WAL + busy_timeout=5000。
 
+pub mod cleanup;
 pub mod fts;
 pub mod items;
 pub mod migration;
