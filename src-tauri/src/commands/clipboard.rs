@@ -83,11 +83,57 @@ pub fn copy_back_with_conn(
         ));
     }
 
-    // 组装 Vec<ClipboardContent>
+    // 组装 Vec<ClipboardContent>(纯函数,可单测)
+    let assembled = assemble_contents(&formats, images_dir);
+
+    if assembled.contents.is_empty() {
+        // 若曾有图片读盘失败,用更明确的错误(告知磁盘图可能损坏),而非笼统「无可回填格式」
+        let msg = assembled
+            .image_read_error
+            .unwrap_or_else(|| format!("条目 {} 无可回填的格式", id));
+        return Err(AppError::new(codes::CLIPBOARD_WRITE_FAILED, msg));
+    }
+
+    // set 原子写(内部已 clear)
+    clipboard.set(assembled.contents).map_err(|e| {
+        AppError::new(
+            codes::CLIPBOARD_WRITE_FAILED,
+            format!("写回剪贴板失败: {e}"),
+        )
+    })?;
+
+    Ok(assembled.title)
+}
+
+/// [`assemble_contents`] 的返回(组装结果)。
+struct AssembledContents {
+    /// 组装出的剪贴板内容列表(给 clipboard.set 用)。
+    contents: Vec<ClipboardContent>,
+    /// 回填标题(给前端显示,取第一个有效格式的文本/文件名/「图片」)。
+    title: String,
+    /// 图片读盘失败信息(若图片读盘失败导致 contents 为空,调用方用此生成明确报错)。
+    image_read_error: Option<String>,
+}
+
+/// 把 DB 格式行组装成 `Vec<ClipboardContent>`(纯函数,可单测)。
+///
+/// 逐行解析格式:
+/// - 文本/富文本/HTML → 对应 `ClipboardContent` 变体
+/// - 文件 URL → `ClipboardContent::Files`(按行 split)
+/// - 图片(PNG/TIFF)→ 从磁盘读原图 → `ClipboardContent::Image`
+/// - 非白名单 UTI → 跳过(debug 日志)
+///
+/// `title` 取第一个有效格式的值(纯文本内容 / 首个文件 URL / 「图片」)。
+/// 图片读盘失败不阻断,记录到 `image_read_error`(若导致 contents 为空,调用方据此报错)。
+fn assemble_contents(
+    formats: &[items::FormatRow],
+    images_dir: &std::path::Path,
+) -> AssembledContents {
     let mut contents: Vec<ClipboardContent> = Vec::new();
-    let mut title_for_return = String::new();
-    let mut image_read_error: Option<String> = None; // 图片读盘失败(若导致 contents 空则用于明确报错)
-    for (uti_str, blob, file_path) in &formats {
+    let mut title = String::new();
+    let mut image_read_error: Option<String> = None;
+
+    for (uti_str, blob, file_path) in formats {
         // WhitelistUti::from_str 把 UTI 字符串解析成穷尽 enum(非白名单 → None → 跳过)
         let Some(white_uti) = crate::clipboard::types::WhitelistUti::from_str(uti_str.as_str()) else {
             log::debug!("[copy_back] 未知格式 {} 跳过", uti_str);
@@ -96,8 +142,8 @@ pub fn copy_back_with_conn(
         match white_uti {
             crate::clipboard::types::WhitelistUti::PlainText => {
                 if let Ok(text) = String::from_utf8(blob.clone().unwrap_or_default()) {
-                    if title_for_return.is_empty() {
-                        title_for_return.clone_from(&text);
+                    if title.is_empty() {
+                        title.clone_from(&text);
                     }
                     contents.push(ClipboardContent::Text(text));
                 }
@@ -114,8 +160,8 @@ pub fn copy_back_with_conn(
                 let blob_data = blob.clone().unwrap_or_default();
                 let urls = String::from_utf8_lossy(&blob_data);
                 let files: Vec<String> = urls.lines().map(String::from).collect();
-                if title_for_return.is_empty() {
-                    title_for_return = files.first().cloned().unwrap_or_default();
+                if title.is_empty() {
+                    title = files.first().cloned().unwrap_or_default();
                 }
                 contents.push(ClipboardContent::Files(files));
             }
@@ -124,14 +170,17 @@ pub fn copy_back_with_conn(
                 if let Some(fp) = file_path {
                     match read_image_content(images_dir, fp) {
                         Ok(img_content) => {
-                            if title_for_return.is_empty() {
-                                title_for_return = "图片".to_string();
+                            if title.is_empty() {
+                                title = "图片".to_string();
                             }
                             contents.push(img_content);
                         }
                         Err(e) => {
                             log::warn!("[copy_back] 读图片 {} 失败,跳过: {}", fp, e.message);
-                            image_read_error = Some(format!("图片文件 {} 读取失败: {}(磁盘图片可能已损坏/被清理)", fp, e.message));
+                            image_read_error = Some(format!(
+                                "图片文件 {} 读取失败: {}(磁盘图片可能已损坏/被清理)",
+                                fp, e.message
+                            ));
                         }
                     }
                 }
@@ -139,22 +188,11 @@ pub fn copy_back_with_conn(
         }
     }
 
-    if contents.is_empty() {
-        // 若曾有图片读盘失败,用更明确的错误(告知磁盘图可能损坏),而非笼统「无可回填格式」
-        let msg = image_read_error
-            .unwrap_or_else(|| format!("条目 {} 无可回填的格式", id));
-        return Err(AppError::new(codes::CLIPBOARD_WRITE_FAILED, msg));
+    AssembledContents {
+        contents,
+        title,
+        image_read_error,
     }
-
-    // set 原子写(内部已 clear)
-    clipboard.set(contents).map_err(|e| {
-        AppError::new(
-            codes::CLIPBOARD_WRITE_FAILED,
-            format!("写回剪贴板失败: {e}"),
-        )
-    })?;
-
-    Ok(title_for_return)
 }
 
 /// 从磁盘读图片 → ClipboardContent::Image。
@@ -346,5 +384,126 @@ mod tests {
         // 验证 DB 里确实有 3 个格式行(copy_back 会读这些)
         let read_formats = items::get_formats(&conn, item.id).unwrap();
         assert_eq!(read_formats.len(), 3, "应有 3 个格式行供 copy_back 读");
+    }
+
+    // ===== assemble_contents 纯函数测试(不依赖真实剪贴板) =====
+
+    /// 构造一个文本类格式行(uti + bytes,无 file_path)。
+    fn text_row(uti: &str, data: &[u8]) -> items::FormatRow {
+        (
+            uti.to_string(),
+            Some(data.to_vec()),
+            None,
+        )
+    }
+
+    /// 构造一个图片格式行(uti + file_path,data 为空)。
+    fn image_row(uti: &str, file_path: &str) -> items::FormatRow {
+        (
+            uti.to_string(),
+            None,
+            Some(crate::clipboard::types::RelPath::from_str(file_path)),
+        )
+    }
+
+    #[test]
+    fn assemble_text_only() {
+        // 纯文本格式 → 1 个 Text content + title 取文本内容
+        let formats = [text_row(uti::UTI_PLAIN_TEXT, b"Hello world")];
+        let result = assemble_contents(&formats, &test_images_dir());
+
+        assert_eq!(result.contents.len(), 1, "应组装 1 个 content");
+        assert!(matches!(result.contents[0], ClipboardContent::Text(_)), "应为 Text");
+        assert_eq!(result.title, "Hello world");
+        assert!(result.image_read_error.is_none());
+    }
+
+    #[test]
+    fn assemble_rich_text() {
+        // text + rtf + html → 3 个 content
+        let formats = [
+            text_row(uti::UTI_PLAIN_TEXT, b"Hello"),
+            text_row(uti::UTI_RTF, b"{\\rtf1 Hello}"),
+            text_row(uti::UTI_HTML, b"<p>Hello</p>"),
+        ];
+        let result = assemble_contents(&formats, &test_images_dir());
+
+        assert_eq!(result.contents.len(), 3, "应组装 3 个 content");
+        assert_eq!(result.title, "Hello", "title 取首个(纯文本)");
+    }
+
+    #[test]
+    fn assemble_file_url() {
+        // file-url → Files content + title 取首个文件 URL
+        let formats = [text_row(uti::UTI_FILE_URL, b"file:///Users/foo/report.pdf")];
+        let result = assemble_contents(&formats, &test_images_dir());
+
+        assert_eq!(result.contents.len(), 1);
+        match &result.contents[0] {
+            ClipboardContent::Files(paths) => {
+                assert_eq!(paths.len(), 1);
+                assert_eq!(paths[0], "file:///Users/foo/report.pdf");
+            }
+            _ => panic!("应为 Files"),
+        }
+        assert_eq!(result.title, "file:///Users/foo/report.pdf");
+    }
+
+    #[test]
+    fn assemble_file_url_multiple() {
+        // 多文件 URL(按行 split)
+        let data = b"file:///a.png\nfile:///b.png\nfile:///c.png";
+        let formats = [text_row(uti::UTI_FILE_URL, data)];
+        let result = assemble_contents(&formats, &test_images_dir());
+
+        match &result.contents[0] {
+            ClipboardContent::Files(paths) => assert_eq!(paths.len(), 3),
+            _ => panic!("应为 Files"),
+        }
+    }
+
+    #[test]
+    fn assemble_unknown_format_skipped() {
+        // 非白名单 UTI → 跳过,不报错
+        let formats = [
+            text_row("com.apple.linkpresentation.metadata", b"noise"),
+            text_row(uti::UTI_PLAIN_TEXT, "有效文本".as_bytes()),
+        ];
+        let result = assemble_contents(&formats, &test_images_dir());
+
+        assert_eq!(result.contents.len(), 1, "噪音格式应跳过,只留 1 个");
+        assert_eq!(result.title, "有效文本");
+    }
+
+    #[test]
+    fn assemble_image_missing_file() {
+        // 图片格式但 file_path 指向不存在的文件 → image_read_error 有值 + contents 空
+        let formats = [image_row(uti::UTI_PNG, "ab/nonexistent.png")];
+        let result = assemble_contents(&formats, &test_images_dir());
+
+        assert!(result.contents.is_empty(), "图片读盘失败 → contents 应空");
+        assert!(result.image_read_error.is_some(), "应有图片读盘错误信息");
+        // title 为空(图片没成功加入)
+        assert!(result.title.is_empty());
+    }
+
+    #[test]
+    fn assemble_empty_formats() {
+        // 空格式列表 → 空结果
+        let result = assemble_contents(&[], &test_images_dir());
+        assert!(result.contents.is_empty());
+        assert!(result.title.is_empty());
+        assert!(result.image_read_error.is_none());
+    }
+
+    #[test]
+    fn assemble_title_priority_text_over_file() {
+        // 纯文本 + file-url:title 取纯文本(先出现)
+        let formats = [
+            text_row(uti::UTI_PLAIN_TEXT, "文本内容".as_bytes()),
+            text_row(uti::UTI_FILE_URL, b"file:///x.pdf"),
+        ];
+        let result = assemble_contents(&formats, &test_images_dir());
+        assert_eq!(result.title, "文本内容", "title 取首个有效格式的值");
     }
 }
