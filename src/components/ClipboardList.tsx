@@ -38,7 +38,7 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
   }
 
   return (
-    <ul className="flex flex-col overflow-y-auto">
+    <ul className="flex flex-col">
       {items.map((item, index) => (
         <li
           key={item.id}

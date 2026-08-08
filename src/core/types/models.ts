@@ -9,6 +9,9 @@
  */
 import { z } from 'zod'
 
+/** 内容类型(与后端 ContentKind enum 对齐,serde rename_all=lowercase) */
+export type ContentKind = 'text' | 'rich' | 'image' | 'file' | 'mixed'
+
 /** ClipboardItem 的 Zod schema(校验后端 invoke 返回,§8 边界校验) */
 export const ClipboardItemSchema = z.object({
   id: z.number(),
@@ -16,7 +19,7 @@ export const ClipboardItemSchema = z.object({
   lastCopiedAt: z.number(),
   copyCount: z.number(),
   title: z.string(),
-  contentKind: z.literal('text'), // M1 固定,M2 扩展为 enum
+  contentKind: z.enum(['text', 'rich', 'image', 'file', 'mixed']),
 })
 
 /** 列表的 Zod schema */
@@ -32,6 +35,6 @@ export interface ClipboardItem {
   readonly copyCount: number
   /** 列表预览文本 */
   readonly title: string
-  /** 内容类型(M1 固定 text,M2 扩展为联合类型) */
-  readonly contentKind: 'text'
+  /** 内容类型 */
+  readonly contentKind: ContentKind
 }

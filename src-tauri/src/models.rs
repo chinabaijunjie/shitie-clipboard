@@ -63,6 +63,7 @@ impl ContentKind {
 /// 对应 `clipboard_items` 表的元数据列,不含 formats 内容。
 /// formats 在 copy_back / M2 富文本场景下由 storage 层单独读写。
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClipboardItem {
     pub id: i64,
     /// 首次复制时间(unix epoch ms)

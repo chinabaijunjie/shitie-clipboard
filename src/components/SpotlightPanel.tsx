@@ -164,8 +164,8 @@ export function SpotlightPanel() {
         </span>
       </div>
 
-      {/* 列表区 */}
-      <div className="flex-1 overflow-hidden">
+      {/* 列表区(可滚动:超出窗口高度的内容滚动显示) */}
+      <div className="flex-1 overflow-y-auto">
         {error ? (
           <p className="py-8 text-center text-xs text-destructive">加载失败:{error}</p>
         ) : loading ? (
