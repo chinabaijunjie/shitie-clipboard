@@ -2,7 +2,7 @@
 title: 全局 TODO
 tags: [TODO, 任务]
 created: 2026-06-29
-updated: 2026-08-07
+updated: 2026-08-08
 status: active
 ---
 
@@ -16,7 +16,6 @@ status: active
 - **M3 常驻体验**:全局快捷键唤起/隐藏窗口 + 托盘 + 自启 + Windows 平台补全
 - 交互已确认:**唤起 + ↑↓ 导航 + 回车回填**(Maccy/Flycut 同款)
 - 可选并行:**UI 苹果审美改造**(见 [[ui-redesign-plan]],M2 已完成可启动)
-- M2 后有 3 项代码改进留待办(见下方「M2 后改进」)
 
 ## 路线图
 
@@ -39,13 +38,13 @@ status: active
 - [x] **阶段 D**:搜索功能(FTS5 + bigram + 搜索框 UI)
 - [x] **阶段 E**:端到端实测 + PR review(4 Critical + 5 Important 全修)
 
-### M2 后改进(PR review 建议项,留后续,不阻断交付)
+### M2 后改进(✅ 全部完成,2026-08-08)
 
 > 来源:M2 PR review(5 agent 并行,见 progress M2 记录)。这些是 code quality 改进,
-> 非阻断性 bug(GUI 已验证功能正常),留到 M3 或独立改进会话处理。
-- [ ] copy_back 组装逻辑抽纯函数 `assemble_contents` + 补测试(test-analyzer 建议,当前 GUI 已验证)
-- [ ] 前端搜索状态机测试(searchQueryRef 闭包 / search 清空回退,test-analyzer 7/10)
-- [ ] newtype 固化类型(WhitelistUti / RelThumbPath / AbsThumbPath,type-design 建议,重构级)
+> 非阻断性 bug(GUI 已验证功能正常)。2026-08-08 独立改进会话清完。
+- [x] newtype 固化类型(WhitelistUti / RelPath / AbsPath,type-design 建议,重构级)
+- [x] copy_back 组装逻辑抽纯函数 `assemble_contents` + 补测试(test-analyzer 建议)
+- [x] 前端搜索状态机测试(searchQueryRef 闭包 / search 清空回退,test-analyzer 7/10)
 
 ### M1 剪贴板监听 MVP(✅ 完成,见 [[m1-plan]])
 

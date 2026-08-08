@@ -2,7 +2,7 @@
 title: 开发进度（状态唯一真相源）
 tags: [进度, 状态]
 created: 2026-06-29
-updated: 2026-08-07
+updated: 2026-08-08
 status: active
 ---
 
@@ -19,8 +19,8 @@ status: active
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
   + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
   + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
-- **验证基线**：cargo test 107 passed + npm test 20 passed + npm build 全绿 + clippy 零 warning
-- **下一步**：M3 常驻体验(全局快捷键唤起/托盘/自启/Windows);M2 后有 3 项改进留 TODO(copy_back 抽纯函数 / 搜索状态机测试 / newtype 固化类型)
+- **验证基线**：cargo test 125 passed + npm test 27 passed + npm build 全绿 + clippy 零 warning
+- **下一步**：M3 常驻体验(全局快捷键唤起/托盘/自启/Windows)
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -120,6 +120,28 @@ status: active
 - 多格式捕获:白名单(照搬 Maccy)+ 隐私黑名单(`ConcealedType`/`TransientType` 整条跳过)
 - ⚠️ 密码管理器浏览器扩展是盲区(只防住桌面 app,README 告知)
 - asset protocol 显示磁盘图片:`tauri.conf.json` 加 scope + Cargo.toml tauri 加 `protocol-asset` feature
+
+## M2 后改进完成记录(2026-08-08)
+
+PR review 留的 3 项 code quality 改进,独立改进会话清完。每项一个 commit。
+
+- **newtype 固化类型**(`e298156`):
+  - 新增 `clipboard/types.rs`:`WhitelistUti`(enum,6 个白名单穷尽安全)+ `RelPath` / `AbsPath`(serde transparent)
+  - `image_store.rs` 路径函数返回 `RelPath`,`resolve_thumb_absolute` 返回 `AbsPath`
+  - `models.rs` `ClipboardItem.thumb_path` 改 `Option<AbsPath>`
+  - `fill_image_fields` 接收 `images_dir` 一步到位生成绝对路径(消除了 command 层重复 `resolve_thumb_absolute`)
+  - `commands/clipboard.rs` `copy_back` match 改用 `WhitelistUti`(穷尽 enum,未知格式安全跳过)
+  - 影响:`get_item/list/insert_or_update/insert_or_update_multi/search` 均加 `images_dir` 参数
+- **copy_back 抽纯函数**(`fe8b8e9`):
+  - 组装循环从 `copy_back_with_conn` 抽成 `assemble_contents(formats, images_dir) -> AssembledContents`
+  - 返回 `{ contents, title, image_read_error }`,可在无真实剪贴板下单测
+  - 补 8 个测试:纯文本/富文本/文件 URL(单+多)/未知格式跳过/图片文件不存在/空列表/title 优先级
+- **前端搜索状态机测试**(`91d205b`):
+  - 补 7 个 `renderHook` 集成测试覆盖搜索状态机分支
+  - 搜索模式忽略 added 事件(searchQueryRef 闭包防过时)/ 非搜索模式接收 / search('') 回退 / search 引用稳定
+  - 技术点:`vi.hoisted` 解决 vi.mock 工厂作用域;`flushAsync()` 用 setTimeout(0) flush 微任务
+
+**验证基线**:cargo test 125 passed(原 107 + newtype 10 + assemble 8)+ npm test 27 passed(原 20 + 搜索 7)+ clippy 零 warning
 
 ## 本工程开发历史
 
