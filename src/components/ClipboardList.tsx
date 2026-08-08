@@ -6,6 +6,7 @@
  *
  * 纯展示组件,便于用 testing-library 测试渲染输出。
  */
+import { useEffect } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 
 import { cn } from '@lib/utils'
@@ -31,6 +32,14 @@ function formatTime(epochMs: number): string {
 }
 
 export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListProps) {
+  // 选中索引变化时,自动把选中项滚动到可视区(block:nearest 只在不可见时滚,避免抖动)
+  useEffect(() => {
+    if (selectedIndex < 0) return
+    const el = document.querySelector<HTMLElement>(`li[data-index="${selectedIndex}"]`)
+    // nearest:选中项已在可视区则不滚动;否则最小幅度滚动让它可见
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [selectedIndex])
+
   if (items.length === 0) {
     return (
       <p className="py-8 text-center text-xs text-muted-foreground/60">
@@ -44,6 +53,7 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
       {items.map((item, index) => (
         <li
           key={item.id}
+          data-index={index}
           onClick={() => onSelect?.(index)}
           className={cn(
             'flex cursor-default items-center gap-2 px-3 py-2 text-xs',

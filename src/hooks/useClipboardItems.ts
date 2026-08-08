@@ -10,7 +10,7 @@
  *
  * 随写随测(§1.22):列表更新逻辑抽成纯函数 applyAddedItem / removeItem,可单测。
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 
 import { call } from '@core/api'
@@ -56,8 +56,13 @@ export function useClipboardItems(): UseClipboardItemsResult {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
+  // ref 跟踪 searchQuery,让 listen 回调(只挂载一次)能读到最新值,避免闭包过时
+  const searchQueryRef = useRef<string | null>(null)
+  useEffect(() => {
+    searchQueryRef.current = searchQuery
+  }, [searchQuery])
 
-  // 初次加载 + 监听实时更新
+  // 初次加载 + 监听实时更新(只挂载一次,依赖 [])
   useEffect(() => {
     let cancelled = false
 
@@ -83,7 +88,7 @@ export function useClipboardItems(): UseClipboardItemsResult {
     // 监听后端新增/更新事件(仅非搜索模式下更新;搜索时忽略新内容,清空搜索后自然可见)
     const unlistenPromise = listen<unknown>(TAURI_EVENTS.CLIPBOARD_ADDED, (event) => {
       if (cancelled) return
-      if (searchQuery !== null) return // 搜索模式:忽略新内容
+      if (searchQueryRef.current !== null) return // 搜索模式:忽略新内容
       try {
         // §8 边界校验:事件 payload 同样经 Zod 校验
         const item = ClipboardItemSchema.parse(event.payload)
@@ -99,15 +104,16 @@ export function useClipboardItems(): UseClipboardItemsResult {
       unlistenPromise.catch((e) => console.error('[clipboard] listen 注册失败:', e))
       void unlistenPromise.then((fn) => fn())
     }
-  }, [searchQuery])
+  }, [])
 
-  const deleteItem = async (id: number) => {
+  const deleteItem = useCallback(async (id: number) => {
     await call('delete_item', { id })
     // 后端确认成功后,移除本地(不可变更新)
     setItems((prev) => removeItem(prev, id))
-  }
+  }, [])
 
-  const search = async (query: string) => {
+  // useCallback 保证引用稳定(否则 debounce effect 会因依赖变化无限重建 → 闪烁)
+  const search = useCallback(async (query: string) => {
     const trimmed = query.trim()
     if (trimmed === '') {
       // 清空搜索:回退到全列表
@@ -134,7 +140,7 @@ export function useClipboardItems(): UseClipboardItemsResult {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   return { items, loading, error, searchQuery, deleteItem, search }
 }
