@@ -39,7 +39,11 @@ export function nextIndex(current: number, direction: -1 | 1, length: number): n
   return ((current + direction) % length + length) % length
 }
 
-export function SpotlightPanel() {
+interface SpotlightPanelProps {
+  onOpenSettings: () => void
+}
+
+export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
   const { items, loading, error, searchQuery, deleteItem, search, moveToFront } = useClipboardItems()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [probe, setProbe] = useState<ProbeStatus>('checking')
@@ -194,18 +198,27 @@ export function SpotlightPanel() {
         'flex h-full w-full flex-col rounded-lg border border-border bg-background text-foreground shadow-2xl',
       )}
     >
-      {/* 顶栏:标题 + 状态 */}
+      {/* 顶栏:标题 + 设置 + 状态 */}
       <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
         <span className="text-xs font-semibold tracking-wide">Clipboard Manager</span>
-        <span className="text-[10px] text-muted-foreground">
-          {probe === 'ready' ? (
-            <span className="text-primary">●</span>
-          ) : probe === 'checking' ? (
-            '连接中…'
-          ) : (
-            <span className="text-destructive">● 超时</span>
-          )}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onOpenSettings}
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+            title="设置"
+          >
+            ⚙
+          </button>
+          <span className="text-[10px] text-muted-foreground">
+            {probe === 'ready' ? (
+              <span className="text-primary">●</span>
+            ) : probe === 'checking' ? (
+              '连接中…'
+            ) : (
+              <span className="text-destructive">● 超时</span>
+            )}
+          </span>
+        </div>
       </div>
 
       {/* 搜索框 */}
