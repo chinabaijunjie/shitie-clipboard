@@ -20,6 +20,8 @@ export const ClipboardItemSchema = z.object({
   copyCount: z.number(),
   title: z.string(),
   contentKind: z.enum(['text', 'rich', 'image', 'file', 'mixed']),
+  // 图片缩略图绝对路径(仅 image/mixed 有,前端 convertFileSrc 转 asset URL)。可选。
+  thumbPath: z.string().nullable().optional(),
 })
 
 /** 列表的 Zod schema */
@@ -37,4 +39,6 @@ export interface ClipboardItem {
   readonly title: string
   /** 内容类型 */
   readonly contentKind: ContentKind
+  /** 图片缩略图绝对路径(仅 image/mixed 有,前端 convertFileSrc 转 asset URL) */
+  readonly thumbPath?: string | null
 }

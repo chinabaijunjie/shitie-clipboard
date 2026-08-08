@@ -17,6 +17,7 @@
 
 pub mod capture;
 pub mod handler;
+pub mod image_store;
 pub mod title;
 pub mod uti;
 
@@ -46,21 +47,26 @@ impl ClipboardWatcherHandle {
     /// 启动剪贴板监听后台线程。
     ///
     /// `db_path`:数据库文件路径(handler 在 watcher 线程内开独立连接,WAL 模式并发安全)。
+    /// `images_dir`:图片存储根目录(M2 阶段 C 图片捕获存盘用)。
     /// `self_write_flag`:自身写入标志(与 copy_back 共享;copy_back 置位,handler 消费跳过)。
     ///
     /// 返回的 handle drop 时自动停止监听(通过 WatcherShutdown 的 Drop 语义)。
     pub fn start(
         app: AppHandle,
         db_path: &Path,
+        images_dir: &Path,
         self_write_flag: Arc<AtomicBool>,
     ) -> Result<Self, String> {
         let (tx_shutdown, rx_shutdown) = std::sync::mpsc::channel::<WatcherShutdown>();
         let db_path = db_path.to_path_buf();
+        let images_dir = images_dir.to_path_buf();
         let app_for_thread = app;
 
         std::thread::Builder::new()
             .name("clipboard-watcher".into())
-            .spawn(move || run_watcher(app_for_thread, &db_path, self_write_flag, tx_shutdown))
+            .spawn(move || {
+                run_watcher(app_for_thread, &db_path, &images_dir, self_write_flag, tx_shutdown)
+            })
             .map_err(|e| format!("spawn clipboard-watcher 线程失败: {e}"))?;
 
         // 等待线程内把 shutdown channel 发回来。
@@ -82,6 +88,7 @@ impl ClipboardWatcherHandle {
 fn run_watcher(
     app: AppHandle,
     db_path: &Path,
+    images_dir: &Path,
     self_write_flag: Arc<AtomicBool>,
     tx_shutdown: std::sync::mpsc::Sender<WatcherShutdown>,
 ) {
@@ -96,8 +103,8 @@ fn run_watcher(
         }
     };
 
-    // 线程内构造 handler(传入 self_write_flag 用于跳过自身写入)
-    let handler = match ClipboardChangeHandler::new(app, db, self_write_flag) {
+    // 线程内构造 handler(传入 self_write_flag + images_dir)
+    let handler = match ClipboardChangeHandler::new(app, db, images_dir.to_path_buf(), self_write_flag) {
         Ok(h) => h,
         Err(e) => {
             log::error!("[clipboard] 构造 handler 失败: {e}");

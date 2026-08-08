@@ -6,6 +6,8 @@
 //!
 //! 阶段 B 范围:文本/富文本(RTF/HTML)/文件 URL。图片留阶段 C(需 image_store)。
 
+use std::path::Path;
+
 use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext, ContentFormat};
 
 use crate::clipboard::uti;
@@ -93,63 +95,76 @@ pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
     ContentKind::Text
 }
 
-/// 一个捕获到的格式(uti + 字节内容)。
+/// 一个捕获到的格式(uti + 字节内容 / 图片文件路径)。
 ///
-/// 文本类格式(text/rtf/html/file-url):data 是字节内容。
-/// 图片格式(png/tiff):阶段 C 起由 image_store 处理(data 为空,file_path 指向磁盘)。
-/// 阶段 B 不返回图片格式(图片场景由 classify 后的调用方判断跳过)。
+/// 文本类格式(text/rtf/html/file-url):data 是字节内容,file_path 为 None。
+/// 图片格式(png/tiff):data 为空,file_path 指向磁盘(由 image_store 存盘)。
 #[derive(Debug, Clone)]
 pub struct CapturedFormat {
     pub uti: String,
     pub data: Vec<u8>,
+    /// 图片格式的磁盘相对路径(file_path)。文本类格式为 None。
+    pub file_path: Option<String>,
 }
 
 /// 捕获的完整结果。
 #[derive(Debug, Clone)]
 pub struct CapturedContent {
-    /// 文本类格式(不含图片)。
+    /// 所有格式(含图片)。
     pub formats: Vec<CapturedFormat>,
     /// 分类后的内容类型。
     pub kind: ContentKind,
+    /// 图片尺寸(若含图片,用于标题「图片 W×H」)。None = 无图片。
+    pub image_size: Option<(u32, u32)>,
 }
 
 /// 从剪贴板读取多格式内容(系统交互,非纯函数)。
 ///
-/// 按 `capture_utis` 读取对应格式,返回字节内容 + contentKind。
-/// 阶段 B:**只读文本/富文本/文件 URL 格式,跳过图片**(图片留阶段 C)。
-/// 如果捕获 UTI 里**只有**图片(无文本/富文本/文件),返回 Ok(None)表示「阶段 B 不处理」。
+/// 按 `capture_utis` 读取对应格式:
+/// - 文本/富文本/文件 URL:读字节进 data
+/// - 图片(png/tiff):get_image → to_png → image_store 存盘 → file_path
+///
+/// `images_dir` 为图片根目录(<app_data_dir>/images/),图片格式需要它存盘。
+/// 返回 None 表示「无有效内容可捕获」。
 pub fn capture_multi(
     clipboard: &ClipboardContext,
     capture_utis: &[String],
+    images_dir: &Path,
 ) -> Result<Option<CapturedContent>, AppError> {
-    // 阶段 B:过滤掉图片格式(图片留阶段 C)
+    let mut formats: Vec<CapturedFormat> = Vec::new();
+    let mut image_size: Option<(u32, u32)> = None;
+
+    // 文本类格式:批量读
     let text_like_utis: Vec<&str> = capture_utis
         .iter()
         .map(|s| s.as_str())
         .filter(|u| *u != uti::UTI_PNG && *u != uti::UTI_TIFF)
         .collect();
-
-    // 如果过滤后为空(纯图片场景),阶段 B 不处理
-    if text_like_utis.is_empty() {
-        return Ok(None);
+    if !text_like_utis.is_empty() {
+        let req: Vec<ContentFormat> = text_like_utis
+            .iter()
+            .filter_map(|u| uti::uti_to_content_format(u))
+            .collect();
+        let contents = clipboard.get(&req).map_err(|e| {
+            AppError::new(crate::error::codes::CLIPBOARD_READ_FAILED, format!("读剪贴板失败: {e}"))
+        })?;
+        for content in contents {
+            if let Some(fmt) = content_to_captured(content) {
+                formats.push(fmt);
+            }
+        }
     }
 
-    // 映射成 ContentFormat(白名单 UTI 都能映射)
-    let req: Vec<ContentFormat> = text_like_utis
-        .iter()
-        .filter_map(|u| uti::uti_to_content_format(u))
-        .collect();
-
-    // 读剪贴板(get:格式不存在时跳过不报错)
-    let contents = clipboard
-        .get(&req)
-        .map_err(|e| AppError::new(crate::error::codes::CLIPBOARD_READ_FAILED, format!("读剪贴板失败: {e}")))?;
-
-    // 转成 CapturedFormat
-    let mut formats: Vec<CapturedFormat> = Vec::new();
-    for content in contents {
-        if let Some(fmt) = content_to_captured(content) {
-            formats.push(fmt);
+    // 图片格式:单独读 + 存盘
+    let has_image = capture_utis.iter().any(|u| u == uti::UTI_PNG || u == uti::UTI_TIFF);
+    if has_image {
+        if let Some(img_fmt) = capture_and_store_image(clipboard, images_dir)? {
+            image_size = Some((img_fmt.image_w, img_fmt.image_h));
+            formats.push(CapturedFormat {
+                uti: uti::UTI_PNG.to_string(),
+                data: Vec::new(),
+                file_path: Some(img_fmt.rel_path),
+            });
         }
     }
 
@@ -157,35 +172,66 @@ pub fn capture_multi(
         return Ok(None);
     }
 
-    // contentKind:基于实际读到的格式(不是传入的 capture_utis,避免误判)
     let captured_utis: Vec<String> = formats.iter().map(|f| f.uti.clone()).collect();
     let kind = classify_content_kind(&captured_utis);
 
-    Ok(Some(CapturedContent { formats, kind }))
+    Ok(Some(CapturedContent { formats, kind, image_size }))
+}
+
+/// 图片捕获 + 存盘的中间结果。
+struct StoredImage {
+    rel_path: String,
+    image_w: u32,
+    image_h: u32,
+}
+
+/// 读剪贴板图片 → to_png → image_store 存盘。返回存盘元数据。
+fn capture_and_store_image(
+    clipboard: &ClipboardContext,
+    images_dir: &Path,
+) -> Result<Option<StoredImage>, AppError> {
+    use clipboard_rs::common::RustImage;
+    let img = match clipboard.get_image() {
+        Ok(img) => img,
+        Err(_) => return Ok(None), // 无图片格式不报错
+    };
+    let png_buffer = img.to_png().map_err(|e| {
+        AppError::new(crate::error::codes::CLIPBOARD_READ_FAILED, format!("图片转 PNG 失败: {e}"))
+    })?;
+    let meta = crate::clipboard::image_store::save_image(png_buffer.get_bytes(), images_dir)?;
+    Ok(Some(StoredImage {
+        rel_path: meta.rel_path,
+        image_w: meta.width,
+        image_h: meta.height,
+    }))
 }
 
 /// 把 clipboard-rs 的 ClipboardContent 转成 CapturedFormat(文本/富文本/文件)。
 ///
-/// 图片格式(ClipboardContent::Image)阶段 B 不处理,返回 None(留阶段 C)。
+/// 图片格式(ClipboardContent::Image)在此不处理(图片走 capture_and_store_image 单独存盘)。
 fn content_to_captured(content: ClipboardContent) -> Option<CapturedFormat> {
     match content {
         ClipboardContent::Text(s) => Some(CapturedFormat {
             uti: uti::UTI_PLAIN_TEXT.to_string(),
             data: s.into_bytes(),
+            file_path: None,
         }),
         ClipboardContent::Rtf(s) => Some(CapturedFormat {
             uti: uti::UTI_RTF.to_string(),
             data: s.into_bytes(),
+            file_path: None,
         }),
         ClipboardContent::Html(s) => Some(CapturedFormat {
             uti: uti::UTI_HTML.to_string(),
             data: s.into_bytes(),
+            file_path: None,
         }),
         ClipboardContent::Files(paths) => Some(CapturedFormat {
             uti: uti::UTI_FILE_URL.to_string(),
             data: paths.join("\n").into_bytes(),
+            file_path: None,
         }),
-        // 图片留阶段 C;Other 不处理(白名单策略下不会有 Other)
+        // 图片走 capture_and_store_image;Other 不处理(白名单策略下不会有 Other)
         ClipboardContent::Image(_) | ClipboardContent::Other(_, _) => None,
     }
 }

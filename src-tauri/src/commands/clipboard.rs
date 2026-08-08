@@ -27,13 +27,33 @@ const DEFAULT_LIST_LIMIT: i64 = 50;
 // ============================================================
 
 /// 查历史列表。
-pub fn list_items_with_conn(conn: &Connection, limit: i64) -> Result<Vec<ClipboardItem>, AppError> {
-    items::list(conn, limit)
+///
+/// `images_dir`:图片存储根目录,用于把缩略图相对路径转绝对路径(前端 convertFileSrc 用)。
+pub fn list_items_with_conn(
+    conn: &Connection,
+    limit: i64,
+    images_dir: &std::path::Path,
+) -> Result<Vec<ClipboardItem>, AppError> {
+    let mut list = items::list(conn, limit)?;
+    // 把缩略图相对路径转绝对路径(fill_image_fields 填的是相对路径)
+    for item in &mut list {
+        if let Some(rel) = &item.thumb_path {
+            let abs = images_dir.join(rel);
+            if let Some(s) = abs.to_str() {
+                item.thumb_path = Some(s.to_string());
+            }
+        }
+    }
+    Ok(list)
 }
 
-/// 删除单条。
-pub fn delete_item_with_conn(conn: &Connection, id: i64) -> Result<(), AppError> {
-    items::delete(conn, id)
+/// 删除单条(含图片引用计数删除)。
+pub fn delete_item_with_conn(
+    conn: &Connection,
+    id: i64,
+    images_dir: &std::path::Path,
+) -> Result<(), AppError> {
+    items::delete(conn, id, images_dir)
 }
 
 /// 回填:读 DB 该条所有格式 → 组装 Vec<ClipboardContent> → set 原子写回剪贴板。
@@ -42,14 +62,14 @@ pub fn delete_item_with_conn(conn: &Connection, id: i64) -> Result<(), AppError>
 /// ⚠️ set(Vec) 内部已 clearContents + writeObjects(原子多格式写),不需要手动 clear。
 /// ⚠️ 不能连续多次 set_text/set_image(单格式 set 会清掉其他格式)。
 ///
-/// 阶段 B:只回填文本类格式(text/rtf/html/file-url)。图片格式(png/tiff)留阶段 C
-/// (需从磁盘读 RustImageData,阶段 C 的 image_store 接入后支持)。
+/// 图片格式(png/tiff):从磁盘读原图 → RustImageData → ClipboardContent::Image。
 ///
 /// 返回回填的条目标题(前端可显示)。
 pub fn copy_back_with_conn(
     conn: &Connection,
     clipboard: &ClipboardContext,
     id: i64,
+    images_dir: &std::path::Path,
 ) -> Result<String, AppError> {
     // 读该 item 的所有格式行
     let formats = items::get_formats(conn, id)?;
@@ -60,10 +80,10 @@ pub fn copy_back_with_conn(
         ));
     }
 
-    // 组装 Vec<ClipboardContent>(阶段 B 只处理文本类格式)
+    // 组装 Vec<ClipboardContent>
     let mut contents: Vec<ClipboardContent> = Vec::new();
     let mut title_for_return = String::new();
-    for (uti_str, blob, _file_path) in &formats {
+    for (uti_str, blob, file_path) in &formats {
         match uti_str.as_str() {
             uti::UTI_PLAIN_TEXT => {
                 if let Ok(text) = String::from_utf8(blob.clone().unwrap_or_default()) {
@@ -91,8 +111,20 @@ pub fn copy_back_with_conn(
                 contents.push(ClipboardContent::Files(files));
             }
             uti::UTI_PNG | uti::UTI_TIFF => {
-                // 阶段 B 不支持图片回填(需 image_store 从盘读);留阶段 C
-                log::debug!("[copy_back] 图片格式({})回填留阶段 C,跳过", uti_str);
+                // 图片:从磁盘读原图 → RustImageData
+                if let Some(fp) = file_path {
+                    match read_image_content(images_dir, fp) {
+                        Ok(img_content) => {
+                            if title_for_return.is_empty() {
+                                title_for_return = "图片".to_string();
+                            }
+                            contents.push(img_content);
+                        }
+                        Err(e) => {
+                            log::warn!("[copy_back] 读图片 {} 失败,跳过: {}", fp, e.message);
+                        }
+                    }
+                }
             }
             other => {
                 log::debug!("[copy_back] 未知格式 {} 跳过", other);
@@ -103,7 +135,7 @@ pub fn copy_back_with_conn(
     if contents.is_empty() {
         return Err(AppError::new(
             codes::CLIPBOARD_WRITE_FAILED,
-            format!("条目 {} 无可回填的文本类格式(可能纯图片,阶段 C 支持)", id),
+            format!("条目 {} 无可回填的格式", id),
         ));
     }
 
@@ -118,6 +150,18 @@ pub fn copy_back_with_conn(
     Ok(title_for_return)
 }
 
+/// 从磁盘读图片 → ClipboardContent::Image。
+fn read_image_content(
+    images_dir: &std::path::Path,
+    rel_path: &str,
+) -> Result<ClipboardContent, AppError> {
+    use clipboard_rs::common::RustImage;
+    let full = images_dir.join(rel_path);
+    let img = clipboard_rs::RustImageData::from_path(full.to_str().unwrap_or(""))
+        .map_err(|e| AppError::internal(format!("从盘读图片失败: {e}")))?;
+    Ok(ClipboardContent::Image(img))
+}
+
 // ============================================================
 // Tauri command 包装(接 State,薄转发)
 // ============================================================
@@ -129,17 +173,17 @@ pub fn list_items(
     limit: Option<i64>,
 ) -> Result<Vec<ClipboardItem>, AppError> {
     let conn = state.db();
-    list_items_with_conn(&conn, limit.unwrap_or(DEFAULT_LIST_LIMIT))
+    list_items_with_conn(&conn, limit.unwrap_or(DEFAULT_LIST_LIMIT), state.images_dir())
 }
 
-/// 删除单条。
+/// 删除单条(含图片引用计数)。
 #[tauri::command]
 pub fn delete_item(
     state: State<'_, crate::AppState>,
     id: i64,
 ) -> Result<(), AppError> {
     let conn = state.db();
-    delete_item_with_conn(&conn, id)
+    delete_item_with_conn(&conn, id, state.images_dir())
 }
 
 /// 回填:读 DB 多格式 → set 原子写回剪贴板。
@@ -162,7 +206,7 @@ pub fn copy_back(
             format!("创建 ClipboardContext 失败: {e}"),
         )
     })?;
-    copy_back_with_conn(&conn, &clipboard, id)
+    copy_back_with_conn(&conn, &clipboard, id, state.images_dir())
 }
 
 #[cfg(test)]
@@ -184,10 +228,23 @@ mod tests {
         conn
     }
 
+    /// 测试用 images_dir(临时目录,纯文本测试不实际写图,但 delete 签名要求传)。
+    fn test_images_dir() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "clipboard-cmd-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
     #[test]
     fn list_items_returns_all_ordered() {
         let conn = db_with_sample_data();
-        let list = list_items_with_conn(&conn, 50).unwrap();
+        let list = list_items_with_conn(&conn, 50, &test_images_dir()).unwrap();
         assert_eq!(list.len(), 3);
         // 按 last_copied_at DESC,第三条最后插入应排第一
         assert_eq!(list[0].title, "第三条");
@@ -196,19 +253,19 @@ mod tests {
     #[test]
     fn list_items_respects_limit() {
         let conn = db_with_sample_data();
-        let list = list_items_with_conn(&conn, 2).unwrap();
+        let list = list_items_with_conn(&conn, 2, &test_images_dir()).unwrap();
         assert_eq!(list.len(), 2);
     }
 
     #[test]
     fn delete_item_removes_it() {
         let conn = db_with_sample_data();
-        let before = list_items_with_conn(&conn, 50).unwrap();
+        let before = list_items_with_conn(&conn, 50, &test_images_dir()).unwrap();
         assert_eq!(before.len(), 3);
 
-        delete_item_with_conn(&conn, before[1].id).unwrap();
+        delete_item_with_conn(&conn, before[1].id, &test_images_dir()).unwrap();
 
-        let after = list_items_with_conn(&conn, 50).unwrap();
+        let after = list_items_with_conn(&conn, 50, &test_images_dir()).unwrap();
         assert_eq!(after.len(), 2);
     }
 
@@ -216,7 +273,7 @@ mod tests {
     fn delete_nonexistent_is_ok() {
         // DELETE 不存在的 id 在 SQLite 是 Ok(无匹配行,影响 0 行,不报错)
         let conn = init_db_in_memory().unwrap();
-        let result = delete_item_with_conn(&conn, 9999);
+        let result = delete_item_with_conn(&conn, 9999, &test_images_dir());
         assert!(result.is_ok(), "删除不存在的 id 应返回 Ok(无副作用)");
     }
 
@@ -224,7 +281,7 @@ mod tests {
     fn copy_back_nonexistent_returns_not_found() {
         let conn = init_db_in_memory().unwrap();
         let clipboard = ClipboardContext::new().expect("ClipboardContext");
-        let err = copy_back_with_conn(&conn, &clipboard, 9999).unwrap_err();
+        let err = copy_back_with_conn(&conn, &clipboard, 9999, &test_images_dir()).unwrap_err();
         assert_eq!(err.code, codes::NOT_FOUND);
     }
 
@@ -238,14 +295,17 @@ mod tests {
             CapturedFormat {
                 uti: uti::UTI_PLAIN_TEXT.to_string(),
                 data: b"Hello".to_vec(),
+                file_path: None,
             },
             CapturedFormat {
                 uti: uti::UTI_RTF.to_string(),
                 data: b"{\\rtf1 Hello}".to_vec(),
+                file_path: None,
             },
             CapturedFormat {
                 uti: uti::UTI_HTML.to_string(),
                 data: b"<p>Hello</p>".to_vec(),
+                file_path: None,
             },
         ];
         let format_inputs: Vec<items::FormatInput<'_>> = formats

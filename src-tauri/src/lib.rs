@@ -44,6 +44,8 @@ pub struct AppState {
     /// copy_back 写剪贴板前置 true;watcher on_clipboard_change 开头消费(置 false),
     /// 若检测到 true 则跳过本次捕获(这是自身写入,不是用户复制)。
     self_write_flag: Arc<AtomicBool>,
+    /// 图片存储根目录(<app_data_dir>/images/)。copy_back/delete 图片时用。
+    images_dir: std::path::PathBuf,
 }
 
 impl AppState {
@@ -55,6 +57,11 @@ impl AppState {
         self.db
             .lock()
             .expect("DB Mutex 中毒(持有者 panic)")
+    }
+
+    /// 图片存储根目录(delete 图片引用计数删除 / copy_back 图片回填用)。
+    pub fn images_dir(&self) -> &std::path::Path {
+        &self.images_dir
     }
 
     /// 标记「下一次剪贴板变化是自身写入,watcher 应跳过」。
@@ -85,6 +92,11 @@ pub fn run() {
                 .expect("创建 app_data_dir 失败");
             let db_path = data_dir.join("clipboard.db");
 
+            // 图片存储目录:app_data_dir/images/(M2 阶段 C)
+            let images_dir = data_dir.join("images");
+            std::fs::create_dir_all(&images_dir)
+                .expect("创建 images_dir 失败");
+
             // 主 DB 连接(command 用)
             let main_conn = storage::init_db(&db_path)
                 .expect("主 DB 连接初始化失败");
@@ -97,6 +109,7 @@ pub fn run() {
             let watcher = clipboard::ClipboardWatcherHandle::start(
                 app.handle().clone(),
                 &db_path,
+                &images_dir,
                 self_write_flag.clone(),
             )
             .expect("剪贴板监听启动失败");
@@ -105,6 +118,7 @@ pub fn run() {
                 db: Mutex::new(main_conn),
                 _watcher: watcher,
                 self_write_flag,
+                images_dir,
             });
 
             Ok(())

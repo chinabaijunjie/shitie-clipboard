@@ -75,6 +75,8 @@ pub struct ClipboardChangeHandler {
     db: Connection,
     /// 剪贴板读取上下文(clipboard-rs)。
     clipboard: clipboard_rs::ClipboardContext,
+    /// 图片存储根目录(M2 阶段 C 图片捕获存盘用)。
+    images_dir: std::path::PathBuf,
     /// 自身写入标志(与 copy_back 共享):true 表示下一次变化是自身写入,应跳过。
     /// on_clipboard_change 开头消费(置 false),若原为 true 则跳过本次捕获。
     self_write_flag: Arc<AtomicBool>,
@@ -85,6 +87,7 @@ impl ClipboardChangeHandler {
     pub fn new(
         app: AppHandle,
         db: Connection,
+        images_dir: std::path::PathBuf,
         self_write_flag: Arc<AtomicBool>,
     ) -> Result<Self, String> {
         let clipboard = clipboard_rs::ClipboardContext::new()
@@ -93,6 +96,7 @@ impl ClipboardChangeHandler {
             app,
             db,
             clipboard,
+            images_dir,
             self_write_flag,
         })
     }
@@ -129,12 +133,11 @@ impl ClipboardHandler for ClipboardChangeHandler {
             return;
         };
 
-        // 3. 读多格式内容(阶段 B:文本/富文本/文件;图片留阶段 C)
-        let captured = match capture::capture_multi(&self.clipboard, &to_capture_utis) {
+        // 3. 读多格式内容(文本/富文本/文件/图片;图片走 image_store 存盘)
+        let captured = match capture::capture_multi(&self.clipboard, &to_capture_utis, &self.images_dir) {
             Ok(Some(c)) => c,
             Ok(None) => {
-                // 纯图片场景(无文本类格式),阶段 B 不处理,留阶段 C
-                log::debug!("[clipboard] 纯图片内容,阶段 B 跳过(留阶段 C)");
+                // 无有效内容,跳过
                 return;
             }
             Err(e) => {
@@ -149,15 +152,15 @@ impl ClipboardHandler for ClipboardChangeHandler {
             return;
         }
 
-        // 5. 生成标题 + 转成 FormatInput 写 DB
-        let title_str = title::generate_title(&captured.formats, captured.kind);
+        // 5. 生成标题(图片用尺寸)+ 转成 FormatInput 写 DB
+        let title_str = title::generate_title(&captured.formats, captured.kind, captured.image_size);
         let format_inputs: Vec<FormatInput<'_>> = captured
             .formats
             .iter()
             .map(|f| FormatInput {
                 uti: &f.uti,
                 data: &f.data,
-                file_path: None, // 阶段 B 无图片,文本类格式不走 file_path
+                file_path: f.file_path.as_deref(),
             })
             .collect();
 
@@ -189,6 +192,7 @@ mod tests {
         CapturedFormat {
             uti: uti.to_string(),
             data: data.as_bytes().to_vec(),
+            file_path: None,
         }
     }
 

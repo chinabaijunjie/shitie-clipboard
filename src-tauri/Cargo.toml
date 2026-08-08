@@ -19,7 +19,7 @@ tauri-build = { version = "2.6.2", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.2", features = ["macos-private-api"] }
+tauri = { version = "2.11.2", features = ["macos-private-api", "protocol-asset"] }
 tauri-plugin-log = "2"
 # tokio: 保留 rt-multi-thread/macros/sync/time。
 # 删 process(sidecar spawn 专用,已无子进程)/fs/io-util。
@@ -34,6 +34,14 @@ clipboard-rs = { version = "0.3", features = ["image"] }
 # migration:M1 用手写 CREATE TABLE IF NOT EXISTS(幂等);长期演进再引 rusqlite_migration。
 rusqlite = { version = "0.31", features = ["bundled"] }
 
+# M2 图片存储:sha256 做图片文件名(天然去重,Raycast 生产验证方案)。
+# RustCrypto 维护,生态最标准的 SHA256 实现。
+sha2 = "0.10"
+
 [features]
 # 默认特性
 default = []
+
+[dev-dependencies]
+# M2 测试用:生成合法 PNG 字节测 image_store(clipboard-rs 依赖的 image 同版本,复用)。
+image = "0.25"

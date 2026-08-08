@@ -16,13 +16,33 @@ use crate::models::{truncate_title, ContentKind};
 /// - Text:取纯文本前 N 字符
 /// - Rich:从 RTF/HTML 提取纯文本(优先 text 格式,无则粗提取)
 /// - File:从 file-url 取文件名(多文件:首个 + 「 等 N 项」)
-/// - Image/Mixed:阶段 C 处理图片,这里走兜底
-pub fn generate_title(formats: &[CapturedFormat], kind: ContentKind) -> String {
+/// - Image:用尺寸生成「图片 W×H」(无尺寸则「图片」)
+/// - Mixed:有图片尺寸用图片标题,否则取纯文本
+pub fn generate_title(
+    formats: &[CapturedFormat],
+    kind: ContentKind,
+    image_size: Option<(u32, u32)>,
+) -> String {
     match kind {
         ContentKind::Text | ContentKind::Rich => title_from_text_or_rich(formats),
         ContentKind::File => title_from_file_url(formats),
-        // 图片/混合留阶段 C(图片标题需尺寸);兜底取纯文本
-        ContentKind::Image | ContentKind::Mixed => title_from_text_or_rich(formats),
+        ContentKind::Image => title_for_image(image_size),
+        ContentKind::Mixed => {
+            // 混合:优先图片标题(若有尺寸),否则纯文本
+            if let Some((w, h)) = image_size {
+                truncate_title(&format!("图片 {w}×{h}"))
+            } else {
+                title_from_text_or_rich(formats)
+            }
+        }
+    }
+}
+
+/// 生成图片标题:「图片 W×H」(无尺寸则「图片」)。
+fn title_for_image(image_size: Option<(u32, u32)>) -> String {
+    match image_size {
+        Some((w, h)) => truncate_title(&format!("图片 {w}×{h}")),
+        None => truncate_title("图片"),
     }
 }
 
@@ -199,27 +219,44 @@ mod tests {
         CapturedFormat {
             uti: uti.to_string(),
             data: data.as_bytes().to_vec(),
+            file_path: None,
         }
+    }
+
+    #[test]
+    fn title_image_with_size() {
+        // 图片标题:「图片 W×H」
+        let formats = vec![fmt("public.png", "")];
+        assert_eq!(
+            generate_title(&formats, ContentKind::Image, Some((1920, 1080))),
+            "图片 1920×1080"
+        );
+    }
+
+    #[test]
+    fn title_image_without_size() {
+        let formats = vec![fmt("public.png", "")];
+        assert_eq!(generate_title(&formats, ContentKind::Image, None), "图片");
     }
 
     #[test]
     fn title_plain_text() {
         let formats = vec![fmt("public.utf8-plain-text", "Hello world")];
-        assert_eq!(generate_title(&formats, ContentKind::Text), "Hello world");
+        assert_eq!(generate_title(&formats, ContentKind::Text, None), "Hello world");
     }
 
     #[test]
     fn title_plain_text_truncated() {
         let long = "a".repeat(TITLE_MAX_CHARS + 100);
         let formats = vec![fmt("public.utf8-plain-text", &long)];
-        let title = generate_title(&formats, ContentKind::Text);
+        let title = generate_title(&formats, ContentKind::Text, None);
         assert_eq!(title.chars().count(), TITLE_MAX_CHARS);
     }
 
     #[test]
     fn title_chinese_text() {
         let formats = vec![fmt("public.utf8-plain-text", "你好世界")];
-        assert_eq!(generate_title(&formats, ContentKind::Text), "你好世界");
+        assert_eq!(generate_title(&formats, ContentKind::Text, None), "你好世界");
     }
 
     #[test]
@@ -229,21 +266,21 @@ mod tests {
             fmt("public.utf8-plain-text", "项目进度报告"),
             fmt("public.rtf", "{\\rtf1\\ansi\\b 项目进度报告}"),
         ];
-        assert_eq!(generate_title(&formats, ContentKind::Rich), "项目进度报告");
+        assert_eq!(generate_title(&formats, ContentKind::Rich, None), "项目进度报告");
     }
 
     #[test]
     fn title_rich_extracts_from_rtf_when_no_text() {
         // 只有 RTF(无纯文本):从 RTF 提取
         let formats = vec![fmt("public.rtf", "{\\rtf1\\ansi 纯RTF内容}")];
-        let title = generate_title(&formats, ContentKind::Rich);
+        let title = generate_title(&formats, ContentKind::Rich, None);
         assert!(title.contains("纯RTF内容"), "标题应含提取的文本,实际: {title}");
     }
 
     #[test]
     fn title_html_extracts_text() {
         let formats = vec![fmt("public.html", "<p>Hello <b>world</b></p>")];
-        let title = generate_title(&formats, ContentKind::Rich);
+        let title = generate_title(&formats, ContentKind::Rich, None);
         assert_eq!(title, "Hello world");
     }
 
@@ -251,14 +288,14 @@ mod tests {
     fn title_file_single() {
         let url = "file:///Users/foo/report.pdf";
         let formats = vec![fmt("public.file-url", url)];
-        assert_eq!(generate_title(&formats, ContentKind::File), "report.pdf");
+        assert_eq!(generate_title(&formats, ContentKind::File, None), "report.pdf");
     }
 
     #[test]
     fn title_file_multiple() {
         let urls = "file:///Users/a.png\nfile:///Users/b.png\nfile:///Users/c.png";
         let formats = vec![fmt("public.file-url", urls)];
-        let title = generate_title(&formats, ContentKind::File);
+        let title = generate_title(&formats, ContentKind::File, None);
         assert_eq!(title, "a.png 等 2 项");
     }
 
@@ -267,7 +304,7 @@ mod tests {
         // %20 URL 编码的空格
         let url = "file:///Users/foo/my%20report.pdf";
         let formats = vec![fmt("public.file-url", url)];
-        assert_eq!(generate_title(&formats, ContentKind::File), "my report.pdf");
+        assert_eq!(generate_title(&formats, ContentKind::File, None), "my report.pdf");
     }
 
     #[test]
@@ -275,7 +312,7 @@ mod tests {
         // 中文文件名 URL 编码
         let url = "file:///Users/foo/%E6%8A%A5%E5%91%8A.pdf"; // 报告.pdf
         let formats = vec![fmt("public.file-url", url)];
-        let title = generate_title(&formats, ContentKind::File);
+        let title = generate_title(&formats, ContentKind::File, None);
         assert_eq!(title, "报告.pdf");
     }
 

@@ -74,8 +74,22 @@ pub struct ClipboardItem {
     pub copy_count: i32,
     /// 列表预览文本(前 N 字符,方便查询展示)
     pub title: String,
-    /// 内容类型(M1 固定 text)
+    /// 内容类型
     pub content_kind: ContentKind,
+    /// 图片缩略图相对路径(仅 image/mixed 类型有,前端用 convertFileSrc 显示)。
+    /// None = 非图片或无缩略图。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumb_path: Option<String>,
+    /// 图片尺寸 [width, height](仅 image/mixed 类型有,用于标题 + 缩略图比例)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_size: Option<ImageSize>,
+}
+
+/// 图片尺寸(序列化为 {width, height})。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ImageSize {
+    pub width: u32,
+    pub height: u32,
 }
 
 /// 标题(列表预览)的最大字符数。

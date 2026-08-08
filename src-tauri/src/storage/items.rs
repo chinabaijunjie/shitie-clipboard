@@ -14,6 +14,7 @@
 #![allow(dead_code)]
 
 use rusqlite::{params, Connection};
+use std::path::Path;
 
 use crate::error::AppError;
 use crate::models::{truncate_title, ClipboardItem, ContentKind};
@@ -186,18 +187,21 @@ pub fn insert_or_update_multi(
 
 /// 按 id 查单条(返回 ClipboardItem 元数据视图)。
 pub fn get_item(conn: &Connection, id: i64) -> Result<ClipboardItem, AppError> {
-    conn.query_row(
-        "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind \
-         FROM clipboard_items WHERE id = ?1",
-        params![id],
-        row_to_item,
-    )
-    .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => {
-            AppError::new(crate::error::codes::NOT_FOUND, format!("条目 {} 不存在", id))
-        }
-        other => AppError::internal(format!("查条目 {} 失败: {}", id, other)),
-    })
+    let mut item = conn
+        .query_row(
+            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind \
+             FROM clipboard_items WHERE id = ?1",
+            params![id],
+            row_to_item,
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::new(crate::error::codes::NOT_FOUND, format!("条目 {} 不存在", id))
+            }
+            other => AppError::internal(format!("查条目 {} 失败: {}", id, other)),
+        })?;
+    fill_image_fields(conn, &mut item)?;
+    Ok(item)
 }
 
 /// 查列表(按 last_copied_at DESC)。
@@ -216,6 +220,10 @@ pub fn list(conn: &Connection, limit: i64) -> Result<Vec<ClipboardItem>, AppErro
     let mut result = Vec::new();
     for row in rows {
         result.push(row.map_err(|e| AppError::internal(format!("读 list 行失败: {e}")))?);
+    }
+    // 补充图片类条目的缩略图路径
+    for item in &mut result {
+        fill_image_fields(conn, item)?;
     }
     Ok(result)
 }
@@ -270,9 +278,23 @@ pub fn get_formats(conn: &Connection, id: i64) -> Result<Vec<FormatRow>, AppErro
 
 /// 删除某条(ON DELETE CASCADE 自动清 formats)。
 ///
-/// ⚠️ M2 图片场景:删 item 前要处理图片文件引用计数(阶段 C 的 image_store 负责),
-/// 这里只管 DB。M1 纯文本场景无图片文件,直接删即可。
-pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
+/// M2 图片场景:删 DB 行前,对该 item 的图片格式做引用计数删除
+/// (引用数 == 1 时删磁盘原图 + 缩略图)。`images_dir` 为图片根目录。
+pub fn delete(conn: &Connection, id: i64, images_dir: &Path) -> Result<(), AppError> {
+    // 删 DB 前:查该 item 的图片格式 file_path,引用计数删除磁盘文件
+    let image_paths: Vec<String> = conn
+        .prepare("SELECT file_path FROM clipboard_formats WHERE item_id = ?1 AND file_path IS NOT NULL")
+        .map_err(|e| AppError::internal(format!("prepare 查图片 file_path 失败: {e}")))?
+        .query_map(params![id], |r| r.get::<_, String>(0))
+        .map_err(|e| AppError::internal(format!("查图片 file_path 失败: {e}")))?
+        .filter_map(Result::ok)
+        .collect();
+    for fp in image_paths {
+        // 引用计数删除(此时 DB 行还在,引用数含当前 item)
+        crate::clipboard::image_store::delete_if_last_reference(conn, &fp, images_dir)?;
+    }
+
+    // 删 DB 行(CASCADE 清 formats)
     conn.execute("DELETE FROM clipboard_items WHERE id = ?1", params![id])
         .map_err(|e| AppError::internal(format!("删除条目 {} 失败: {}", id, e)))?;
     Ok(())
@@ -294,6 +316,9 @@ fn now_epoch_ms() -> i64 {
 /// DB 行 → ClipboardItem。
 ///
 /// `pub(crate)` 供 search.rs 复用(FTS 查询也返回相同结构的 ClipboardItem)。
+///
+/// 注意:items 表行不含图片字段(thumb_path/image_size 在 formats 表)。
+/// 这里填 None,由 `fill_image_fields` 在 list/get_item 后对图片类条目补充。
 pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardItem> {
     Ok(ClipboardItem {
         id: row.get(0)?,
@@ -301,10 +326,35 @@ pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clipboard
         last_copied_at: row.get(2)?,
         copy_count: row.get(3)?,
         title: row.get(4)?,
-        content_kind: ContentKind::from_db_str(
-            row.get::<_, String>(5)?.as_str(),
-        ),
+        content_kind: ContentKind::from_db_str(row.get::<_, String>(5)?.as_str()),
+        thumb_path: None,
+        image_size: None,
     })
+}
+
+/// 给图片类 item 补充缩略图路径(从 formats 表查 file_path 推导)。
+///
+/// 非 image/mixed 类型不处理。图片格式(public.png/public.tiff)的 file_path 存的是
+/// 原图相对路径,缩略图路径由 image_store::relative_thumb_path_from_image 推导。
+fn fill_image_fields(conn: &Connection, item: &mut ClipboardItem) -> Result<(), AppError> {
+    if !matches!(item.content_kind, ContentKind::Image | ContentKind::Mixed) {
+        return Ok(());
+    }
+    // 查图片格式的 file_path
+    let file_path: Option<String> = conn
+        .query_row(
+            "SELECT file_path FROM clipboard_formats \
+             WHERE item_id = ?1 AND uti IN ('public.png','public.tiff') AND file_path IS NOT NULL \
+             LIMIT 1",
+            params![item.id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| AppError::internal(format!("查图片 file_path 失败: {e}")))?;
+    if let Some(fp) = file_path {
+        item.thumb_path = Some(crate::clipboard::image_store::relative_thumb_path_from_image_pub(&fp));
+    }
+    Ok(())
 }
 
 /// rusqlite 的 Optional 扩展 trait(把 QueryReturnedNoRows 转成 Option)。
@@ -329,6 +379,19 @@ mod tests {
 
     fn db() -> Connection {
         init_db_in_memory().expect("内存 DB 初始化应成功")
+    }
+
+    /// 测试用 images_dir(临时目录,纯文本测试不实际写图)。
+    fn test_images_dir() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "clipboard-items-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
     }
 
     #[test]
@@ -395,7 +458,7 @@ mod tests {
             .unwrap();
         assert_eq!(fmt_count, 1);
 
-        delete(&conn, item.id).unwrap();
+        delete(&conn, item.id, &test_images_dir()).unwrap();
 
         // 删除后 items 和 formats 都没了(CASCADE)
         let item_count: i64 = conn

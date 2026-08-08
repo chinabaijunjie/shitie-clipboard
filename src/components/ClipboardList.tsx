@@ -6,6 +6,8 @@
  *
  * 纯展示组件,便于用 testing-library 测试渲染输出。
  */
+import { convertFileSrc } from '@tauri-apps/api/core'
+
 import { cn } from '@lib/utils'
 import type { ClipboardItem } from '@core/types'
 
@@ -50,6 +52,17 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
               : 'text-foreground hover:bg-accent/50',
           )}
         >
+          {/* 图片类:显示缩略图 */}
+          {item.thumbPath ? (
+            <img
+              src={convertFileSrc(item.thumbPath)}
+              alt=""
+              className="h-8 w-8 shrink-0 rounded object-cover"
+              draggable={false}
+            />
+          ) : (
+            <span className="shrink-0 w-2" />
+          )}
           <span className="flex-1 truncate">
             {item.title.slice(0, PREVIEW_MAX_CHARS) || '<空>'}
             {item.title.length > PREVIEW_MAX_CHARS && '…'}
