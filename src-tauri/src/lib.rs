@@ -20,6 +20,7 @@ mod error;
 mod models;
 mod settings;
 mod storage;
+mod window_control;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -103,6 +104,29 @@ pub fn run() {
                     settings::Settings::default()
                 });
 
+            // M3:全局快捷键插件 + toggle 窗口 handler
+            // ⚠️ Tauri 2:register() 不再接 handler,handler 在 plugin Builder 的 with_handler 传入
+            #[cfg(desktop)]
+            {
+                let shortcut_str = user_settings.shortcut.clone();
+                app.handle().plugin(
+                    tauri_plugin_global_shortcut::Builder::new()
+                        .with_handler(move |app, _shortcut, event| {
+                            // 只响应 Pressed(松手检测做不到,Tauri 全局快捷键仅支持 keydown)
+                            if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                                window_control::toggle_window(app);
+                            }
+                        })
+                        .build(),
+                )?;
+
+                // 注册快捷键(用设置中的值)
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                if let Err(e) = app.global_shortcut().register(shortcut_str.as_str()) {
+                    log::warn!("[shortcut] 注册快捷键 {} 失败: {e}", shortcut_str);
+                }
+            }
+
             // DB 路径:app_data_dir/clipboard.db
             let data_dir = app
                 .path()
@@ -142,6 +166,24 @@ pub fn run() {
                 settings: Mutex::new(user_settings),
             });
 
+            // M3:根据 launch_visible 设置决定是否显示窗口
+            // (tauri.conf.json visible:false,由代码控制显示时机)
+            let launch_visible = app
+                .try_state::<AppState>()
+                .map(|s| {
+                    s.settings()
+                        .lock()
+                        .map(|gs| gs.launch_visible)
+                        .unwrap_or(true)
+                })
+                .unwrap_or(true);
+
+            // --hidden 启动参数(开机自启时)强制不显示,覆盖 launch_visible
+            let hidden_flag = std::env::args().any(|a| a == "--hidden");
+            if launch_visible && !hidden_flag {
+                window_control::show_main_window(app.handle());
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -153,10 +195,17 @@ pub fn run() {
             get_settings,
             update_settings,
         ])
+        // M3:窗口事件 — 失焦隐藏 + close 拦截转 hide
+        .on_window_event(|window, event| {
+            window_control::handle_window_event(event, window.app_handle());
+        })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, _event| {
-            // AppState drop 时 _watcher 自动停止监听,无需在此手动清理。
-            // 未来若加托盘/全局快捷键,在此处理 RunEvent::Exit。
+        .run(|_app_handle, event| {
+            // M3:拦截退出请求 → 保持进程常驻(末窗口关闭不应退出 app)
+            // 退出只能从托盘菜单「退出」触发(app.exit(0) 绕过此拦截)
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                api.prevent_exit();
+            }
         });
 }
