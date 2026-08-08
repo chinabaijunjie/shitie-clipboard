@@ -1,0 +1,79 @@
+# Release CI — push tag v* 自动跨平台打包,上传到 GitHub Release
+#
+# 产物:
+#   macOS arm64:  Clipboard Manager_<version>_aarch64.dmg
+#   macOS x86_64: Clipboard Manager_<version>_x64.dmg
+#   Windows:      Clipboard Manager_<version>_x64-setup.exe + .msi
+#
+# 未签名:macOS 用户需「系统设置→隐私与安全性」手动放行,
+#         Windows 弹 SmartScreen 警告点「仍要运行」。
+# 后续补签名证书后,在 env 里加 APPLE_*/WINDOWS_* 签名变量。
+#
+# 触发方式:
+#   1. push tag v* (正式发布)
+#   2. workflow_dispatch (手动触发调试,不需要打 tag)
+#
+# 调研依据:wiki/dev/m4-research.md 第二章
+
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Apple Silicon (原生编译)
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          # macOS Intel (ARM runner 交叉编译)
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          # Windows
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # macOS runner 需同时装两个 target(arm64 原生 + x86_64 交叉编译)
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Clipboard Manager ${{ github.ref_name }}'
+          releaseBody: 'See the assets to download and install.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
