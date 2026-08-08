@@ -127,6 +127,46 @@ pub fn run() {
                 }
             }
 
+            // M3:系统托盘(常驻 + 左键 toggle / 右键菜单)
+            #[cfg(desktop)]
+            {
+                use tauri::menu::{Menu, MenuItem};
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+                let show_item = MenuItem::with_id(app, "show", "显示剪贴板", true, None::<&str>)?;
+                let quit_item = MenuItem::with_id(app, "quit", "退出 Clipboard Manager", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+                TrayIconBuilder::with_id("main-tray")
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .tooltip("Clipboard Manager")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => window_control::show_main_window(app),
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            window_control::toggle_window(tray.app_handle());
+                        }
+                    })
+                    .build(app)?;
+            }
+
+            // M3:开机自启插件(LaunchAgent,无权限弹窗)
+            // 不在 setup 里强制 enable —— 自启状态由用户在设置面板驱动
+            app.handle().plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                Some(vec!["--hidden"]),
+            ))?;
+
             // DB 路径:app_data_dir/clipboard.db
             let data_dir = app
                 .path()
