@@ -237,4 +237,51 @@ mod tests {
         "#;
         assert!(!is_sensitive(code), "普通代码不应被误报");
     }
+
+    // ===== extract_plain_text 测试 =====
+
+    fn fmt(uti: &str, data: &[u8]) -> crate::clipboard::capture::CapturedFormat {
+        crate::clipboard::capture::CapturedFormat {
+            uti: uti.to_string(),
+            data: data.to_vec(),
+            file_path: None,
+        }
+    }
+
+    #[test]
+    fn extract_plain_text_from_mixed_formats() {
+        // 含纯文本格式 → 返回 Some(正确字符串)
+        let formats = vec![
+            fmt("public.rtf", b"{\\rtf1 hello}"),
+            fmt("public.utf8-plain-text", b"hello world"),
+            fmt("public.html", b"<p>hello</p>"),
+        ];
+        let result = extract_plain_text(&formats);
+        assert_eq!(result.as_deref(), Some("hello world"));
+    }
+
+    #[test]
+    fn extract_plain_text_none_when_no_text() {
+        // 无纯文本格式(只有 RTF/图片)→ None
+        let formats = vec![
+            fmt("public.rtf", b"{\\rtf1 hello}"),
+            fmt("public.html", b"<p>hello</p>"),
+        ];
+        assert!(extract_plain_text(&formats).is_none());
+    }
+
+    #[test]
+    fn extract_plain_text_from_single_text() {
+        // 单一纯文本格式 → Some(中文)
+        let formats = vec![fmt("public.utf8-plain-text", "中文测试".as_bytes())];
+        let result = extract_plain_text(&formats);
+        assert_eq!(result.as_deref(), Some("中文测试"));
+    }
+
+    #[test]
+    fn extract_plain_text_empty_formats() {
+        // 空格式列表 → None
+        let formats: Vec<crate::clipboard::capture::CapturedFormat> = vec![];
+        assert!(extract_plain_text(&formats).is_none());
+    }
 }

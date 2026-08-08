@@ -7,7 +7,8 @@
 //! M2 扩展:`insert_or_update_multi` 支持一次写入多格式(RTF/HTML/图片等),
 //! content_kind 分类,并写 search_text(FTS 索引用)。M1 的单文本入口保留(handler 仍在用)。
 //!
-//! 去重用 data_blob 内容比对(M1 数据量小,全表扫可接受;M4 加 hash 索引优化)。
+//! 去重用 data_blob 内容比对(M1 数据量小,全表扫可接受;hash 索引优化经 M4 评估后
+//! 决定不做——万条内无感,见 wiki/dev/m4-research.md §3.3 G3)。
 
 use rusqlite::{params, Connection};
 use std::path::Path;
@@ -245,8 +246,8 @@ pub fn insert_or_update_multi(
             .map_err(|e| AppError::internal(format!("INSERT items 失败: {e}")))?;
             let new_id = tx.last_insert_rowid();
 
-            // INSERT 所有 formats 行
-            insert_formats(&tx, new_id, formats);
+            // INSERT 所有 formats 行(失败则事务回滚)
+            insert_formats(&tx, new_id, formats)?;
 
             new_id
         }
@@ -395,9 +396,15 @@ pub fn delete(conn: &Connection, id: i64, images_dir: &Path) -> Result<(), AppEr
 // ============================================================
 
 /// 向 clipboard_formats 表插入多行(M4 抽出,供 insert_or_update_multi 复用)。
-fn insert_formats(conn: &Connection, item_id: i64, formats: &[FormatInput<'_>]) {
+///
+/// 返回 Result:任一 INSERT 失败即返回错误,调用方据此回滚事务。
+fn insert_formats(
+    conn: &Connection,
+    item_id: i64,
+    formats: &[FormatInput<'_>],
+) -> Result<(), AppError> {
     for fmt in formats {
-        if let Err(e) = conn.execute(
+        conn.execute(
             "INSERT INTO clipboard_formats (item_id, uti, data_blob, file_path, size) \
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
@@ -407,10 +414,10 @@ fn insert_formats(conn: &Connection, item_id: i64, formats: &[FormatInput<'_>]) 
                 fmt.file_path,
                 fmt.data.len() as i64,
             ],
-        ) {
-            log::error!("[storage] INSERT formats ({}) 失败: {e}", fmt.uti);
-        }
+        )
+        .map_err(|e| AppError::internal(format!("INSERT formats ({}) 失败: {e}", fmt.uti)))?;
     }
+    Ok(())
 }
 
 /// 替换某 item 的所有 formats 行(G1 修复:命中去重时用新格式覆盖旧格式)。
@@ -915,6 +922,56 @@ mod tests {
         // formats 应仍然是 2 行(相同内容替换)
         let read_back = get_formats(&conn, second.id).unwrap();
         assert_eq!(read_back.len(), 2, "相同 formats 替换后行数不变");
+    }
+
+    #[test]
+    fn dedup_replaces_formats_drops_old_image() {
+        // G1 + 图片引用计数:图片 item 命中去重,新 formats 无图片 → 旧图片磁盘文件应删
+        let conn = db();
+        let images_dir = test_images_dir();
+        let png = test_png_bytes();
+
+        // 存图
+        let meta = crate::clipboard::image_store::save_image(&png, &images_dir).unwrap();
+        let orig_path = images_dir.join(meta.rel_path.as_str());
+        assert!(orig_path.exists(), "原图应存在");
+
+        // 第一次:文本 + 图片(mixed)
+        let text = b"screenshot".to_vec();
+        let rel_path_str = meta.rel_path.as_str().to_string();
+        let formats_with_image = vec![
+            FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
+            FormatInput { uti: crate::clipboard::uti::UTI_PNG, data: &[], file_path: Some(&rel_path_str) },
+        ];
+        let first = insert_or_update_multi(
+            &conn, &formats_with_image, ContentKind::Mixed, "screenshot", &images_dir,
+        ).unwrap();
+
+        // 确认引用数为 1
+        assert_eq!(
+            crate::clipboard::image_store::count_references(&conn, &meta.rel_path).unwrap(),
+            1
+        );
+
+        // 第二次:相同文本但只有纯文本(图片被丢弃)
+        let formats_text_only = vec![
+            FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
+        ];
+        let second = insert_or_update_multi(
+            &conn, &formats_text_only, ContentKind::Text, "screenshot", &images_dir,
+        ).unwrap();
+
+        // 命中同一条
+        assert_eq!(first.id, second.id);
+        assert_eq!(second.copy_count, 2);
+
+        // formats 应只有 1 行(纯文本),PNG 已被替换掉
+        let read_back = get_formats(&conn, second.id).unwrap();
+        assert_eq!(read_back.len(), 1, "图片 format 应被替换掉");
+        assert_eq!(read_back[0].0, "public.utf8-plain-text");
+
+        // 旧图片磁盘文件应被删(引用计数归 0)
+        assert!(!orig_path.exists(), "旧图片应被引用计数删除");
     }
 
     #[test]

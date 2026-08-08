@@ -154,18 +154,23 @@ impl ClipboardHandler for ClipboardChangeHandler {
         }
 
         // 4.5 敏感信息过滤(M4):读设置决定是否启用,检测纯文本是否含已知敏感模式
-        if let Some(state) = self.app.try_state::<crate::AppState>() {
-            let enable_filter = {
-                let guard = state.settings().lock().expect("Settings Mutex 中毒");
-                guard.enable_sensitive_filter
-            };
-            if enable_filter {
-                if let Some(text) = filter::extract_plain_text(&captured.formats) {
-                    if filter::is_sensitive(&text) {
-                        log::info!("[clipboard] 跳过敏感内容(API key/token/私钥)");
-                        return;
+        match self.app.try_state::<crate::AppState>() {
+            Some(state) => {
+                let enable_filter = {
+                    let guard = state.settings().lock().expect("Settings Mutex 中毒");
+                    guard.enable_sensitive_filter
+                };
+                if enable_filter {
+                    if let Some(text) = filter::extract_plain_text(&captured.formats) {
+                        if filter::is_sensitive(&text) {
+                            log::info!("[clipboard] 跳过敏感内容(API key/token/私钥)");
+                            return;
+                        }
                     }
                 }
+            }
+            None => {
+                log::warn!("[clipboard] AppState 未就绪,敏感过滤被跳过");
             }
         }
 

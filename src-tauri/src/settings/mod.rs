@@ -3,7 +3,7 @@
 //! M3 新增。使用 tauri-plugin-store(settings.json in app_data_dir)持久化。
 //! 与 rusqlite(历史数据)职责分离。
 //!
-//! 配置项(8 项):
+//! 配置项(7 项):
 //! - shortcut:全局唤起快捷键(默认 "Cmd+Shift+V")
 //! - launch_visible:启动时打开窗口(默认 true)
 //! - max_items:历史记录上限(默认 50)
@@ -55,7 +55,7 @@ pub struct Settings {
     #[serde(rename = "hideOnBlur", default = "default_hide_on_blur")]
     pub hide_on_blur: bool,
     /// 敏感内容过滤(检测 API key/token/私钥,命中则跳过入库)。
-    #[serde(rename = "enableSensitiveFilter", default = "default_true")]
+    #[serde(rename = "enableSensitiveFilter", default = "default_enable_sensitive_filter")]
     pub enable_sensitive_filter: bool,
 }
 
@@ -71,7 +71,7 @@ fn default_max_items() -> i64 {
 fn default_hide_on_blur() -> bool {
     true
 }
-fn default_true() -> bool {
+fn default_enable_sensitive_filter() -> bool {
     true
 }
 
@@ -84,7 +84,7 @@ impl Default for Settings {
             retention_days: 0,
             max_storage_mb: 0,
             hide_on_blur: default_hide_on_blur(),
-            enable_sensitive_filter: default_true(),
+            enable_sensitive_filter: default_enable_sensitive_filter(),
         }
     }
 }
