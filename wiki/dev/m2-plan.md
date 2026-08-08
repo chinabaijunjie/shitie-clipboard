@@ -2,8 +2,8 @@
 title: M2 规划 — 搜索 + 富文本/图片支持
 tags: [M2, 规划, FTS5, 搜索, 富文本, 图片, 多格式, 回填]
 created: 2026-08-06
-updated: 2026-08-06
-status: active
+updated: 2026-08-07
+status: done
 tech_base: ./m2-research.md
 ---
 

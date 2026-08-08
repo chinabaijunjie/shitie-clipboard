@@ -2,7 +2,7 @@
 title: 回流候选池
 tags: [回流, 候选池, 子工程]
 created: 2026-06-29
-updated: 2026-06-29
+updated: 2026-08-07
 status: active
 ---
 
@@ -25,6 +25,16 @@ status: active
 ### [简述] — YYYY-MM-DD
 - **内容**：做了什么
 - **为什么像通用**：对应哪个信号
+- **状态**：待评估 / 已回流 / 留子工程 / 丢弃
+-->
+
+### [FTS5 中文 bigram + migration 版本号 + bundled 含 FTS5 发现] — 2026-08-07
+- **内容**:M2 实现搜索时发现三件可能通用的事:
+  1. rusqlite `bundled` feature 已无条件编译 FTS5(libsqlite3-sys build.rs),无需加任何 feature 即可用 `CREATE VIRTUAL TABLE USING fts5`
+  2. FTS5 中文搜索方案:unicode61 + 应用层 bigram 预处理(30 行纯函数)+ LIKE 单字兜底,零依赖零 unsafe
+  3. SQLite migration 手写 `PRAGMA user_version`(ALTER TABLE 不幂等需版本号守护,且整段要包事务)
+- **为什么像通用**:对应 reflux-signals「通用技术坑/方案」—— 任何需要本地搜索的 Tauri/Rust 桌面应用都会遇到 FTS5 中文 + migration,模板母体若加这些约束可帮到其他子工程
+- **状态**:待评估(收尾时提示用户;剪贴板专用性强,但 FTS5 中文 + migration 模式可能值得回流 constraints.md)
 - **状态**：待评估 / 已回流 / 留子工程 / 丢弃
 -->
 

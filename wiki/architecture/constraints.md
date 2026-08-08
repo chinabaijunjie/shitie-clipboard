@@ -2,7 +2,7 @@
 title: 技术硬约束（红线）
 tags: [架构, 约束, 红线]
 created: 2026-06-29
-updated: 2026-08-05
+updated: 2026-08-07
 status: active
 ---
 
@@ -31,6 +31,63 @@ SQLite 连接必须启用:`PRAGMA foreign_keys=ON` + `PRAGMA journal_mode=WAL` +
 `PRAGMA busy_timeout=5000`。否则并发读写时会出现 FK 约束失效 / 写锁冲突。
 
 rusqlite 通过 `Connection::pragma_update` 或 `Connection::execute_batch` 设置。
+
+## SQLite migration:ALTER TABLE 不幂等 + 必须包事务(M2+ 适用)
+
+> M2 起 schema 需结构性变更(加列)时适用。M0/M1 用 `CREATE TABLE IF NOT EXISTS`(幂等)无此问题。
+
+`ALTER TABLE ADD COLUMN` **不幂等**(SQLite 不支持 IF NOT EXISTS),重复执行报
+"duplicate column name"。M2 起改用手写版本号 `PRAGMA user_version` 守护:
+每次启动查版本号,未达 CURRENT 才跑增量迁移分支。
+
+⚠️ **整段迁移必须包事务**(`unchecked_transaction` + `commit`):若中途某步失败
+(如 FTS rebuild 失败),前面 ALTER 已提交但 user_version 没写 → 下次启动重跑
+ALTER 报 duplicate column → **app 永久启动失败**(init_db 的 expect panic)。
+事务保证任一步失败 ROLLBACK 回旧版本,下次干净重试。
+
+```rust
+let tx = conn.unchecked_transaction()?;
+let result = migrate_inner(&tx);  // ALTER + 回填 + 建触发器 + rebuild
+match result {
+    Ok(()) => tx.commit()?,        // 全成功才提交
+    Err(e) => { /* tx drop 自动 rollback */ return Err(e); }
+}
+```
+
+## FTS5 中文搜索:必须 bigram 预处理,不能裸用 unicode61(M2+ 适用)
+
+> M2 全文搜索适用。任何用 SQLite FTS5 搜中文的场景都有此坑。
+
+FTS5 默认 `unicode61` 分词器对 CJK 无效:中文无空格会被当成**单个超长 token**
+("你好世界" 整段是 1 个 token),任何子串都搜不到。
+
+- **P0 方案(零依赖)**:应用层 bigram 预处理(CJK 连续段切 2 字重叠滑窗),
+  ingest + query 双向用同一个纯函数;单字查询走 `LIKE '%字%'` 兜底。
+- `bundled` feature 已含 FTS5(libsqlite3-sys build.rs 无条件编译 `-DSQLITE_ENABLE_FTS5`),
+  无需改 Cargo.toml,直接 `CREATE VIRTUAL TABLE USING fts5(...)` 即用。
+- ⚠️ FTS5 MATCH 表达式的 token 内双引号需转义为 `""`(短语定界符),否则用户输入
+  含 `"` 触发 FTS5 语法错误。
+- 外部内容表(content='items')的三触发器(ai/ad/au)同步时,⚠️ 回填 UPDATE 必须在建
+  触发器**之前**,否则 au 对尚不存在的 FTS 行发 delete → "database disk image is malformed"。
+
+## asset protocol 显示磁盘文件需配 scope + protocol-asset feature(M2+ 适用)
+
+> M2 图片缩略图显示适用。任何 Tauri 应用用 convertFileSrc 显示磁盘文件的场景都有此要求。
+
+前端 `convertFileSrc(path)` 把磁盘路径转 `asset://localhost/...` URL 显示图片,需要两处配置:
+
+1. `tauri.conf.json` 的 `app.security.assetProtocol`:
+```json
+"security": {
+  "assetProtocol": { "enable": true, "scope": ["$APPDATA/images/**"] }
+}
+```
+scope 只开需要的目录(最小权限,不开 `$APPDATA/**`)。
+
+2. `Cargo.toml` 的 tauri 依赖加 `protocol-asset` feature(否则 build.rs 报 allowlist 不匹配):
+```toml
+tauri = { version = "2.11.2", features = ["macos-private-api", "protocol-asset"] }
+```
 
 ## Tauri v2 setup 时序坑（setup 内 emit 事件会被丢弃）
 

@@ -2,7 +2,7 @@
 title: 开发进度（状态唯一真相源）
 tags: [进度, 状态]
 created: 2026-06-29
-updated: 2026-08-06
+updated: 2026-08-07
 status: active
 ---
 
@@ -14,12 +14,13 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M2 搜索 + 富文本/图片支持 — **调研 + spike 完成,规划落盘待施工**
+- **当前里程碑**：M2 搜索 + 富文本/图片支持 — **✅ 完成**(2026-08-07,5 阶段施工 + GUI 实测 + PR review)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
-  + clipboard-rs 0.3(剪贴板读写/监听)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
-- **验证基线**：cargo test 35 passed(含 FTS5 spike 8)+ npm test 20 passed + npm build 43 modules,全绿零 warning
-- **下一步**：按 m2-plan 五阶段施工(A schema/migration → B 多格式捕获回填 → C 图片 → D 搜索 → E 实测)
+  + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
+  + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
+- **验证基线**：cargo test 107 passed + npm test 20 passed + npm build 全绿 + clippy 零 warning
+- **下一步**：M3 常驻体验(全局快捷键唤起/托盘/自启/Windows);M2 后有 3 项改进留 TODO(copy_back 抽纯函数 / 搜索状态机测试 / newtype 固化类型)
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -82,6 +83,43 @@ status: active
   BM25 排序 / LIKE 兜底 / rebuild / 触发器同步 全通过。spike 代码 `fts_spike.rs` 待 M2 施工演化后删。
 - **M2 规划落盘**(见 [[m2-plan]]):5 阶段(A schema/migration → B 多格式捕获回填 → C 图片 → D 搜索 → E 实测)。
   用户决策:migration 手写版本号 / 施工顺序多格式→搜索→图片 / 范围全做。
+
+## M2 实施完成记录(2026-08-07)
+
+5 阶段施工,搜索 + 富文本/图片全链路打通,GUI 实测 + PR review 全过。
+
+- **阶段 A**(`2bd6f96`):schema migration(手写 `PRAGMA user_version`)+ FTS5 外部内容表 + 三触发器 + 多格式存储基础
+  - 🔴 决定性发现:**bundled feature 已含 FTS5**(libsqlite3-sys build.rs 无条件编译),Cargo.toml 零改动
+  - 踩坑:migration 回填必须在建 FTS 触发器之前(否则 UPDATE 触发 au 对不存在的 FTS 行发 delete → malformed)
+- **阶段 B**(`a491350` + `fa8960c`):多格式捕获(白名单照搬 Maccy + 隐私黑名单)+ 多格式回填(set 原子写)
+  - 新模块:uti.rs(白/黑名单)/ capture.rs(classify_formats 纯函数)/ title.rs(按 kind 生成标题)
+  - 实测:富文本回填保留格式(加粗/链接)/ 文件 URL 回填粘贴出文件
+  - fix:serde 缺 rename_all=camelCase(字段名不匹配)/ contentKind schema 扩联合类型 / 列表滚动
+- **阶段 C**(`586d415` + `4104893`):图片存储(sha256 分桶 + to_png)+ 缩略图(asset protocol)+ 引用计数删除 + 图片去重
+  - 新模块:image_store.rs(save_image / count_references / delete_if_last_reference)
+  - 踩坑:缩略图相对/绝对路径不一致(emit 相对、command 绝对 → 抽 resolve_thumb_absolute 统一)
+  - 踩坑:纯图片无文本去重缺失(语音工具反复写同一图 → 一张变 4 份)→ 加 DedupKey::Image 按 file_path 去重
+  - 实测:截图 → 缩略图显示 + 「图片 W×H」→ 回填粘贴出图片
+- **阶段 D**(`f2124c3` + `cd94899`):搜索功能(FTS5 + bigram + 搜索框 UI + 选中滚动)
+  - search_items command + useClipboardItems 加 search 状态机 + SpotlightPanel 搜索框
+  - 踩坑:搜索导致列表无限闪烁(search 没 useCallback → debounce effect 无限重建)→ useCallback 修复
+  - 体验:选中项自动滚动到可视区(scrollIntoView nearest)
+- **PR review**(commit `865d8d2`,5 agent 并行):4 Critical + 5 Important 全修
+  - 🔴 migration 无事务 → 包 unchecked_transaction(中途失败 ROLLBACK,避免 app 永久启动失败)
+  - 🔴 搜索结果图片缩略图丢失 → search 补 fill_image_fields
+  - 🔴 capture get_image 吞错 → 改 log::warn
+  - 🔴 image_size 死链路(四层全断)→ 删除 ImageSize struct + 字段
+  - 🟡 FTS 特殊字符注入(转义)/ PNG 解码硬错误 / 注释清理 / copy_back 错误信息 / 路径转换
+  - 🧪 补图片引用计数 delete 端到端测试(2 项)
+  - 不修(留 TODO):copy_back 抽纯函数 / 搜索状态机测试 / newtype 固化类型
+
+**M2 期间确立的技术决策**(已沉淀 constraints.md):
+- SQLite migration 用手写 `PRAGMA user_version`(不引 rusqlite_migration),ALTER TABLE 不幂等需版本号守护
+- FTS5 中文:P0 = unicode61 + 应用层 bigram + LIKE 单字兜底(零依赖);P1 留 jieba
+- 图片存储:混合方案(文本进 BLOB,图片进文件系统 sha256 分桶 + 引用计数)
+- 多格式捕获:白名单(照搬 Maccy)+ 隐私黑名单(`ConcealedType`/`TransientType` 整条跳过)
+- ⚠️ 密码管理器浏览器扩展是盲区(只防住桌面 app,README 告知)
+- asset protocol 显示磁盘图片:`tauri.conf.json` 加 scope + Cargo.toml tauri 加 `protocol-asset` feature
 
 ## 本工程开发历史
 

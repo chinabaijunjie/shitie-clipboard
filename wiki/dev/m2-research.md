@@ -2,8 +2,8 @@
 title: M2 技术调研 — FTS5 中文搜索 / 图片存储 / 多格式捕获回填
 tags: [M2, 调研, FTS5, 中文分词, 图片存储, clipboard-rs, 多格式]
 created: 2026-08-06
-updated: 2026-08-06
-status: active
+updated: 2026-08-07
+status: done
 ---
 
 # M2 技术调研报告

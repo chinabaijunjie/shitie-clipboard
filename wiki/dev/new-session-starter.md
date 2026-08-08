@@ -21,7 +21,7 @@ status: ready-to-use
 
 > 当前状态(版本/测试数/架构) → 见 wiki/dev/progress.md「当前状态」段
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
-> 当前任务规划 → wiki/dev/m1-plan.md(M1 已完成,M2 待规划,启动前需技术 spike §1.16)
+> 当前任务规划 → M3 待规划(启动前需技术 spike:全局快捷键/托盘/自启)
 
 ## 必读文档
 1. AGENTS.md(AI 启动 3 步 + 核心原则 7 模块化 / 8 随写随测 / §8 通用工程纪律)
@@ -30,8 +30,8 @@ status: ready-to-use
 4. wiki/dev/TODO.md(下次目标 + 待办)
 
 ## ⏰ 待触发任务提醒
-- **M2 五阶段(A-E)全部 ✅ 后** → 启动 UI 苹果审美改造(见 wiki/dev/ui-redesign-plan.md)。
-  这是高频常驻工具,审美改造排 M2 之后避免返工。触发时提醒用户确认。
+- **M2 已完成** → UI 苹果审美改造可启动(见 wiki/dev/ui-redesign-plan.md)。
+  M3 与 UI 改造可并行或先后,启动时问用户优先级。
 
 ## 工作模式
 - 遇到决策点先跟我确认,不要自己拍板
