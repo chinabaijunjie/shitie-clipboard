@@ -13,7 +13,7 @@
  * 模块化(§1.21):本组件是容器,数据逻辑在 hook,展示在 ClipboardList,键盘导航
  * 边界计算在 nextIndex 纯函数(可单测)。
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { call } from '@core/api'
 import { useClipboardItems } from '@hooks/useClipboardItems'
@@ -39,10 +39,12 @@ export function nextIndex(current: number, direction: -1 | 1, length: number): n
 }
 
 export function SpotlightPanel() {
-  const { items, loading, error, deleteItem } = useClipboardItems()
+  const { items, loading, error, searchQuery, deleteItem, search } = useClipboardItems()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [probe, setProbe] = useState<ProbeStatus>('checking')
   const [actionError, setActionError] = useState<string | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [searchText, setSearchText] = useState('')
 
   /** 设置操作错误(回填/删除失败时),3 秒后自动清除 */
   const showActionError = useCallback((msg: string) => {
@@ -76,6 +78,14 @@ export function SpotlightPanel() {
       window.clearTimeout(deadline)
     }
   }, [])
+
+  // 搜索:searchText 变化后 debounce 300ms 触发(避免每次按键都查询)
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void search(searchText)
+    }, 300)
+    return () => window.clearTimeout(handle)
+  }, [searchText, search])
 
   // 选中索引边界保护:items 变化时不能越界
   useEffect(() => {
@@ -118,22 +128,40 @@ export function SpotlightPanel() {
   // 键盘交互
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (items.length === 0) return
+      const searchFocused = document.activeElement === searchInputRef.current
+      // 搜索框聚焦时:只拦截 Esc(清空搜索),其余按键交给输入框
+      if (searchFocused) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setSearchText('')
+          searchInputRef.current?.blur()
+        }
+        return
+      }
+      // 非搜索框聚焦:列表导航 + / 聚焦搜索
       switch (e.key) {
+        case '/':
+          e.preventDefault()
+          searchInputRef.current?.focus()
+          break
         case 'ArrowUp':
+          if (items.length === 0) return
           e.preventDefault()
           setSelectedIndex((i) => nextIndex(i, -1, items.length))
           break
         case 'ArrowDown':
+          if (items.length === 0) return
           e.preventDefault()
           setSelectedIndex((i) => nextIndex(i, 1, items.length))
           break
         case 'Enter':
+          if (items.length === 0) return
           e.preventDefault()
           void handleCopyBack(selectedIndex)
           break
         case 'Backspace':
         case 'Delete':
+          if (items.length === 0) return
           e.preventDefault()
           void handleDelete(selectedIndex)
           break
@@ -164,6 +192,26 @@ export function SpotlightPanel() {
         </span>
       </div>
 
+      {/* 搜索框 */}
+      <div className="border-b border-border/50 px-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground/70">🔍</span>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="搜索剪贴板历史…(按 / 快速聚焦)"
+            className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+          />
+          {searchQuery && (
+            <span className="shrink-0 text-[10px] text-muted-foreground/70">
+              {items.length} 条结果
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* 列表区(可滚动:超出窗口高度的内容滚动显示) */}
       <div className="flex-1 overflow-y-auto">
         {error ? (
@@ -184,7 +232,7 @@ export function SpotlightPanel() {
         {actionError ? (
           <span className="text-destructive">{actionError}</span>
         ) : (
-          <span className="text-muted-foreground/70">↑↓ 导航 · ⏎ 回填 · ⌫ 删除</span>
+          <span className="text-muted-foreground/70">↑↓ 导航 · ⏎ 回填 · ⌫ 删除 · / 搜索</span>
         )}
       </div>
     </div>

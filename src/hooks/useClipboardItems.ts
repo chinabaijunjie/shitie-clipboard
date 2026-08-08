@@ -43,14 +43,19 @@ export interface UseClipboardItemsResult {
   items: ClipboardItem[]
   loading: boolean
   error: string | null
+  /** 当前搜索查询(null = 非搜索模式,显示全列表) */
+  searchQuery: string | null
   /** 删除一条(同步更新本地列表)。失败抛错给调用方处理。 */
   deleteItem: (id: number) => Promise<void>
+  /** 搜索(空字符串/纯空白 = 清空搜索,回退全列表) */
+  search: (query: string) => Promise<void>
 }
 
 export function useClipboardItems(): UseClipboardItemsResult {
   const [items, setItems] = useState<ClipboardItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState<string | null>(null)
 
   // 初次加载 + 监听实时更新
   useEffect(() => {
@@ -75,9 +80,10 @@ export function useClipboardItems(): UseClipboardItemsResult {
 
     void load()
 
-    // 监听后端新增/更新事件
+    // 监听后端新增/更新事件(仅非搜索模式下更新;搜索时忽略新内容,清空搜索后自然可见)
     const unlistenPromise = listen<unknown>(TAURI_EVENTS.CLIPBOARD_ADDED, (event) => {
       if (cancelled) return
+      if (searchQuery !== null) return // 搜索模式:忽略新内容
       try {
         // §8 边界校验:事件 payload 同样经 Zod 校验
         const item = ClipboardItemSchema.parse(event.payload)
@@ -93,7 +99,7 @@ export function useClipboardItems(): UseClipboardItemsResult {
       unlistenPromise.catch((e) => console.error('[clipboard] listen 注册失败:', e))
       void unlistenPromise.then((fn) => fn())
     }
-  }, [])
+  }, [searchQuery])
 
   const deleteItem = async (id: number) => {
     await call('delete_item', { id })
@@ -101,5 +107,34 @@ export function useClipboardItems(): UseClipboardItemsResult {
     setItems((prev) => removeItem(prev, id))
   }
 
-  return { items, loading, error, deleteItem }
+  const search = async (query: string) => {
+    const trimmed = query.trim()
+    if (trimmed === '') {
+      // 清空搜索:回退到全列表
+      setSearchQuery(null)
+      setLoading(true)
+      try {
+        const raw = await call<unknown>('list_items', { limit: DEFAULT_LIMIT })
+        setItems(ClipboardItemListSchema.parse(raw))
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+    setSearchQuery(trimmed)
+    setLoading(true)
+    try {
+      const raw = await call<unknown>('search_items', { query: trimmed, limit: DEFAULT_LIMIT })
+      setItems(ClipboardItemListSchema.parse(raw))
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { items, loading, error, searchQuery, deleteItem, search }
 }

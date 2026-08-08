@@ -54,6 +54,26 @@ pub fn delete_item_with_conn(
     items::delete(conn, id, images_dir)
 }
 
+/// 搜索剪贴板历史(FTS5 + bigram 中文分词,单字 LIKE 兜底)。
+///
+/// `images_dir`:图片存储根目录,搜索结果里的图片条目需要把缩略图相对路径转绝对。
+pub fn search_items_with_conn(
+    conn: &Connection,
+    query: &str,
+    limit: i64,
+    images_dir: &std::path::Path,
+) -> Result<Vec<ClipboardItem>, AppError> {
+    let mut list = crate::storage::search::search(conn, query, limit)?;
+    // 搜索结果也转缩略图绝对路径(与 list_items 一致)
+    for item in &mut list {
+        item.thumb_path = crate::clipboard::image_store::resolve_thumb_absolute(
+            &item.thumb_path,
+            images_dir,
+        );
+    }
+    Ok(list)
+}
+
 /// 回填:读 DB 该条所有格式 → 组装 Vec<ClipboardContent> → set 原子写回剪贴板。
 ///
 /// M2 多格式回填:把该 item 所有存下来的格式都写回(保留 Word 富文本格式等)。
@@ -182,6 +202,17 @@ pub fn delete_item(
 ) -> Result<(), AppError> {
     let conn = state.db();
     delete_item_with_conn(&conn, id, state.images_dir())
+}
+
+/// 搜索剪贴板历史(FTS5 + bigram)。
+#[tauri::command]
+pub fn search_items(
+    state: State<'_, crate::AppState>,
+    query: String,
+    limit: Option<i64>,
+) -> Result<Vec<ClipboardItem>, AppError> {
+    let conn = state.db();
+    search_items_with_conn(&conn, &query, limit.unwrap_or(DEFAULT_LIST_LIMIT), state.images_dir())
 }
 
 /// 回填:读 DB 多格式 → set 原子写回剪贴板。

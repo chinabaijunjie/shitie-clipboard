@@ -23,7 +23,7 @@ mod storage;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use commands::clipboard::{copy_back, delete_item, list_items};
+use commands::clipboard::{copy_back, delete_item, list_items, search_items};
 use commands::ping::ping;
 use tauri::Manager;
 
@@ -128,6 +128,7 @@ pub fn run() {
             list_items,
             copy_back,
             delete_item,
+            search_items,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
