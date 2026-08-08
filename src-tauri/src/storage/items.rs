@@ -106,6 +106,7 @@ pub fn insert_or_update(
 /// 决策规则(优先级):
 /// - 有纯文本格式 → 按文本内容去重(富文本/纯文本场景)
 /// - 无纯文本但有图片 → 按图片 file_path 去重(同一张图 sha256 相同,file_path 相同)
+/// - 无文本无图片但有文件 URL → 按 URL 字节去重
 /// - 都没有 → 不去重(无法判定唯一性)
 #[derive(Debug, Clone, PartialEq)]
 pub enum DedupKey<'a> {
@@ -113,6 +114,8 @@ pub enum DedupKey<'a> {
     Text(&'a [u8]),
     /// 按图片 file_path 去重(相对路径)。
     Image(&'a str),
+    /// 按文件 URL 字节去重(public.file-url 的 data)。
+    File(&'a [u8]),
 }
 
 /// 从 formats 推出去重 key(纯函数,可测)。
@@ -130,6 +133,13 @@ pub fn dedup_key<'a>(formats: &'a [FormatInput<'_>]) -> Option<DedupKey<'a>> {
             return Some(DedupKey::Image(fp));
         }
     }
+    // 再次文件 URL(按 URL 字节去重)
+    if let Some(f) = formats
+        .iter()
+        .find(|f| f.uti == crate::clipboard::uti::UTI_FILE_URL)
+    {
+        return Some(DedupKey::File(f.data));
+    }
     None
 }
 
@@ -143,7 +153,11 @@ pub fn dedup_key<'a>(formats: &'a [FormatInput<'_>]) -> Option<DedupKey<'a>> {
 /// 去重(见 `dedup_key`):
 /// - 有纯文本 → 按文本内容去重(富文本/纯文本)
 /// - 无纯文本但有图片 → 按图片 file_path 去重(同一张图不重复入库)
+/// - 无文本无图片但有文件 URL → 按 URL 去重
 /// - 都没有 → 不去重
+///
+/// 命中去重时,formats 表会整体替换(DELETE 旧行 + INSERT 新行),确保最新格式生效
+/// (M4 G1 修复:A(带RTF)→B→A(纯文本) 后不再残留旧 RTF)。
 ///
 /// 返回最终的 ClipboardItem。
 pub fn insert_or_update_multi(
@@ -189,47 +203,57 @@ pub fn insert_or_update_multi(
             )
             .optional()
             .map_err(|e| AppError::internal(format!("图片去重查询失败: {e}")))?,
+        Some(DedupKey::File(url_bytes)) => conn
+            .query_row(
+                "SELECT item_id FROM clipboard_formats \
+                 WHERE uti = ?1 AND data_blob = ?2 LIMIT 1",
+                params![crate::clipboard::uti::UTI_FILE_URL, url_bytes],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| AppError::internal(format!("文件 URL 去重查询失败: {e}")))?,
         None => None,
     };
 
+    // 整个写入包进事务:命中替换 formats 或新增都需原子性(M4 G1)
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| AppError::internal(format!("开启写入事务失败: {e}")))?;
+
     let item_id = match existing_id {
         Some(id) => {
-            conn.execute(
+            // 命中去重:更新时间 + 次数 + 替换 formats(G1 修复)
+            tx.execute(
                 "UPDATE clipboard_items SET last_copied_at = ?1, copy_count = copy_count + 1 WHERE id = ?2",
                 params![now, id],
             )
             .map_err(|e| AppError::internal(format!("更新 copy_count 失败: {e}")))?;
+
+            // G1 修复:替换 formats 表(DELETE 旧行 + INSERT 新行)
+            // 确保最新格式生效(如富文本→纯文本切换时旧 RTF 不残留)
+            replace_formats(&tx, id, formats, images_dir)?;
+
             id
         }
         None => {
-            conn.execute(
+            tx.execute(
                 "INSERT INTO clipboard_items \
                  (first_copied_at, last_copied_at, copy_count, title, content_kind, search_text) \
                  VALUES (?1, ?2, 1, ?3, ?4, ?5)",
                 params![now, now, &title, kind.as_db_str(), &search_text],
             )
             .map_err(|e| AppError::internal(format!("INSERT items 失败: {e}")))?;
-            let new_id = conn.last_insert_rowid();
+            let new_id = tx.last_insert_rowid();
 
             // INSERT 所有 formats 行
-            for fmt in formats {
-                conn.execute(
-                    "INSERT INTO clipboard_formats (item_id, uti, data_blob, file_path, size) \
-                     VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![
-                        new_id,
-                        fmt.uti,
-                        fmt.data,
-                        fmt.file_path,
-                        fmt.data.len() as i64,
-                    ],
-                )
-                .map_err(|e| AppError::internal(format!("INSERT formats ({}) 失败: {e}", fmt.uti)))?;
-            }
+            insert_formats(&tx, new_id, formats);
 
             new_id
         }
     };
+
+    tx.commit()
+        .map_err(|e| AppError::internal(format!("写入事务 commit 失败: {e}")))?;
 
     get_item(conn, item_id, images_dir)
 }
@@ -369,6 +393,98 @@ pub fn delete(conn: &Connection, id: i64, images_dir: &Path) -> Result<(), AppEr
 // ============================================================
 // 内部辅助
 // ============================================================
+
+/// 向 clipboard_formats 表插入多行(M4 抽出,供 insert_or_update_multi 复用)。
+fn insert_formats(conn: &Connection, item_id: i64, formats: &[FormatInput<'_>]) {
+    for fmt in formats {
+        if let Err(e) = conn.execute(
+            "INSERT INTO clipboard_formats (item_id, uti, data_blob, file_path, size) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                item_id,
+                fmt.uti,
+                fmt.data,
+                fmt.file_path,
+                fmt.data.len() as i64,
+            ],
+        ) {
+            log::error!("[storage] INSERT formats ({}) 失败: {e}", fmt.uti);
+        }
+    }
+}
+
+/// 替换某 item 的所有 formats 行(G1 修复:命中去重时用新格式覆盖旧格式)。
+///
+/// 步骤:
+/// 1. 查旧 formats 里的图片 file_path,对新 formats 中不再出现的做引用计数删除
+/// 2. DELETE 旧 formats 行
+/// 3. INSERT 新 formats 行
+///
+/// 图片引用计数安全:去重命中通常新旧图片引用一致(同 file_path),
+/// 若新 formats 丢弃了旧图片引用,需删除磁盘文件防止泄露。
+fn replace_formats(
+    conn: &Connection,
+    item_id: i64,
+    new_formats: &[FormatInput<'_>],
+    images_dir: &Path,
+) -> Result<(), AppError> {
+    // 收集新 formats 中的图片 file_path(仍在引用的图片)
+    let new_image_paths: std::collections::HashSet<&str> = new_formats
+        .iter()
+        .filter(|f| {
+            f.uti == crate::clipboard::uti::UTI_PNG || f.uti == crate::clipboard::uti::UTI_TIFF
+        })
+        .filter_map(|f| f.file_path)
+        .collect();
+
+    // 查旧 formats 里的图片 file_path
+    let old_image_paths: Vec<RelPath> = conn
+        .prepare(
+            "SELECT file_path FROM clipboard_formats \
+             WHERE item_id = ?1 AND file_path IS NOT NULL \
+             AND uti IN ('public.png','public.tiff')",
+        )
+        .map_err(|e| AppError::internal(format!("prepare 查旧图片 file_path 失败: {e}")))?
+        .query_map(params![item_id], |r| {
+            let s: String = r.get(0)?;
+            Ok(RelPath::new(s))
+        })
+        .map_err(|e| AppError::internal(format!("查旧图片 file_path 失败: {e}")))?
+        .filter_map(Result::ok)
+        .collect();
+
+    // 对新 formats 中不再引用的旧图片做引用计数删除
+    for old_fp in &old_image_paths {
+        if !new_image_paths.contains(old_fp.as_str()) {
+            crate::clipboard::image_store::delete_if_last_reference(conn, old_fp, images_dir)?;
+        }
+    }
+
+    // DELETE 旧 formats 行
+    conn.execute(
+        "DELETE FROM clipboard_formats WHERE item_id = ?1",
+        params![item_id],
+    )
+    .map_err(|e| AppError::internal(format!("DELETE 旧 formats 失败: {e}")))?;
+
+    // INSERT 新 formats 行
+    for fmt in new_formats {
+        conn.execute(
+            "INSERT INTO clipboard_formats (item_id, uti, data_blob, file_path, size) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                item_id,
+                fmt.uti,
+                fmt.data,
+                fmt.file_path,
+                fmt.data.len() as i64,
+            ],
+        )
+        .map_err(|e| AppError::internal(format!("INSERT formats ({}) 失败: {e}", fmt.uti)))?;
+    }
+
+    Ok(())
+}
 
 /// 当前 unix epoch 毫秒。
 pub(crate) fn now_epoch_ms() -> i64 {
@@ -692,13 +808,113 @@ mod tests {
     }
 
     #[test]
-    fn dedup_key_none_when_no_text_no_image() {
-        // 纯文件 URL(无文本无图片)→ 不去重
-        let url = b"file:///x".to_vec();
+    fn dedup_key_none_when_unknown_uti() {
+        // 非白名单 UTI(无文本无图片无文件URL)→ 不去重
+        let data = b"random".to_vec();
+        let formats = vec![
+            FormatInput { uti: "dyn.some-random", data: &data, file_path: None },
+        ];
+        assert_eq!(dedup_key(&formats), None);
+    }
+
+    #[test]
+    fn dedup_key_file_url_when_no_text_no_image() {
+        // 无文本无图片 + 有文件 URL → 按文件 URL 去重
+        let url = b"file:///Users/test/report.pdf".to_vec();
         let formats = vec![
             FormatInput { uti: "public.file-url", data: &url, file_path: None },
         ];
-        assert_eq!(dedup_key(&formats), None);
+        assert_eq!(dedup_key(&formats), Some(DedupKey::File(&url)));
+    }
+
+    #[test]
+    fn insert_multi_dedup_by_file_url() {
+        // 文件 URL 去重:相同 URL 复制两次 → 命中同一 item
+        let conn = db();
+        let url = b"file:///Users/test/report.pdf".to_vec();
+        let formats = vec![
+            FormatInput { uti: "public.file-url", data: &url, file_path: None },
+        ];
+        let first = insert_or_update_multi(&conn, &formats, ContentKind::File, "report.pdf", &test_images_dir()).unwrap();
+        let second = insert_or_update_multi(&conn, &formats, ContentKind::File, "report.pdf", &test_images_dir()).unwrap();
+
+        assert_eq!(first.id, second.id, "相同文件 URL 应命中同一条");
+        assert_eq!(second.copy_count, 2);
+    }
+
+    #[test]
+    fn insert_multi_different_file_urls_no_dedup() {
+        // 不同文件 URL 不去重
+        let conn = db();
+        let url1 = b"file:///a.pdf".to_vec();
+        let url2 = b"file:///b.pdf".to_vec();
+        let f1 = vec![FormatInput { uti: "public.file-url", data: &url1, file_path: None }];
+        let f2 = vec![FormatInput { uti: "public.file-url", data: &url2, file_path: None }];
+        let first = insert_or_update_multi(&conn, &f1, ContentKind::File, "a.pdf", &test_images_dir()).unwrap();
+        let second = insert_or_update_multi(&conn, &f2, ContentKind::File, "b.pdf", &test_images_dir()).unwrap();
+        assert_ne!(first.id, second.id, "不同文件 URL 应各自入库");
+    }
+
+    #[test]
+    fn dedup_replaces_formats_on_hit() {
+        // G1 修复:A(带 RTF)→B→A(纯文本) 后,旧 RTF 不残留
+        let conn = db();
+        let text = b"hello".to_vec();
+        let rtf = b"{\\rtf1 hello}".to_vec();
+
+        // 第一次:text + rtf
+        let formats_with_rtf = vec![
+            FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
+            FormatInput { uti: "public.rtf", data: &rtf, file_path: None },
+        ];
+        let first = insert_or_update_multi(&conn, &formats_with_rtf, ContentKind::Rich, "hello", &test_images_dir()).unwrap();
+
+        // 确认第一次有 2 个 formats
+        let fmt_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM clipboard_formats WHERE item_id = ?1",
+                params![first.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(fmt_count, 2, "首次插入应有 2 个格式行");
+
+        // 第二次:相同文本但只有纯文本(模拟从记事本复制)
+        let formats_text_only = vec![
+            FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
+        ];
+        let second = insert_or_update_multi(&conn, &formats_text_only, ContentKind::Text, "hello", &test_images_dir()).unwrap();
+
+        // 应命中同一条
+        assert_eq!(first.id, second.id, "相同文本应命中同一条");
+        assert_eq!(second.copy_count, 2);
+
+        // formats 应只有 1 行(纯文本),RTF 已被替换掉
+        let read_back = get_formats(&conn, second.id).unwrap();
+        assert_eq!(read_back.len(), 1, "G1:旧 RTF 应被替换,只剩纯文本");
+        assert_eq!(read_back[0].0, "public.utf8-plain-text");
+    }
+
+    #[test]
+    fn dedup_replaces_formats_keeps_same_formats() {
+        // G1 边界:命中去重时新旧 formats 相同 → 替换后格式不变
+        let conn = db();
+        let text = b"hello".to_vec();
+        let rtf = b"{\\rtf1 hello}".to_vec();
+        let formats = vec![
+            FormatInput { uti: "public.utf8-plain-text", data: &text, file_path: None },
+            FormatInput { uti: "public.rtf", data: &rtf, file_path: None },
+        ];
+
+        let first = insert_or_update_multi(&conn, &formats, ContentKind::Rich, "hello", &test_images_dir()).unwrap();
+        let second = insert_or_update_multi(&conn, &formats, ContentKind::Rich, "hello", &test_images_dir()).unwrap();
+
+        assert_eq!(first.id, second.id);
+        assert_eq!(second.copy_count, 2);
+
+        // formats 应仍然是 2 行(相同内容替换)
+        let read_back = get_formats(&conn, second.id).unwrap();
+        assert_eq!(read_back.len(), 2, "相同 formats 替换后行数不变");
     }
 
     #[test]
