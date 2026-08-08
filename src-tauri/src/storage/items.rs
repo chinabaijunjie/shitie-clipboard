@@ -96,6 +96,38 @@ pub fn insert_or_update(conn: &Connection, text: &str) -> Result<ClipboardItem, 
     get_item(conn, item_id)
 }
 
+/// 去重的判定 key(纯函数,可测)。
+///
+/// 决策规则(优先级):
+/// - 有纯文本格式 → 按文本内容去重(富文本/纯文本场景)
+/// - 无纯文本但有图片 → 按图片 file_path 去重(同一张图 sha256 相同,file_path 相同)
+/// - 都没有 → 不去重(无法判定唯一性)
+#[derive(Debug, Clone, PartialEq)]
+pub enum DedupKey<'a> {
+    /// 按纯文本字节去重。
+    Text(&'a [u8]),
+    /// 按图片 file_path 去重(相对路径)。
+    Image(&'a str),
+}
+
+/// 从 formats 推出去重 key(纯函数,可测)。
+pub fn dedup_key<'a>(formats: &'a [FormatInput<'_>]) -> Option<DedupKey<'a>> {
+    // 优先纯文本
+    if let Some(f) = formats.iter().find(|f| f.uti == UTI_PLAIN_TEXT) {
+        return Some(DedupKey::Text(f.data));
+    }
+    // 其次图片(file_path,sha256 去重)
+    if let Some(f) = formats
+        .iter()
+        .find(|f| f.uti == crate::clipboard::uti::UTI_PNG || f.uti == crate::clipboard::uti::UTI_TIFF)
+    {
+        if let Some(fp) = f.file_path {
+            return Some(DedupKey::Image(fp));
+        }
+    }
+    None
+}
+
 /// 插入或更新剪贴板条目(多格式入口,M2 捕获层用)。
 ///
 /// 与 `insert_or_update`(单文本)的区别:
@@ -103,8 +135,10 @@ pub fn insert_or_update(conn: &Connection, text: &str) -> Result<ClipboardItem, 
 /// - content_kind 由调用方根据捕获格式分类
 /// - 标题由调用方生成(富文本提取纯文本 / 图片尺寸 / 文件名)
 ///
-/// 去重:基于纯文本格式的 data_blob 比对(与 M1 一致)。
-/// 若 formats 里没有纯文本(纯图片/纯文件),不做去重(每次都新增)。
+/// 去重(见 `dedup_key`):
+/// - 有纯文本 → 按文本内容去重(富文本/纯文本)
+/// - 无纯文本但有图片 → 按图片 file_path 去重(同一张图不重复入库)
+/// - 都没有 → 不去重
 ///
 /// 返回最终的 ClipboardItem。
 pub fn insert_or_update_multi(
@@ -129,9 +163,9 @@ pub fn insert_or_update_multi(
         None => String::new(),
     };
 
-    // 去重:有纯文本格式才比对(与 M1 一致)
-    let existing_id: Option<i64> = match plain_text {
-        Some(bytes) => conn
+    // 去重:按 dedup_key 查已有 item
+    let existing_id: Option<i64> = match dedup_key(formats) {
+        Some(DedupKey::Text(bytes)) => conn
             .query_row(
                 "SELECT item_id FROM clipboard_formats \
                  WHERE uti = ?1 AND data_blob = ?2 LIMIT 1",
@@ -139,7 +173,16 @@ pub fn insert_or_update_multi(
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| AppError::internal(format!("多格式查询去重失败: {e}")))?,
+            .map_err(|e| AppError::internal(format!("文本去重查询失败: {e}")))?,
+        Some(DedupKey::Image(file_path)) => conn
+            .query_row(
+                "SELECT item_id FROM clipboard_formats \
+                 WHERE uti IN ('public.png','public.tiff') AND file_path = ?1 LIMIT 1",
+                params![file_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| AppError::internal(format!("图片去重查询失败: {e}")))?,
         None => None,
     };
 
@@ -570,8 +613,8 @@ mod tests {
     }
 
     #[test]
-    fn insert_multi_no_plain_text_no_dedup() {
-        // 纯图片(无纯文本格式)不去重,每次新增
+    fn insert_multi_image_dedup_by_file_path() {
+        // 纯图片(无纯文本格式)按 file_path 去重:同一张图(同 sha256 → 同 file_path)不重复入库
         let conn = db();
         let formats = vec![
             FormatInput { uti: "public.png", data: &[], file_path: Some("ab/1234.png") },
@@ -579,7 +622,49 @@ mod tests {
         let first = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图片 100×100").unwrap();
         let second = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图片 100×100").unwrap();
 
-        assert_ne!(first.id, second.id, "无纯文本格式不去重");
+        assert_eq!(first.id, second.id, "相同图片(file_path 相同)应去重命中同一条");
+        assert_eq!(second.copy_count, 2);
+    }
+
+    #[test]
+    fn insert_multi_different_images_no_dedup() {
+        // 不同图片(file_path 不同)不去重
+        let conn = db();
+        let f1 = vec![FormatInput { uti: "public.png", data: &[], file_path: Some("ab/1111.png") }];
+        let f2 = vec![FormatInput { uti: "public.png", data: &[], file_path: Some("cd/2222.png") }];
+        let first = insert_or_update_multi(&conn, &f1, ContentKind::Image, "图1").unwrap();
+        let second = insert_or_update_multi(&conn, &f2, ContentKind::Image, "图2").unwrap();
+        assert_ne!(first.id, second.id, "不同图片应各自入库");
+    }
+
+    #[test]
+    fn dedup_key_prefers_text() {
+        // 有纯文本 → 按文本去重(即使还有图片)
+        let text = b"hello".to_vec();
+        let formats = vec![
+            FormatInput { uti: UTI_PLAIN_TEXT, data: &text, file_path: None },
+            FormatInput { uti: "public.png", data: &[], file_path: Some("ab/x.png") },
+        ];
+        assert_eq!(dedup_key(&formats), Some(DedupKey::Text(&text)));
+    }
+
+    #[test]
+    fn dedup_key_image_when_no_text() {
+        // 无纯文本 + 有图片 → 按图片 file_path
+        let formats = vec![
+            FormatInput { uti: "public.png", data: &[], file_path: Some("ab/x.png") },
+        ];
+        assert_eq!(dedup_key(&formats), Some(DedupKey::Image("ab/x.png")));
+    }
+
+    #[test]
+    fn dedup_key_none_when_no_text_no_image() {
+        // 纯文件 URL(无文本无图片)→ 不去重
+        let url = b"file:///x".to_vec();
+        let formats = vec![
+            FormatInput { uti: "public.file-url", data: &url, file_path: None },
+        ];
+        assert_eq!(dedup_key(&formats), None);
     }
 
     #[test]

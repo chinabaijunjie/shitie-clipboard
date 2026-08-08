@@ -165,7 +165,12 @@ impl ClipboardHandler for ClipboardChangeHandler {
             .collect();
 
         match items::insert_or_update_multi(&self.db, &format_inputs, captured.kind, &title_str) {
-            Ok(item) => {
+            Ok(mut item) => {
+                // 缩略图相对路径 → 绝对路径(前端 convertFileSrc 需要绝对路径)
+                item.thumb_path = crate::clipboard::image_store::resolve_thumb_absolute(
+                    &item.thumb_path,
+                    &self.images_dir,
+                );
                 log::info!(
                     "[clipboard] 捕获: id={} kind={:?} title={:?}",
                     item.id,

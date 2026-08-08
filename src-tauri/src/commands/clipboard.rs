@@ -35,14 +35,12 @@ pub fn list_items_with_conn(
     images_dir: &std::path::Path,
 ) -> Result<Vec<ClipboardItem>, AppError> {
     let mut list = items::list(conn, limit)?;
-    // 把缩略图相对路径转绝对路径(fill_image_fields 填的是相对路径)
+    // 把缩略图相对路径转绝对路径(前端 convertFileSrc 需要绝对路径)
     for item in &mut list {
-        if let Some(rel) = &item.thumb_path {
-            let abs = images_dir.join(rel);
-            if let Some(s) = abs.to_str() {
-                item.thumb_path = Some(s.to_string());
-            }
-        }
+        item.thumb_path = crate::clipboard::image_store::resolve_thumb_absolute(
+            &item.thumb_path,
+            images_dir,
+        );
     }
     Ok(list)
 }

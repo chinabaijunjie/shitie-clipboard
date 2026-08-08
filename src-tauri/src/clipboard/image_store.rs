@@ -157,6 +157,15 @@ pub fn relative_thumb_path_from_image_pub(image_rel: &str) -> String {
     relative_thumb_path_from_image(image_rel)
 }
 
+/// 把缩略图相对路径转成绝对路径字符串(给前端 convertFileSrc 用)。
+///
+/// handler emit / command 返回前调用。None 或转失败时返回 None。
+pub fn resolve_thumb_absolute(thumb_rel: &Option<String>, images_dir: &Path) -> Option<String> {
+    let rel = thumb_rel.as_ref()?;
+    let abs = images_dir.join(rel);
+    abs.to_str().map(|s| s.to_string())
+}
+
 /// 从原图相对路径反推缩略图相对路径。
 ///
 /// 原图:`ab/cdef...png`(分桶 = sha256 前 2 位,rest = 剩余 hash + .png)
