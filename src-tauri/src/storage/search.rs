@@ -78,9 +78,12 @@ pub fn is_single_char_query(query: &str) -> bool {
 /// 用户输入 → FTS5 MATCH 表达式。
 ///
 /// bigram 预处理后,每个 token 包成 FTS5 短语(双引号),多 token 之间 OR。
-/// - "你好" → `"你好>`
+/// - "你好" → `"你好"`
 /// - "你好世" → `"你好" OR "好世"`
 /// - "rust async" → `"rust" OR "async"`(英文 unicode61 默认已切)
+///
+/// ⚠️ token 内的双引号需转义为 `""`(FTS5 短语定界符),否则 `a"b` 会拼成非法 MATCH
+/// 表达式触发语法错误。见 code-reviewer 置信 81 发现。
 ///
 /// 返回 None 表示输入经预处理后无有效 token(空查询)。
 pub fn to_fts_query(user_input: &str) -> Option<String> {
@@ -89,7 +92,18 @@ pub fn to_fts_query(user_input: &str) -> Option<String> {
     if parts.is_empty() {
         return None;
     }
-    Some(parts.iter().map(|t| format!("\"{t}\"")).collect::<Vec<_>>().join(" OR "))
+    Some(
+        parts
+            .iter()
+            .map(|t| format!("\"{}\"", escape_fts_phrase(t)))
+            .collect::<Vec<_>>()
+            .join(" OR "),
+    )
+}
+
+/// 转义 FTS5 短语内的双引号:`"` → `""`(FTS5 短语定界符转义规则)。
+fn escape_fts_phrase(token: &str) -> String {
+    token.replace('"', "\"\"")
 }
 
 /// 搜索剪贴板历史。
@@ -106,11 +120,16 @@ pub fn search(conn: &Connection, query: &str, limit: i64) -> Result<Vec<Clipboar
         return Ok(Vec::new());
     }
 
-    if is_single_char_query(trimmed) {
-        search_by_like(conn, trimmed, limit)
+    let mut results = if is_single_char_query(trimmed) {
+        search_by_like(conn, trimmed, limit)?
     } else {
-        search_by_fts(conn, trimmed, limit)
+        search_by_fts(conn, trimmed, limit)?
+    };
+    // 补充图片类条目的缩略图路径(与 list/get_item 保持一致,否则搜索命中的图片无缩略图)
+    for item in &mut results {
+        crate::storage::items::fill_image_fields(conn, item)?;
     }
+    Ok(results)
 }
 
 /// FTS + BM25 搜索(多字查询)。
@@ -230,6 +249,12 @@ mod tests {
     fn to_fts_query_empty_returns_none() {
         assert!(to_fts_query("").is_none());
         assert!(to_fts_query("   ").is_none());
+    }
+
+    #[test]
+    fn to_fts_query_escapes_double_quote() {
+        // 含双引号的 token 需转义为 "",否则拼成非法 MATCH 表达式触发 FTS5 语法错误
+        assert_eq!(to_fts_query("a\"b").unwrap(), "\"a\"\"b\"");
     }
 
     #[test]

@@ -54,15 +54,42 @@ fn read_version(conn: &Connection) -> Result<i64, AppError> {
 ///
 /// - 加 `clipboard_items.search_text` 列(存 bigram 预处理后的全文,供 FTS 索引)
 /// - 建 FTS5 外部内容表 + 三触发器(指向 items,content_rowid=id)
-/// - 加 `idx_formats_file_path`(图片引用计数查询用,阶段 C)
+/// - 加 `idx_formats_file_path`(图片引用计数查询用)
 /// - 存量回填:从 formats 表读 plain text → bigram → search_text + FTS rebuild
 /// - 写 user_version=2
 ///
-/// ⚠️ ALTER TABLE ADD COLUMN 不幂等,靠「current < 2 才进入」守护。
+/// ⚠️ ALTER TABLE ADD COLUMN 不幂等,靠「current < 2 才进入」守护 + **整段事务包裹**:
+/// 任一步失败 ROLLBACK 回 v0(下次启动干净重试),避免半迁移状态卡死 app。
 fn migrate_to_v2(conn: &Connection) -> Result<(), AppError> {
     log::info!("[migration] 升级到 schema v2(M2:search_text + FTS5)");
 
-    // 1. 加 search_text 列(不幂等,版本号守护)
+    // ⚠️ 整个迁移包进事务:任一步失败回滚,避免 ALTER 已提交但版本号没写 →
+    // 下次重跑 ALTER 报 duplicate column → app 永久启动失败。
+    // 用 unchecked_transaction:rusqlite 的 Transaction drop 会自动 rollback(失败时),
+    // 手动 commit(成功时)。
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| AppError::internal(format!("开启 migration 事务失败: {e}")))?;
+
+    let result = migrate_to_v2_inner(&tx);
+    match result {
+        Ok(()) => {
+            tx.commit()
+                .map_err(|e| AppError::internal(format!("migration commit 失败: {e}")))?;
+            log::info!("[migration] schema v2 升级完成");
+            Ok(())
+        }
+        Err(e) => {
+            // tx drop 时自动 rollback,这里显式说明
+            log::error!("[migration] schema v2 升级失败,已回滚: {}", e.message);
+            Err(e)
+        }
+    }
+}
+
+/// migrate_to_v2 的事务内逻辑(失败时由调用方 rollback)。
+fn migrate_to_v2_inner(conn: &Connection) -> Result<(), AppError> {
+    // 1. 加 search_text 列(不幂等,版本号 + 事务守护)
     conn.execute(
         "ALTER TABLE clipboard_items ADD COLUMN search_text TEXT",
         [],
@@ -91,7 +118,6 @@ fn migrate_to_v2(conn: &Connection) -> Result<(), AppError> {
     // 6. 写版本号
     write_version(conn, CURRENT_SCHEMA_VERSION)?;
 
-    log::info!("[migration] schema v2 升级完成");
     Ok(())
 }
 

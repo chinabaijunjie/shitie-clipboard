@@ -9,9 +9,6 @@
 //!
 //! ⚠️ PRAGMA 红线(constraints.md):foreign_keys=ON + WAL + busy_timeout=5000。
 
-// 阶段 B/C 接线后移除此 allow。
-#![allow(dead_code)]
-
 pub mod fts;
 pub mod items;
 pub mod migration;

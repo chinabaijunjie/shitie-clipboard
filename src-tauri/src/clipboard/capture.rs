@@ -4,7 +4,8 @@
 //! 1. `classify_formats`(纯函数):UTI 列表 → 捕获决策(隐私跳过?捕获哪些?)
 //! 2. `capture_multi`(系统交互):按决策读剪贴板内容 → 字节
 //!
-//! 阶段 B 范围:文本/富文本(RTF/HTML)/文件 URL。图片留阶段 C(需 image_store)。
+//! 阶段范围:文本/富文本(RTF/HTML)/文件 URL/图片(PNG/TIFF)。图片走 image_store 存盘,
+//! file_path 存相对路径。
 
 use std::path::Path;
 
@@ -58,8 +59,6 @@ pub fn classify_formats(available_utis: &[String]) -> CaptureDecision {
 /// - 含图片(png/tiff)→ Image(或 Mixed 若还有文本/富文本)
 /// - 含 rtf/html → Rich(或 Mixed 若还有图片)
 /// - 只有 text → Text
-///
-/// 阶段 B 不处理图片(图片走阶段 C 的 image_store),但分类逻辑提前定好。
 pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
     let has_text = capture_utis.iter().any(|u| u == uti::UTI_PLAIN_TEXT);
     let has_rich = capture_utis
@@ -79,7 +78,7 @@ pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
         return ContentKind::File;
     }
 
-    // 图片相关分类(阶段 C 处理图片,但分类逻辑定好)
+    // 图片分类(图片走 capture_and_store_image 存盘,此处按格式推断 kind)
     if has_image {
         if has_text || has_rich {
             return ContentKind::Mixed;
@@ -193,7 +192,12 @@ fn capture_and_store_image(
     use clipboard_rs::common::RustImage;
     let img = match clipboard.get_image() {
         Ok(img) => img,
-        Err(_) => return Ok(None), // 无图片格式不报错
+        Err(e) => {
+            // 真实读剪贴板失败(非「无图格式」)也要降级跳过(不阻断其他格式捕获),
+            // 但必须留日志,否则图片静默丢失无法排查。
+            log::warn!("[capture] get_image 失败,跳过图片捕获: {e}");
+            return Ok(None);
+        }
     };
     let png_buffer = img.to_png().map_err(|e| {
         AppError::new(crate::error::codes::CLIPBOARD_READ_FAILED, format!("图片转 PNG 失败: {e}"))
@@ -322,7 +326,7 @@ mod tests {
 
     #[test]
     fn classify_captures_screenshot_png_tiff() {
-        // 系统截图:png + tiff(阶段 B 不读图片,但 classify 应捕获)
+        // 系统截图:png + tiff(classify 应判定为可捕获)
         let formats = utis(&["public.png", "public.tiff"]);
         match classify_formats(&formats) {
             CaptureDecision::Capture(utis) => {

@@ -9,10 +9,6 @@
 //!
 //! 去重用 data_blob 内容比对(M1 数据量小,全表扫可接受;M4 加 hash 索引优化)。
 
-// M1 阶段 A:存储层先建,阶段 B(watcher)/C(command)接线前公开 API 暂未使用。
-// 阶段 B/C 接线后移除此 allow。
-#![allow(dead_code)]
-
 use rusqlite::{params, Connection};
 use std::path::Path;
 
@@ -37,7 +33,11 @@ pub struct FormatInput<'a> {
     pub file_path: Option<&'a str>,
 }
 
-/// 插入或更新剪贴板条目(去重,纯文本入口,M1 handler 用)。
+/// 插入或更新剪贴板条目(去重,纯文本入口)。
+///
+/// M1 单文本入口,生产路径已改走 `insert_or_update_multi`(handler 用 multi)。
+/// 保留供测试/向后兼容。
+#[allow(dead_code)]
 ///
 /// 返回最终的 ClipboardItem(新增或更新后的)。调用方据此 emit 前端。
 ///
@@ -271,9 +271,11 @@ pub fn list(conn: &Connection, limit: i64) -> Result<Vec<ClipboardItem>, AppErro
     Ok(result)
 }
 
-/// 读某条的纯文本内容(给 copy_back 用)。
+/// 读某条的纯文本内容。
 ///
-/// M1 从 formats 表读 uti=PLAIN_TEXT 的 data_blob。
+/// M1 的 copy_back 用此读纯文本;M2 copy_back 改用 `get_formats` 读多格式。
+/// 保留供测试/向后兼容。
+#[allow(dead_code)]
 pub fn get_text(conn: &Connection, id: i64) -> Result<String, AppError> {
     let blob: Vec<u8> = conn
         .query_row(
@@ -371,7 +373,6 @@ pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clipboard
         title: row.get(4)?,
         content_kind: ContentKind::from_db_str(row.get::<_, String>(5)?.as_str()),
         thumb_path: None,
-        image_size: None,
     })
 }
 
@@ -379,7 +380,10 @@ pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clipboard
 ///
 /// 非 image/mixed 类型不处理。图片格式(public.png/public.tiff)的 file_path 存的是
 /// 原图相对路径,缩略图路径由 image_store::relative_thumb_path_from_image 推导。
-fn fill_image_fields(conn: &Connection, item: &mut ClipboardItem) -> Result<(), AppError> {
+///
+/// `pub(crate)`:list/get_item(本文件)+ search.rs(搜索结果)都要调用,
+/// 保证所有返回前端的路径都填了 thumb_path(否则搜索命中的图片无缩略图)。
+pub(crate) fn fill_image_fields(conn: &Connection, item: &mut ClipboardItem) -> Result<(), AppError> {
     if !matches!(item.content_kind, ContentKind::Image | ContentKind::Mixed) {
         return Ok(());
     }
@@ -690,5 +694,86 @@ mod tests {
             )
             .unwrap();
         assert_eq!(st, crate::storage::search::bigram_cjk("搜索测试文本"));
+    }
+
+    // ===== PR review 补:图片引用计数 delete 端到端 =====
+
+    /// 测试用 PNG(2x2 红色,通过 image crate 生成,可靠)。
+    fn test_png_bytes() -> Vec<u8> {
+        use image::{ImageBuffer, Rgba};
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_fn(2, 2, |_, _| Rgba([255, 0, 0, 255]));
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png)
+            .unwrap();
+        bytes
+    }
+
+    #[test]
+    fn delete_image_end_to_end_reference_counting() {
+        // 端到端:两张图共享同一 file_path(去重命中)→ 删一个保留磁盘,删第二个清盘。
+        // test-analyzer 评 8/10 的关键缺口:items::delete 有图片时从未测过(只测纯文本)。
+        let conn = db();
+        let images_dir = test_images_dir();
+        let png = test_png_bytes();
+
+        // 存图(sha256 决定 file_path)
+        let meta = crate::clipboard::image_store::save_image(&png, &images_dir).unwrap();
+        let orig_path = images_dir.join(&meta.rel_path);
+        assert!(orig_path.exists(), "原图应存在");
+
+        // 两个 item 都引用同一图片 file_path(模拟同一张图被两次复制)
+        let formats = vec![FormatInput {
+            uti: crate::clipboard::uti::UTI_PNG,
+            data: &[],
+            file_path: Some(&meta.rel_path),
+        }];
+        let item1 = insert_or_update_multi(&conn, &formats, ContentKind::Image, "图1").unwrap();
+        // 第二个 item:insert_or_update_multi 会按 Image file_path 去重命中 item1,
+        // 所以直接插第二个真实 item + formats 行(模拟两条历史引用同一张图)。
+        let item2_id: i64 = conn
+            .query_row(
+                "INSERT INTO clipboard_items (first_copied_at, last_copied_at, title, content_kind) \
+                 VALUES (2,2,'图2','image') RETURNING id",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        conn.execute(
+            "INSERT INTO clipboard_formats (item_id, uti, file_path, size) VALUES (?1,'public.png',?2,0)",
+            params![item2_id, &meta.rel_path],
+        )
+        .unwrap();
+
+        // 引用数应为 2
+        assert_eq!(
+            crate::clipboard::image_store::count_references(&conn, &meta.rel_path).unwrap(),
+            2
+        );
+
+        // 删 item1:引用数 2 → 1,磁盘文件保留
+        delete(&conn, item1.id, &images_dir).unwrap();
+        assert!(orig_path.exists(), "引用数仍 1,磁盘文件应保留");
+
+        // 删 item2:引用数 1 → 0,磁盘文件清除
+        delete(&conn, item2_id, &images_dir).unwrap();
+        assert!(!orig_path.exists(), "引用数归 0,磁盘文件应清除");
+    }
+
+    #[test]
+    fn delete_image_missing_disk_file_is_ok() {
+        // 磁盘文件已不存在(孤儿/手动删)时,delete 不应报错(NotFound 豁免)
+        let conn = db();
+        let images_dir = test_images_dir();
+        // 插一个指向不存在文件的图片 item
+        let formats = vec![FormatInput {
+            uti: crate::clipboard::uti::UTI_PNG,
+            data: &[],
+            file_path: Some("ab/nonexistent.png"),
+        }];
+        let item = insert_or_update_multi(&conn, &formats, ContentKind::Image, "孤儿图").unwrap();
+        // delete 应成功(磁盘文件不存在不算错误)
+        delete(&conn, item.id, &images_dir).unwrap();
     }
 }

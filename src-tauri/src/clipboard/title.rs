@@ -3,8 +3,7 @@
 //! 技术依据见 m2-research.md §三(标题生成策略表)。
 //! 参考 Maccy previewableText 优先级:file-url → text → rtf.string → html.string。
 //!
-//! 阶段 B 范围:text / rich(rtf/html 提取纯文本)/ file(取文件名)。
-//! 图片标题(「图片 W×H」)留阶段 C(需图片尺寸,从 RustImageData.get_size 取)。
+//! 范围:text / rich(从 RTF/HTML 提取纯文本)/ file(取文件名)/ image(图片 W×H)。
 
 use crate::clipboard::capture::CapturedFormat;
 use crate::clipboard::uti;

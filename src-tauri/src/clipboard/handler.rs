@@ -75,7 +75,7 @@ pub struct ClipboardChangeHandler {
     db: Connection,
     /// 剪贴板读取上下文(clipboard-rs)。
     clipboard: clipboard_rs::ClipboardContext,
-    /// 图片存储根目录(M2 阶段 C 图片捕获存盘用)。
+    /// 图片存储根目录(图片捕获存盘用)。
     images_dir: std::path::PathBuf,
     /// 自身写入标志(与 copy_back 共享):true 表示下一次变化是自身写入,应跳过。
     /// on_clipboard_change 开头消费(置 false),若原为 true 则跳过本次捕获。

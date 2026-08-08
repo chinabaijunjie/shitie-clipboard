@@ -49,7 +49,14 @@ pub struct ImageMeta {
 /// 同一内容(sha256 相同)重复存储是幂等的(覆盖写,不报错)。
 pub fn save_image(png_bytes: &[u8], images_dir: &Path) -> Result<ImageMeta, AppError> {
     let hash = sha256_hex(png_bytes);
-    let (width, height) = read_png_dimensions(png_bytes).unwrap_or((0, 0));
+    // 解码失败直接报错(而非降级 0×0):损坏 PNG 不应静默存盘,
+    // 否则缩略图是坏字节 + 标题「图片 0×0」且无日志(silent-failure-hunter 发现)。
+    let (width, height) = read_png_dimensions(png_bytes).ok_or_else(|| {
+        AppError::new(
+            crate::error::codes::CLIPBOARD_READ_FAILED,
+            format!("PNG 解码失败(损坏数据),sha256 前 8 位: {}", &hash[..8]),
+        )
+    })?;
 
     let rel_path = relative_image_path(&hash);
     let thumb_rel_path = relative_thumb_path(&hash);

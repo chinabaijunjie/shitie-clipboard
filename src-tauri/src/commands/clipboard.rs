@@ -101,6 +101,7 @@ pub fn copy_back_with_conn(
     // 组装 Vec<ClipboardContent>
     let mut contents: Vec<ClipboardContent> = Vec::new();
     let mut title_for_return = String::new();
+    let mut image_read_error: Option<String> = None; // 图片读盘失败(若导致 contents 空则用于明确报错)
     for (uti_str, blob, file_path) in &formats {
         match uti_str.as_str() {
             uti::UTI_PLAIN_TEXT => {
@@ -140,6 +141,7 @@ pub fn copy_back_with_conn(
                         }
                         Err(e) => {
                             log::warn!("[copy_back] 读图片 {} 失败,跳过: {}", fp, e.message);
+                            image_read_error = Some(format!("图片文件 {} 读取失败: {}(磁盘图片可能已损坏/被清理)", fp, e.message));
                         }
                     }
                 }
@@ -151,10 +153,10 @@ pub fn copy_back_with_conn(
     }
 
     if contents.is_empty() {
-        return Err(AppError::new(
-            codes::CLIPBOARD_WRITE_FAILED,
-            format!("条目 {} 无可回填的格式", id),
-        ));
+        // 若曾有图片读盘失败,用更明确的错误(告知磁盘图可能损坏),而非笼统「无可回填格式」
+        let msg = image_read_error
+            .unwrap_or_else(|| format!("条目 {} 无可回填的格式", id));
+        return Err(AppError::new(codes::CLIPBOARD_WRITE_FAILED, msg));
     }
 
     // set 原子写(内部已 clear)
@@ -175,8 +177,12 @@ fn read_image_content(
 ) -> Result<ClipboardContent, AppError> {
     use clipboard_rs::common::RustImage;
     let full = images_dir.join(rel_path);
-    let img = clipboard_rs::RustImageData::from_path(full.to_str().unwrap_or(""))
-        .map_err(|e| AppError::internal(format!("从盘读图片失败: {e}")))?;
+    // 路径非 UTF-8 时显式报错(而非 unwrap_or("") 用空串兜底,误导排查)
+    let path_str = full.to_str().ok_or_else(|| {
+        AppError::internal(format!("图片路径含非 UTF-8 字符: {}", full.display()))
+    })?;
+    let img = clipboard_rs::RustImageData::from_path(path_str)
+        .map_err(|e| AppError::internal(format!("从盘读图片失败 {}: {e}", full.display())))?;
     Ok(ClipboardContent::Image(img))
 }
 

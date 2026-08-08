@@ -80,16 +80,6 @@ pub struct ClipboardItem {
     /// None = 非图片或无缩略图。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thumb_path: Option<String>,
-    /// 图片尺寸 [width, height](仅 image/mixed 类型有,用于标题 + 缩略图比例)。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image_size: Option<ImageSize>,
-}
-
-/// 图片尺寸(序列化为 {width, height})。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct ImageSize {
-    pub width: u32,
-    pub height: u32,
 }
 
 /// 标题(列表预览)的最大字符数。
