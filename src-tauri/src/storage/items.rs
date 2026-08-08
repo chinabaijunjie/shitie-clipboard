@@ -371,7 +371,7 @@ pub fn delete(conn: &Connection, id: i64, images_dir: &Path) -> Result<(), AppEr
 // ============================================================
 
 /// 当前 unix epoch 毫秒。
-fn now_epoch_ms() -> i64 {
+pub(crate) fn now_epoch_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

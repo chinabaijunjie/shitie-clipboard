@@ -21,6 +21,19 @@ use crate::storage::items;
 /// 列表默认条数上限(前端不传 limit 时)。
 const DEFAULT_LIST_LIMIT: i64 = 50;
 
+/// 更新指定条目的 last_copied_at 为当前时间(M3:回填后移到最前)。
+///
+/// ⚠️ 不加 copy_count:copy_count 反映「被复制次数」,回填不是新复制。
+fn update_last_copied_at(conn: &Connection, id: i64) -> Result<(), AppError> {
+    let now = items::now_epoch_ms();
+    conn.execute(
+        "UPDATE clipboard_items SET last_copied_at = ?1 WHERE id = ?2",
+        rusqlite::params![now, id],
+    )
+    .map_err(|e| AppError::internal(format!("更新 last_copied_at 失败: {e}")))?;
+    Ok(())
+}
+
 // ============================================================
 // 核心逻辑(接 &Connection,可单测)
 // ============================================================
@@ -101,6 +114,10 @@ pub fn copy_back_with_conn(
             format!("写回剪贴板失败: {e}"),
         )
     })?;
+
+    // M3:更新 last_copied_at(回填后将该条移到最前)
+    // ⚠️ 不加 copy_count:copy_count 反映「被复制次数」,回填不是新复制
+    update_last_copied_at(conn, id)?;
 
     Ok(assembled.title)
 }
@@ -505,5 +522,43 @@ mod tests {
         ];
         let result = assemble_contents(&formats, &test_images_dir());
         assert_eq!(result.title, "文本内容", "title 取首个有效格式的值");
+    }
+
+    // ===== update_last_copied_at 测试 =====
+
+    #[test]
+    fn update_last_copied_at_moves_item_to_front() {
+        // copy_back 后 UPDATE last_copied_at → 列表排序变化
+        let conn = db_with_sample_data();
+        let dir = test_images_dir();
+
+        // 排序应该是:第三条(最新) / 第二条 / 第一条
+        let before = list_items_with_conn(&conn, 50, &dir).unwrap();
+        assert_eq!(before[0].title, "第三条");
+
+        // 回填第一条(最旧的)→ 更新 last_copied_at → 应排到最前
+        let first_id = before[2].id; // 第一条
+        update_last_copied_at(&conn, first_id).unwrap();
+
+        let after = list_items_with_conn(&conn, 50, &dir).unwrap();
+        assert_eq!(after[0].title, "第一条", "回填后应排到最前");
+    }
+
+    #[test]
+    fn update_last_copied_at_does_not_change_copy_count() {
+        // copy_count 不应因回填变化(回填不是新复制)
+        let conn = db_with_sample_data();
+        let dir = test_images_dir();
+        let before = list_items_with_conn(&conn, 50, &dir).unwrap();
+
+        let target = &before[2]; // 第一条,copy_count=1
+        assert_eq!(target.copy_count, 1);
+        let target_id = target.id;
+
+        update_last_copied_at(&conn, target_id).unwrap();
+
+        let after = list_items_with_conn(&conn, 50, &dir).unwrap();
+        let updated = after.iter().find(|i| i.id == target_id).unwrap();
+        assert_eq!(updated.copy_count, 1, "copy_count 不应变(回填不加 count)");
     }
 }

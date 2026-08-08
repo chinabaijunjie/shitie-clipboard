@@ -39,6 +39,20 @@ export function removeItem(items: ClipboardItem[], id: number): ClipboardItem[] 
   return items.filter((it) => it.id !== id)
 }
 
+/**
+ * 把指定 id 的条目移到列表最前(不可变更新)。纯函数,可单测。
+ *
+ * M3:回填后将该条移到最前(与后端 UPDATE last_copied_at 对齐)。
+ * 若 id 不存在,返回原列表(不变)。
+ */
+export function moveToFront(items: ClipboardItem[], id: number): ClipboardItem[] {
+  const idx = items.findIndex((it) => it.id === id)
+  if (idx === -1) return items
+  if (idx === 0) return items // 已在最前
+  const item = items[idx]
+  return [item, ...items.slice(0, idx), ...items.slice(idx + 1)]
+}
+
 export interface UseClipboardItemsResult {
   items: ClipboardItem[]
   loading: boolean
@@ -49,6 +63,8 @@ export interface UseClipboardItemsResult {
   deleteItem: (id: number) => Promise<void>
   /** 搜索(空字符串/纯空白 = 清空搜索,回退全列表) */
   search: (query: string) => Promise<void>
+  /** 把指定 id 的条目移到列表最前(M3:回填后前置)。同步更新本地列表。 */
+  moveToFront: (id: number) => void
 }
 
 export function useClipboardItems(): UseClipboardItemsResult {
@@ -142,5 +158,10 @@ export function useClipboardItems(): UseClipboardItemsResult {
     }
   }, [])
 
-  return { items, loading, error, searchQuery, deleteItem, search }
+  // M3:把指定 id 的条目移到列表最前(回填后前置)
+  const moveToFrontAction = useCallback((id: number) => {
+    setItems((prev) => moveToFront(prev, id))
+  }, [])
+
+  return { items, loading, error, searchQuery, deleteItem, search, moveToFront: moveToFrontAction }
 }

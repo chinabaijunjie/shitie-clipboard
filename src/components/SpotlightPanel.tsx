@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { call } from '@core/api'
+import { hideWindow } from '@core/window'
 import { useClipboardItems } from '@hooks/useClipboardItems'
 import { cn } from '@lib/utils'
 import { ClipboardList } from '@components/ClipboardList'
@@ -39,7 +40,7 @@ export function nextIndex(current: number, direction: -1 | 1, length: number): n
 }
 
 export function SpotlightPanel() {
-  const { items, loading, error, searchQuery, deleteItem, search } = useClipboardItems()
+  const { items, loading, error, searchQuery, deleteItem, search, moveToFront } = useClipboardItems()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [probe, setProbe] = useState<ProbeStatus>('checking')
   const [actionError, setActionError] = useState<string | null>(null)
@@ -101,13 +102,20 @@ export function SpotlightPanel() {
       if (!item) return
       try {
         await call<string>('copy_back', { id: item.id })
+        // M3:回填成功后 → 前置该 item(移到最前)+ 隐藏窗口
+        moveToFront(item.id)
+        // 搜索模式下回填:清空搜索(回退全列表)
+        if (searchText) {
+          setSearchText('')
+        }
+        await hideWindow()
       } catch (e) {
         // UI 层给用户友好提示(§8「绝不静默吞错」),保留 console.error 供调试
         console.error('[copy_back] 失败:', e)
         showActionError(`回填失败:${e instanceof Error ? e.message : String(e)}`)
       }
     },
-    [items, showActionError],
+    [items, showActionError, moveToFront, searchText],
   )
 
   // 删除选中条目
@@ -129,20 +137,28 @@ export function SpotlightPanel() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const searchFocused = document.activeElement === searchInputRef.current
-      // 搜索框聚焦时:只拦截 Esc(清空搜索),其余按键交给输入框
+      // 搜索框聚焦时:Esc 有搜索→清空 / 无搜索→隐藏窗口;其余交给输入框
       if (searchFocused) {
         if (e.key === 'Escape') {
           e.preventDefault()
-          setSearchText('')
-          searchInputRef.current?.blur()
+          if (searchText) {
+            setSearchText('')
+            searchInputRef.current?.blur()
+          } else {
+            void hideWindow()
+          }
         }
         return
       }
-      // 非搜索框聚焦:列表导航 + / 聚焦搜索
+      // 非搜索框聚焦:列表导航 + / 聚焦搜索 + Esc 隐藏
       switch (e.key) {
         case '/':
           e.preventDefault()
           searchInputRef.current?.focus()
+          break
+        case 'Escape':
+          e.preventDefault()
+          void hideWindow()
           break
         case 'ArrowUp':
           if (items.length === 0) return

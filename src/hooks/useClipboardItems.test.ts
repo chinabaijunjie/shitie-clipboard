@@ -15,7 +15,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { applyAddedItem, removeItem, useClipboardItems } from './useClipboardItems'
+import { applyAddedItem, moveToFront, removeItem, useClipboardItems } from './useClipboardItems'
 import type { ClipboardItem } from '@core/types'
 
 // ============================================================
@@ -149,6 +149,49 @@ describe('removeItem', () => {
     const snapshot = [...original]
 
     removeItem(original, 1)
+
+    expect(original).toEqual(snapshot)
+  })
+})
+
+describe('moveToFront', () => {
+  it('把中间条目移到最前', () => {
+    const items = [makeItem(1, 'A'), makeItem(2, 'B'), makeItem(3, 'C')]
+
+    const result = moveToFront(items, 2)
+
+    expect(result.map((i) => i.id)).toEqual([2, 1, 3])
+  })
+
+  it('把末尾条目移到最前', () => {
+    const items = [makeItem(1, 'A'), makeItem(2, 'B'), makeItem(3, 'C')]
+
+    const result = moveToFront(items, 3)
+
+    expect(result.map((i) => i.id)).toEqual([3, 1, 2])
+  })
+
+  it('已在最前 → 原样返回', () => {
+    const items = [makeItem(1, 'A'), makeItem(2, 'B')]
+
+    const result = moveToFront(items, 1)
+
+    expect(result.map((i) => i.id)).toEqual([1, 2])
+  })
+
+  it('id 不存在 → 原样返回', () => {
+    const items = [makeItem(1, 'A')]
+
+    const result = moveToFront(items, 999)
+
+    expect(result.map((i) => i.id)).toEqual([1])
+  })
+
+  it('不可变性:不修改原数组', () => {
+    const original = [makeItem(1, 'A'), makeItem(2, 'B')]
+    const snapshot = [...original]
+
+    moveToFront(original, 2)
 
     expect(original).toEqual(snapshot)
   })
