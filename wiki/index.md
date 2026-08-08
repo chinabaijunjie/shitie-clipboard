@@ -2,7 +2,7 @@
 title: 知识库总索引（门面）
 tags: [索引, 门面, 导航]
 created: 2026-06-29
-updated: 2026-08-07
+updated: 2026-08-08
 status: active
 ---
 
@@ -13,14 +13,15 @@ status: active
 
 ---
 
-## 🚨 当前状态(M2 完成,下一步 M3)
+## 🚨 当前状态(M2 完成 + M2 后改进清完,下一步 M3)
 
 > **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架。
 > **M1 已完成**(2026-08-06):macOS 剪贴板监听 MVP,端到端实测 6 项全通过。
 > **M2 已完成**(2026-08-07):搜索 + 富文本/图片支持(FTS5 bigram + 多格式 + 图片存储),5 阶段施工 + GUI 实测 + PR review(4 Critical 全修)。
+> **M2 后改进已完成**(2026-08-08):newtype 固化类型 + copy_back 抽纯函数 + 搜索状态机测试(3 项 PR review 留项清完)。
 > 详见 [[dev/progress]] + [[dev/m2-plan]](done) + [[dev/m2-research]](技术依据)。
 >
-> **下一步:M3** 常驻体验(快捷键唤起/托盘/自启/Windows)。M2 后有 3 项改进留 TODO。详见 [[dev/TODO]]。
+> **下一步:M3** 常驻体验(快捷键唤起/托盘/自启/Windows)。详见 [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
 > sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。

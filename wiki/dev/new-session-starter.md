@@ -2,7 +2,7 @@
 title: 新窗口启动包
 tags: [启动, 跨会话]
 created: 2026-06-29
-updated: 2026-08-07
+updated: 2026-08-08
 status: ready-to-use
 ---
 
@@ -30,8 +30,10 @@ status: ready-to-use
 4. wiki/dev/TODO.md(下次目标 + 待办)
 
 ## ⏰ 待触发任务提醒
-- **M2 已完成** → UI 苹果审美改造可启动(见 wiki/dev/ui-redesign-plan.md)。
-  M3 与 UI 改造可并行或先后,启动时问用户优先级。
+- **M2 后改进 3 项已完成**(2026-08-08):newtype / assemble_contents / 搜索状态机测试。
+- **下一步 M3**(常驻体验)与 **UI 苹果审美改造** 均可启动。启动时问用户优先级。
+  - M3 启动前需技术 spike(全局快捷键/托盘/自启的 Tauri 2 实现方式)
+  - UI 改造规划已就绪(见 wiki/dev/ui-redesign-plan.md,M2 后可执行)
 
 ## 工作模式
 - 遇到决策点先跟我确认,不要自己拍板
