@@ -21,7 +21,7 @@ status: ready-to-use
 
 > 当前状态(版本/测试数/架构) → 见 wiki/dev/progress.md「当前状态」段
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
-> 当前任务规划 → M3 待规划(启动前需技术 spike:全局快捷键/托盘/自启)
+> 当前任务规划 → M4 待规划(打包/去重/敏感过滤/Windows)
 
 ## 必读文档
 1. AGENTS.md(AI 启动 3 步 + 核心原则 7 模块化 / 8 随写随测 / §8 通用工程纪律)
@@ -30,10 +30,10 @@ status: ready-to-use
 4. wiki/dev/TODO.md(下次目标 + 待办)
 
 ## ⏰ 待触发任务提醒
-- **M2 后改进 3 项已完成**(2026-08-08):newtype / assemble_contents / 搜索状态机测试。
-- **下一步 M3**(常驻体验)与 **UI 苹果审美改造** 均可启动。启动时问用户优先级。
-  - M3 启动前需技术 spike(全局快捷键/托盘/自启的 Tauri 2 实现方式)
-  - UI 改造规划已就绪(见 wiki/dev/ui-redesign-plan.md,M2 后可执行)
+- **M3 常驻体验已完成**(2026-08-08):全局快捷键/托盘/自启/设置面板/自动清理 + PR review。
+- **下一步 M4**(生产化)与 **UI 苹果审美改造** 均可启动。启动时问用户优先级。
+  - M4 启动前需技术 spike(打包 dmg/exe / 去重策略 / 敏感过滤 / Windows 平台)
+  - UI 改造规划已就绪(见 wiki/dev/ui-redesign-plan.md,M3 后可执行)
 
 ## 工作模式
 - 遇到决策点先跟我确认,不要自己拍板

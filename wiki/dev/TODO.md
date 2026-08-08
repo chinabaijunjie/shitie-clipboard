@@ -9,22 +9,21 @@ status: active
 # 全局 TODO
 
 > 本工程是 Clipboard Manager(轻量常驻的剪贴板历史管理桌面应用),
-> 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1 已完成。
+> 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3 已完成。
 
 ## 🎯 下次目标
 
-- **M3 常驻体验**:全局快捷键唤起/隐藏窗口 + 托盘 + 自启 + Windows 平台补全
-- 交互已确认:**唤起 + ↑↓ 导航 + 回车回填**(Maccy/Flycut 同款)
-- 可选并行:**UI 苹果审美改造**(见 [[ui-redesign-plan]],M2 已完成可启动)
+- **M4 生产化**:打包 dmg/exe + 去重 + 敏感过滤 + Windows 平台补全
+- 可选并行:**UI 苹果审美改造**(见 [[ui-redesign-plan]],M3 已完成可启动)
 
 ## 路线图
 
 - [x] **M0**:架构清理 + Spotlight UI 骨架(sidecar → 纯 Rust)— ✅ 完成(2026-08-05)
 - [x] **M1**:macOS 剪贴板监听 MVP(clipboard-rs watcher + rusqlite + 历史列表 + 回填)— ✅ 完成(2026-08-06)
 - [x] **M2**:搜索 + 富文本/图片支持(SQLite FTS5 + 多格式)— ✅ 完成(2026-08-07)
-- [ ] **M3**:常驻体验(全局快捷键唤起 + 托盘 + 自启 + Windows 平台补全)— **下一步**
-- [ ] **M4**:生产化(打包 dmg/exe + 去重 + 容量上限 + 敏感过滤)
-- [ ] **UI 苹果审美改造**(M2 完成后执行,见 [[ui-redesign-plan]])
+- [x] **M3**:常驻体验(全局快捷键 + 托盘 + 自启 + 设置面板 + 自动清理)— ✅ 完成(2026-08-08)
+- [ ] **M4**:生产化(打包 dmg/exe + 去重 + 敏感过滤 + Windows 平台补全)— **下一步**
+- [ ] **UI 苹果审美改造**(M3 完成后执行,见 [[ui-redesign-plan]])
 
 ## 待办
 
@@ -56,16 +55,19 @@ status: active
 - [x] **阶段 D**:前端 SpotlightPanel 改造(历史列表 + 上下键 + 回填)
 - [x] **阶段 E**:端到端实测(6 项全通过)
 
-### M3 常驻体验(已确认交互方案,待规划)
+### M3 常驻体验(✅ 完成,见 [[m3-plan]])
 
-- 全局快捷键唤起/隐藏窗口(M1 遗留:窗口目前 visible:true 常驻)
-- 交互:**唤起 + ↑↓ 导航 + 回车回填**(主流方案,Maccy/Flycut 同款)
-- ⚠️ 不做「松手回填」:Tauri 全局快捷键只支持 keydown(见 progress M1 记录)
+- [x] **阶段 A**:设置持久化层(Settings 模块 + Store 插件 + command + 类型)
+- [x] **阶段 B**:全局快捷键 + 窗口控制(toggle/hide/show + close 拦截 + 失焦隐藏 + 进程常驻)
+- [x] **阶段 C**:托盘 + 开机自启(LaunchAgent + --hidden)
+- [x] **阶段 D**:回填增强(移到最前 + 隐藏窗口 + Esc 逻辑)
+- [x] **阶段 E**:设置面板 UI(7 项配置 + 视图切换)
+- [x] **阶段 F**:自动清理(保留天数 + 容量上限 + 条数上限) + PR review
 
-### UI 苹果审美改造(M2 完成后执行,见 [[ui-redesign-plan]])
+### UI 苹果审美改造(M3 完成后执行,见 [[ui-redesign-plan]])
 
-> ⏳ 触发条件:M2 五阶段(A-E)全部 ✅。基于 emilkowalski/skills 设计规则 + 苹果 WWDC 原则。
-> 高频常驻工具,审美改造排 M2 之后避免返工。
+> ⏳ 触发条件:M3 已完成 ✅。基于 emilkowalski/skills 设计规则 + 苹果 WWDC 原则。
+> 高频常驻工具,审美改造排 M3 之后避免返工。
 
 - [ ] **Token 层** — `index.css` 加缓动/颜色/圆角/阴影 token,`tailwind.config.ts` 接线
 - [ ] **毛玻璃外壳** — SpotlightPanel 根容器改 `backdrop-filter: blur()`(窗口已 transparent)

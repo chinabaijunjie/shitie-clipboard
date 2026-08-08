@@ -13,15 +13,15 @@ status: active
 
 ---
 
-## 🚨 当前状态(M2 完成 + M2 后改进清完,下一步 M3)
+## 🚨 当前状态(M3 完成,下一步 M4)
 
 > **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架。
 > **M1 已完成**(2026-08-06):macOS 剪贴板监听 MVP,端到端实测 6 项全通过。
 > **M2 已完成**(2026-08-07):搜索 + 富文本/图片支持(FTS5 bigram + 多格式 + 图片存储),5 阶段施工 + GUI 实测 + PR review(4 Critical 全修)。
-> **M2 后改进已完成**(2026-08-08):newtype 固化类型 + copy_back 抽纯函数 + 搜索状态机测试(3 项 PR review 留项清完)。
-> 详见 [[dev/progress]] + [[dev/m2-plan]](done) + [[dev/m2-research]](技术依据)。
+> **M3 已完成**(2026-08-08):常驻体验(全局快捷键 + 托盘 + 自启 + 设置面板 + 自动清理),6 阶段施工 + GUI 实测 + PR review(2 Critical + 8 Important 全修)。
+> 详见 [[dev/progress]] + [[dev/m3-plan]](done) + [[dev/m3-research]](技术依据)。
 >
-> **下一步:M3** 常驻体验(快捷键唤起/托盘/自启/Windows)。详见 [[dev/TODO]]。
+> **下一步:M4** 生产化(打包 dmg/exe + 去重 + 敏感过滤 + Windows)。详见 [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
 > sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。
@@ -40,7 +40,7 @@ status: active
 | 会话收尾 | [[dev/session-checklist]]（8 步）|
 | 改 AGENTS.md / CLAUDE.md | [[process/dual-tool-sync]] |
 | 写/改 wiki 内容（防膨胀）| [[process/knowledge-base-guide]] |
-| 查当前任务规划（M2/M3）| [[dev/m2-plan]](done) / M3 待规划 |
+| 查当前任务规划（M2/M3/M4）| [[dev/m2-plan]](done) / [[dev/m3-plan]](done) / M4 待规划 |
 | 查 UI 审美改造规划（M2 后执行）| [[dev/ui-redesign-plan]] |
 | 查 M1 技术调研/spike | [[dev/m1-research]] |
 | 查进度 / 下次目标 | [[dev/progress]] + [[dev/TODO]] |
@@ -67,8 +67,10 @@ status: active
 
 ### dev/（进度 + TODO + 启动包）
 - [[dev/m2-plan]] — M2 规划(已完成,搜索 + 富文本/图片支持)
-- [[dev/ui-redesign-plan]] — UI 苹果审美改造规划(M2 完成后执行,emilkowalski/skills 规则)
+- [[dev/m3-plan]] — M3 规划(已完成,常驻体验:快捷键/托盘/自启/设置/清理)
+- [[dev/ui-redesign-plan]] — UI 苹果审美改造规划(M3 完成后执行,emilkowalski/skills 规则)
 - [[dev/m2-research]] — M2 技术调研 + spike(FTS5 bigram / 图片存储 / 多格式,已完成)
+- [[dev/m3-research]] — M3 技术调研(global-shortcut / tray / autostart / store,已完成)
 - [[dev/m1-plan]] — M1 规划(已完成)
 - [[dev/m1-research]] — M1 技术调研 + spike(clipboard-rs 选型依据)
 - [[dev/m0-plan]] — M0 规划(已完成,架构清理 + Spotlight UI 骨架)

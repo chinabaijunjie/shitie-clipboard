@@ -14,13 +14,15 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M2 搜索 + 富文本/图片支持 — **✅ 完成**(2026-08-07,5 阶段施工 + GUI 实测 + PR review)
+- **当前里程碑**：M3 常驻体验 — **✅ 完成**(2026-08-08,6 阶段施工 + GUI 实测 + PR review)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
+  + M3 新增:全局快捷键 / 托盘 / 开机自启 / 设置持久化(Store 插件)/ 自动清理
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
   + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
   + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
-- **验证基线**：cargo test 125 passed + npm test 27 passed + npm build 全绿 + clippy 零 warning
-- **下一步**：M3 常驻体验(全局快捷键唤起/托盘/自启/Windows)
+  + tauri-plugin-global-shortcut 2 / tauri-plugin-autostart 2 / tauri-plugin-store 2(M3 新增)
+- **验证基线**：cargo test 159 passed + npm test 55 passed + npm build 全绿 + clippy 零 warning
+- **下一步**：M4 生产化(打包 dmg/exe + 去重 + 敏感过滤)/ UI 苹果审美改造(见 [[ui-redesign-plan]])
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -142,6 +144,71 @@ PR review 留的 3 项 code quality 改进,独立改进会话清完。每项一�
   - 技术点:`vi.hoisted` 解决 vi.mock 工厂作用域;`flushAsync()` 用 setTimeout(0) flush 微任务
 
 **验证基线**:cargo test 125 passed(原 107 + newtype 10 + assemble 8)+ npm test 27 passed(原 20 + 搜索 7)+ clippy 零 warning
+
+## M3 调研 + 规划记录(2026-08-08)
+
+- **技术调研**(见 [[m3-research]]):四块并行调研,全部官方文档/docs.rs 源码确认
+  - 全局快捷键:`tauri-plugin-global-shortcut`(Tauri 2 register 不接 handler → with_handler 在 Builder 注册)
+  - 托盘:Tauri 2 内置 `tray-icon` feature + `TrayIconBuilder`(与 v1 API 完全不同)
+  - 开机自启:`tauri-plugin-autostart`(LaunchAgent,无权限弹窗)
+  - 配置持久化:`tauri-plugin-store`(settings.json,与 rusqlite 职责分离)
+  - 🔴 关键陷阱:hide() 触发 Focused(false) 连锁 → SUPPRESS_BLUR_HIDE AtomicBool guard
+  - 🔴 进程常驻:RunEvent::ExitRequested prevent_exit(末窗口关闭不退出)
+- **M3 规划落盘**(见 [[m3-plan]]):6 阶段(A 设置层 → B 快捷键+窗口 → C 托盘+自启 → D 回填增强 → E 设置面板 → F 清理+实测)
+  用户决策:7 项配置(自启/快捷键/启动窗口/历史上限/保留天数/容量上限/失焦隐藏)
+
+## M3 实施完成记录(2026-08-08)
+
+6 阶段施工,常驻体验全链路打通,GUI 实测 + PR review 全过。
+
+- **阶段 A**(`0e8b283`):设置持久化层
+  - `settings/mod.rs`:Settings struct(6 字段 serde camelCase)+ Store 插件读写 + 7 单测
+  - `commands/settings.rs`:get_settings / update_settings command
+  - `lib.rs`:setup 加载 store 插件 + 读初始设置 → AppState 加 `settings: Mutex<Settings>`
+  - 错误码两端镜像(SETTINGS_LOAD_FAILED / SETTINGS_UPDATE_FAILED / SHORTCUT_REGISTER_FAILED)
+- **阶段 B**(`f26b41c`):全局快捷键 + 窗口控制
+  - `window_control.rs`:toggle/hide_main/show_main + SUPPRESS_BLUR_HIDE guard(AtomicBool)
+  - `lib.rs`:global-shortcut 插件 + with_handler(toggle) + on_window_event(失焦+close拦截) + ExitRequested prevent_exit
+  - tauri.conf.json:visible:false(代码控制显示时机)
+- **阶段 C**(`3bfc621`):托盘 + 开机自启
+  - TrayIconBuilder + 菜单(显示/退出),左键 toggle / 右键菜单
+  - tauri-plugin-autostart(LaunchAgent, --hidden),不在 setup 强制 enable
+- **阶段 D**(`28f47e6`):回填增强
+  - copy_back_with_conn 加 UPDATE last_copied_at(⚠️ 不加 copy_count)
+  - 前端 handleCopyBack 成功后 → moveToFront + hideWindow;Esc 有搜索→清空 / 无搜索→隐藏
+- **阶段 E**(`8eda6fa`):设置面板 UI
+  - SettingsPanel.tsx:7 项配置(自启 Toggle / 快捷键录入器 / Select / Toggle)
+  - App.tsx:view state(main ↔ settings)
+  - shortcut.ts:e.code 物理键位(非 e.key 字符)避免输入法特殊字符问题
+- **阶段 F**(`573cc42`):自动清理
+  - cleanup.rs:cleanup_by_retention / cleanup_by_capacity / cleanup_by_count + run_cleanup(包事务)
+  - handler.rs:每次成功写入后触发,联动图片引用计数删除
+- **快捷键 bugfix**(`d02cbfc`):录入器改用 e.code(物理键位)避免中文输入法 √ 字符导致 Tauri 报错
+
+**M3 期间确立的技术决策**(待沉淀 constraints.md):
+- 配置持久化用 tauri-plugin-store(settings.json),与 rusqlite 职责分离
+- 窗口隐藏 guard(SUPPRESS_BLUR_HIDE AtomicBool)防 hide()→Focused(false) 连锁
+- 全局快捷键 handler 在 plugin Builder 的 with_handler(Tauri 2 register 不再接 handler)
+- 快捷键录入用 e.code 物理键位(非 e.key 字符),避免输入法干扰
+- 自动清理包 unchecked_transaction,中途失败回滚
+
+## M3 PR review 完成记录(2026-08-08)
+
+5 agent 并行(code-reviewer / silent-failure-hunter / type-design-analyzer / pr-test-analyzer / comment-analyzer),
+2 Critical + 8 Important + 5 注释 + 3 测试缺口,全部修复(`1efb888`)。
+
+- 🔴 **C1 已修**:update_settings 整个临界区纳入一次 Mutex 锁(防并发改快捷键交错导致快捷键永久失效)
+- 🔴 **C2 已修**:App.tsx 解构 loading/error,设置加载失败显示错误态而非静默
+- 🟡 **I1 已修**:前端 hideWindow 改走后端 hide_window command(统一 SUPPRESS_BLUR_HIDE guard)
+- 🟡 **I2 已修**:cleanup 容量清理改累计删除字节数(避免反复全表 SUM)+ 包 unchecked_transaction
+- 🟡 **I3+I4+I5 已修**:window_control hide/show/set_focus/is_visible + 快捷键回滚 全补 log(原 `let _ =` / `unwrap_or(false)` 静默吞错)
+- 🟡 **I6 已修**:max_items 幽灵字段落地 — 接入 list_items limit + 新增 cleanup_by_count
+- 🟡 **I7 已修**:Zod SettingsSchema 数值字段加 .int().nonnegative()
+- 🟡 **I8 已修**:settings_from_value 解析失败 log::warn(原 unwrap_or_default 静默吞损坏)
+- 🔵 **注释修正**:A1 #13511 引用错误 / A2 rename_all → 逐字段 rename / A4 触发措辞 / A5 invoke 参数格式
+- 🔵 **测试补充**:shortcut_changed/should_run_cleanup 纯函数 7 测试 + moveToFront action 集成 3 测试 + cleanup_by_count 5 测试
+
+**验证基线**:cargo test 159 passed(原 147 + review 补 12)+ npm test 55 passed(原 52 + review 补 3)+ clippy 零 warning
 
 ## 本工程开发历史
 

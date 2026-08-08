@@ -3,7 +3,7 @@ title: M3 规划 — 常驻体验(全局快捷键/托盘/自启/设置/清理)
 tags: [M3, 规划, global-shortcut, tray, autostart, settings, cleanup]
 created: 2026-08-08
 updated: 2026-08-08
-status: active
+status: done
 tech_base: ./m3-research.md
 ---
 
