@@ -2,19 +2,19 @@
 title: 全局 TODO
 tags: [TODO, 任务]
 created: 2026-06-29
-updated: 2026-08-08
+updated: 2026-08-09
 status: active
 ---
 
 # 全局 TODO
 
 > 本工程是 Clipboard Manager(轻量常驻的剪贴板历史管理桌面应用),
-> 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3 已完成。
+> 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3/M4(A+B+C) 已完成。
 
 ## 🎯 下次目标
 
-- **M4 生产化**:打包 dmg/exe + 去重 + 敏感过滤 + Windows 平台补全
-- 可选并行:**UI 苹果审美改造**(见 [[ui-redesign-plan]],M3 已完成可启动)
+- **UI 苹果审美改造**(见 [[ui-redesign-plan]])— 当前 UI 太难看,改造后才值得打包测试
+- 改造完成后 → **M4 阶段 D**:Windows 实测(PD 虚拟机)+ CI 打包发布(push tag v1.0.0)
 
 ## 路线图
 
@@ -22,8 +22,9 @@ status: active
 - [x] **M1**:macOS 剪贴板监听 MVP(clipboard-rs watcher + rusqlite + 历史列表 + 回填)— ✅ 完成(2026-08-06)
 - [x] **M2**:搜索 + 富文本/图片支持(SQLite FTS5 + 多格式)— ✅ 完成(2026-08-07)
 - [x] **M3**:常驻体验(全局快捷键 + 托盘 + 自启 + 设置面板 + 自动清理)— ✅ 完成(2026-08-08)
-- [ ] **M4**:生产化(打包 dmg/exe + 去重 + 敏感过滤 + Windows 平台补全)— **下一步**
-- [ ] **UI 苹果审美改造**(M3 完成后执行,见 [[ui-redesign-plan]])
+- [x] **M4 A+B+C**:打包 CI + 去重修复 + 敏感过滤 — ✅ 完成(2026-08-09)
+- [ ] **UI 苹果审美改造**(下一步,见 [[ui-redesign-plan]])
+- [ ] **M4 阶段 D**:Windows 实测 + CI 打包发布(UI 改造完成后)
 
 ## 待办
 

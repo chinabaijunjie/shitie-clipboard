@@ -2,7 +2,7 @@
 title: 新窗口启动包
 tags: [启动, 跨会话]
 created: 2026-06-29
-updated: 2026-08-08
+updated: 2026-08-09
 status: ready-to-use
 ---
 
@@ -21,7 +21,7 @@ status: ready-to-use
 
 > 当前状态(版本/测试数/架构) → 见 wiki/dev/progress.md「当前状态」段
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
-> 当前任务规划 → M4 待规划(打包/去重/敏感过滤/Windows)
+> 当前任务规划 → M4 A+B+C 已完成,下一步 UI 改造
 
 ## 必读文档
 1. AGENTS.md(AI 启动 3 步 + 核心原则 7 模块化 / 8 随写随测 / §8 通用工程纪律)
@@ -30,10 +30,10 @@ status: ready-to-use
 4. wiki/dev/TODO.md(下次目标 + 待办)
 
 ## ⏰ 待触发任务提醒
-- **M3 常驻体验已完成**(2026-08-08):全局快捷键/托盘/自启/设置面板/自动清理 + PR review。
-- **下一步 M4**(生产化)与 **UI 苹果审美改造** 均可启动。启动时问用户优先级。
-  - M4 启动前需技术 spike(打包 dmg/exe / 去重策略 / 敏感过滤 / Windows 平台)
-  - UI 改造规划已就绪(见 wiki/dev/ui-redesign-plan.md,M3 后可执行)
+- **M4 A+B+C 已完成**(2026-08-09):打包 CI workflow + 去重修复(G1 格式覆盖/G2 文件URL) + 敏感过滤(正则黑名单) + PR review(2C+5I 全修)。
+- **下一步:UI 苹果审美改造**(见 wiki/dev/ui-redesign-plan.md)。当前 UI 太难看,改造完才值得打包测试。
+- UI 改造完成后 → M4 阶段 D(Windows PD 虚拟机实测 + push tag 触发 CI 打包发布)。
+  - ⚠️ CI 前置:用户需在 GitHub 建仓库 + git remote add + push tag v1.0.0
 
 ## 工作模式
 - 遇到决策点先跟我确认,不要自己拍板

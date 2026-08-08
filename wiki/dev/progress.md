@@ -2,7 +2,7 @@
 title: 开发进度（状态唯一真相源）
 tags: [进度, 状态]
 created: 2026-06-29
-updated: 2026-08-08
+updated: 2026-08-09
 status: active
 ---
 
@@ -14,15 +14,17 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M3 常驻体验 — **✅ 完成**(2026-08-08,6 阶段施工 + GUI 实测 + PR review)
+- **当前里程碑**：M4 生产化(阶段 A+B+C) — **✅ 完成**(2026-08-09,打包 CI + 去重 + 敏感过滤 + PR review)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
   + M3 新增:全局快捷键 / 托盘 / 开机自启 / 设置持久化(Store 插件)/ 自动清理
+  + M4 新增:敏感信息过滤(正则黑名单)+ 去重修复(格式覆盖/文件 URL)+ CI 跨平台打包
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
   + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
   + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
   + tauri-plugin-global-shortcut 2 / tauri-plugin-autostart 2 / tauri-plugin-store 2(M3 新增)
-- **验证基线**：cargo test 159 passed + npm test 55 passed + npm build 全绿 + clippy 零 warning
-- **下一步**：M4 生产化(打包 dmg/exe + 去重 + 敏感过滤)/ UI 苹果审美改造(见 [[ui-redesign-plan]])
+  + regex 1(M4 新增,敏感信息正则匹配)
+- **验证基线**：cargo test 189 passed + npm test 55 passed + npm build 全绿 + clippy 零 warning
+- **下一步**：UI 苹果审美改造(见 [[ui-redesign-plan]])→ 完成后 M4 阶段 D(Windows 实测 + CI 打包发布)
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -209,6 +211,55 @@ PR review 留的 3 项 code quality 改进,独立改进会话清完。每项一�
 - 🔵 **测试补充**:shortcut_changed/should_run_cleanup 纯函数 7 测试 + moveToFront action 集成 3 测试 + cleanup_by_count 5 测试
 
 **验证基线**:cargo test 159 passed(原 147 + review 补 12)+ npm test 55 passed(原 52 + review 补 3)+ clippy 零 warning
+
+## M4 生产化实施完成记录(2026-08-09)
+
+3 阶段施工(A+B+C),打包 CI + 去重修复 + 敏感过滤,PR review 全过。
+> 用户决策:打包优先。A+B+C 本地做完后结束会话去做 UI 改造,D(Windows 实测)留 UI 完成后。
+
+- **技术调研**(见 [[m4-research]]):四块并行调研
+  - 本地打包:`npm run tauri build` 一次成功(1m25s),.dmg 4.8M
+  - CI:tauri-apps/tauri-action + macos-latest(ARM 双架构)+ windows-latest
+  - 去重:Maccy 源码确认(全局去重+移到最前),发现 3 缺口(G1 格式残留/G2 文件URL/G3 hash 暂不做)
+  - 敏感过滤:业界无纯文本启发式(高熵误报被弃),共识三层防御,选 gitleaks 正则黑名单
+- **阶段 B 去重修复**(`86f78e5`):items.rs G1+G2
+  - G1:命中去重时替换 formats(DELETE旧+INSERT新,同事务),replace_formats 辅助函数(含图片引用计数安全)
+  - G2:DedupKey 加 File 变体,public.file-url 参与去重
+  - 整个 insert_or_update_multi 包 unchecked_transaction
+  - 5 个新测试
+- **阶段 C 敏感过滤**(`ebe1d0e`):clipboard/filter.rs + handler + 设置接线
+  - is_sensitive 纯函数,9 个高置信度模式(AWS/GitHub/GitLab/Slack/Stripe/Google/私钥)
+  - extract_plain_text 从捕获格式提取纯文本
+  - handler 步骤 4.5(空内容后/写DB前),读 settings.enable_sensitive_filter
+  - 设置 4 处同步(Rust Settings + Default + 前端 Zod + SettingsPanel Toggle)
+  - 依赖:Cargo.toml 加 regex = "1"
+  - 不做:高熵检测(误报不可接受)/ 应用黑名单(P1)
+- **阶段 A CI workflow**(`98e06c1`):.github/workflows/release.yml
+  - push tag v* + workflow_dispatch 触发
+  - matrix:macOS arm64 + macOS x86_64 + Windows
+  - tauri-action + rust-cache + npm cache,草稿 release
+  - ⚠️ 前置:用户需建 GitHub 仓库 + add remote + push tag
+
+**M4 PR review 完成记录**(2026-08-09)
+
+5 agent 并行(code-reviewer / silent-failure-hunter / type-design-analyzer / pr-test-analyzer / comment-analyzer),
+2 Critical + 5 Important,全部修复(`8bb7acb`)。
+
+- 🔴 **C1 已修**:insert_formats 返回 Result 传播错误(原静默吞错违反 §8,与 replace_formats 不一致)
+- 🔴 **C2 已修**:settings/mod.rs 配置项计数 8→7(autostart 不在 Settings struct)
+- 🟡 **I1 已修**:补 replace_formats 图片引用计数端到端测试(dedup_replaces_formats_drops_old_image)
+- 🟡 **I2 已修**:补 extract_plain_text 4 个纯函数测试
+- 🟡 **I3 已修**:handler 敏感过滤 try_state None 分支加 log::warn(与自动清理一致)
+- 🟡 **I4 已修**:items.rs:10 hash 注释改为「M4 评估后决定不做」(原与决策矛盾)
+- 🟡 **I5 已修**:default_true → default_enable_sensitive_filter(命名对称)
+
+**验证基线**:cargo test 189 passed(原 159 + B 5 + C 25 + review 5)+ npm test 55 passed + clippy 零 warning
+
+**M4 期间确立的技术决策**(待沉淀 constraints.md):
+- 敏感过滤:只做固定前缀正则(gitleaks 精选),不做高熵检测(误报不可接受)
+- 去重格式覆盖:命中去重时 formats 整体替换(同事务),防旧格式残留
+- CI 打包:tauri-action 三平台,macos-latest 已是 ARM(双架构交叉编译)
+- 无证书不阻断打包(macOS 手动放行 / Windows SmartScreen 警告)
 
 ## 本工程开发历史
 

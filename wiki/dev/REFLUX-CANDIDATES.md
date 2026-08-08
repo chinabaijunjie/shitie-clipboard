@@ -2,7 +2,7 @@
 title: 回流候选池
 tags: [回流, 候选池, 子工程]
 created: 2026-06-29
-updated: 2026-08-08
+updated: 2026-08-09
 status: active
 ---
 
@@ -28,7 +28,15 @@ status: active
 - **状态**：待评估 / 已回流 / 留子工程 / 丢弃
 -->
 
-（空——子工程开发中由 AI/你随时记录）
+### [敏感信息正则过滤(内容级)] — 2026-08-09
+- **内容**:M4 实现基于正则的敏感信息检测(API key/token/私钥),从 gitleaks 精选高置信度模式(固定前缀)。三层防御的第 3 层(前两层:UTI 标记/应用黑名单)。调研结论:业界无纯文本启发式(高熵检测误报被弃),gitleaks 正则是共识方案。
+- **为什么像通用**:对应 reflux-signals「通用方案」—— 任何处理用户输入的桌面应用都可能需要敏感信息过滤,gitleaks 正则模式库 + OnceLock 懒初始化模式可复用
+- **状态**:待评估
+
+### [Tauri 2 跨平台 CI 打包(tauri-action)] — 2026-08-09
+- **内容**:M4 写了 GitHub Actions workflow,用 tauri-apps/tauri-action 实现三平台打包(macos arm64/x86_64 + windows)。macos-latest 已是 ARM runner,双架构靠一个 runner 交叉编译。push tag v* 触发 + 草稿 release。
+- **为什么像通用**:对应 reflux-signals「通用方案」—— 所有 Tauri 桌面应用都需要 CI 打包发布,这份 workflow 可直接复制(改 productName/identifier 即可)
+- **状态**:待评估
 
 ---
 
