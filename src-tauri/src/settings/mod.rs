@@ -93,9 +93,16 @@ pub fn merge_settings(base: &Settings, patch: &Settings) -> Settings {
 /// 从 serde_json::Value 反序列化 Settings,缺字段用默认值兜底。
 ///
 /// Store 插件返回的是 `serde_json::Value`,其中可能缺部分键(老版本 settings.json)。
-/// serde 的 `#[default]` 属性确保缺字段时用默认值。
+/// serde 的 `#[serde(default)]` / `#[serde(default = "...")]` 属性确保缺字段时用默认值。
+/// 类型不匹配(损坏的 settings.json)时 log::warn 后用默认值兜底。
 pub fn settings_from_value(value: &serde_json::Value) -> Settings {
-    serde_json::from_value(value.clone()).unwrap_or_default()
+    match serde_json::from_value(value.clone()) {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("[settings] settings.json 解析失败,用默认值: {e}");
+            Settings::default()
+        }
+    }
 }
 
 /// 从 Store 读取 Settings。

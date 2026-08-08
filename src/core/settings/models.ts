@@ -1,11 +1,11 @@
 /**
  * Settings 类型(前端侧)
  *
- * 与 Rust 侧 settings::Settings 对齐(serde rename_all=camelCase)。
+ * 与 Rust 侧 settings::Settings 对齐(逐字段标注 #[serde(rename = "...")] 输出 camelCase)。
  * Rust: src-tauri/src/settings/mod.rs Settings。
  *
  * 字段全 readonly:编译期阻止 mutate(§8 不可变性原则)。
- * 后端响应经 Zod schema 校验后才赋值(§8 边界校验)。
+ * 后端响应经 Zod schema 校验后才赋值(§8 边界校验,数值字段限制非负整数)。
  *
  * ⚠️ autostart 状态由 tauri-plugin-autostart 管理(不走 get_settings/update_settings),
  *    SettingsPanel 读取时直接调 isEnabled()。
@@ -16,9 +16,9 @@ import { z } from 'zod'
 export const SettingsSchema = z.object({
   shortcut: z.string(),
   launchVisible: z.boolean(),
-  maxItems: z.number(),
-  retentionDays: z.number(),
-  maxStorageMb: z.number(),
+  maxItems: z.number().int().nonnegative(),
+  retentionDays: z.number().int().nonnegative(),
+  maxStorageMb: z.number().int().nonnegative(),
   hideOnBlur: z.boolean(),
 })
 

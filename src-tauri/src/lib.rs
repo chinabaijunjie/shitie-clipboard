@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 use commands::clipboard::{copy_back, delete_item, list_items, search_items};
 use commands::ping::ping;
 use commands::settings::{get_settings, update_settings};
-use tauri::Manager;
+use tauri::{Manager, Window};
 
 /// 应用全局状态。
 ///
@@ -80,6 +80,15 @@ impl AppState {
     pub fn mark_self_write(&self) {
         self.self_write_flag.store(true, Ordering::SeqCst);
     }
+}
+
+/// 隐藏主窗口(前端 invoke 入口,走后端统一 guard 管理)。
+///
+/// 前端回填/Esc 等场景必须走此 command(而非直接 getCurrentWindow().hide()),
+/// 以确保 SUPPRESS_BLUR_HIDE guard 被正确置位,防 Focused(false) 连锁(tauri 已知行为)。
+#[tauri::command]
+fn hide_window(window: Window) {
+    window_control::hide_main_window(window.app_handle());
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -234,6 +243,7 @@ pub fn run() {
             search_items,
             get_settings,
             update_settings,
+            hide_window,
         ])
         // M3:窗口事件 — 失焦隐藏 + close 拦截转 hide
         .on_window_event(|window, event| {

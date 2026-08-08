@@ -3,7 +3,7 @@
  *
  * 职责(单一):管理用户设置的加载 + 更新。
  * - 初次加载:invoke('get_settings')
- * - 更新:invoke('update_settings', { ...newSettings })
+ * - 更新:invoke('update_settings', { newSettings })
  * - autostart 状态:直接调 @tauri-apps/plugin-autostart(不走 settings.json)
  *
  * 不关心 UI 怎么展示(那是 SettingsPanel 的事)。

@@ -1,12 +1,14 @@
-//! 自动清理 — 保留天数 + 容量上限
+//! 自动清理 — 保留天数 + 容量上限 + 条数上限
 //!
-//! M3 新增。在 watcher 每次捕获新内容后触发。
+//! M3 新增。在 watcher 每次成功写入后触发。
 //!
 //! 策略:
 //! - retention_days > 0:删除 last_copied_at < (now - days*86400000) 的条目
 //! - max_storage_mb > 0:总容量超限时,从最旧(last_copied_at 最小)开始删,直到达标
+//! - max_items > 0:条数超限时,从最旧开始删
 //!
 //! ⚠️ 删除联动图片引用计数(复用 items::delete 逻辑,含磁盘文件清理)。
+//! ⚠️ 清理过程包事务(rusqlite unchecked_transaction),中途失败回滚避免半清理状态。
 //!
 //! 模块化(§1.21):本模块只管「按策略选 id + 逐条删」,不管触发时机(handler 决定)。
 
@@ -58,6 +60,8 @@ pub fn cleanup_by_retention(
 ///
 /// `max_mb <= 0` 时不清理(0 = 不限)。
 /// 返回删除的条目数。
+///
+/// 性能优化:累计已删除字节数,避免每删一条都全表 SUM。
 pub fn cleanup_by_capacity(
     conn: &Connection,
     max_mb: i64,
@@ -74,35 +78,93 @@ pub fn cleanup_by_capacity(
         return Ok(0); // 未超限
     }
 
-    // 从最旧(last_copied_at ASC)开始查 id,逐条删直到达标
-    let oldest_ids: Vec<i64> = conn
-        .prepare("SELECT id FROM clipboard_items ORDER BY last_copied_at ASC")
-        .map_err(|e| AppError::internal(format!("prepare 查最旧条目失败: {e}")))?
-        .query_map([], |r| r.get::<_, i64>(0))
-        .map_err(|e| AppError::internal(format!("查最旧条目失败: {e}")))?
+    // 查最旧条目的 id + 各自占用的字节数(SUM(size) GROUP BY item_id),一次查完
+    let items_with_size: Vec<(i64, i64)> = conn
+        .prepare(
+            "SELECT i.id, COALESCE(SUM(f.size), 0) AS item_size \
+             FROM clipboard_items i \
+             LEFT JOIN clipboard_formats f ON f.item_id = i.id \
+             GROUP BY i.id \
+             ORDER BY i.last_copied_at ASC",
+        )
+        .map_err(|e| AppError::internal(format!("prepare 查条目容量失败: {e}")))?
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))
+        .map_err(|e| AppError::internal(format!("查条目容量失败: {e}")))?
         .filter_map(Result::ok)
         .collect();
 
+    let excess = total - max_bytes;
+    let mut freed: i64 = 0;
     let mut deleted = 0;
-    for id in oldest_ids {
-        items::delete(conn, id, images_dir)?;
-        deleted += 1;
-        let remaining = total_storage_bytes(conn)?;
-        if remaining <= max_bytes {
+
+    for (id, size) in items_with_size {
+        if freed >= excess {
             break;
         }
+        items::delete(conn, id, images_dir)?;
+        freed += size;
+        deleted += 1;
     }
 
     if deleted > 0 {
         log::info!(
-            "[cleanup] 容量上限 {}MB(实际 {}MB):清理了 {} 条最旧记录",
+            "[cleanup] 容量上限 {}MB(实际 {}MB):清理了 {} 条最旧记录,释放 {}MB",
             max_mb,
             total / 1024 / 1024,
-            deleted
+            deleted,
+            freed / 1024 / 1024
         );
     }
 
     Ok(deleted)
+}
+
+/// 按条数上限清理:条数超限时从最旧开始删,直到达标。
+///
+/// `max_items <= 0` 时不清理(0 = 不限)。
+/// 返回删除的条目数。
+pub fn cleanup_by_count(
+    conn: &Connection,
+    max_items: i64,
+    images_dir: &Path,
+) -> Result<usize, AppError> {
+    if max_items <= 0 {
+        return Ok(0);
+    }
+
+    let total_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r.get(0))
+        .map_err(|e| AppError::internal(format!("查条目总数失败: {e}")))?;
+
+    if total_count <= max_items {
+        return Ok(0);
+    }
+
+    let excess = (total_count - max_items) as usize;
+
+    // 查最旧的 excess 条
+    let oldest_ids: Vec<i64> = conn
+        .prepare("SELECT id FROM clipboard_items ORDER BY last_copied_at ASC LIMIT ?1")
+        .map_err(|e| AppError::internal(format!("prepare 查超限条目失败: {e}")))?
+        .query_map(params![excess as i64], |r| r.get::<_, i64>(0))
+        .map_err(|e| AppError::internal(format!("查超限条目失败: {e}")))?
+        .filter_map(Result::ok)
+        .collect();
+
+    for id in &oldest_ids {
+        items::delete(conn, *id, images_dir)?;
+    }
+
+    if !oldest_ids.is_empty() {
+        log::info!(
+            "[cleanup] 条数上限 {} 条(实际 {} 条):清理了 {} 条最旧记录",
+            max_items,
+            total_count,
+            oldest_ids.len()
+        );
+    }
+
+    Ok(oldest_ids.len())
 }
 
 /// 查总存储字节数(SUM(size) from clipboard_formats)。
@@ -113,17 +175,34 @@ pub fn total_storage_bytes(conn: &Connection) -> Result<i64, AppError> {
     .map_err(|e| AppError::internal(format!("查总容量失败: {e}")))
 }
 
-/// 执行完整清理(保留天数 + 容量上限)。
+/// 执行完整清理(保留天数 + 容量上限 + 条数上限)。
 ///
 /// 便捷函数,在 watcher handler 里调用。
+/// ⚠️ 包事务(unchecked_transaction),中途失败回滚。
 pub fn run_cleanup(
     conn: &Connection,
     retention_days: i64,
     max_storage_mb: i64,
+    max_items: i64,
     images_dir: &Path,
 ) -> Result<(), AppError> {
-    cleanup_by_retention(conn, retention_days, images_dir)?;
-    cleanup_by_capacity(conn, max_storage_mb, images_dir)?;
+    // 三策略任一启用才执行
+    if retention_days <= 0 && max_storage_mb <= 0 && max_items <= 0 {
+        return Ok(());
+    }
+
+    // 包事务:中途失败回滚(避免半清理状态与前端不一致)
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| AppError::internal(format!("开启清理事务失败: {e}")))?;
+
+    cleanup_by_retention(&tx, retention_days, images_dir)?;
+    cleanup_by_capacity(&tx, max_storage_mb, images_dir)?;
+    cleanup_by_count(&tx, max_items, images_dir)?;
+
+    tx.commit()
+        .map_err(|e| AppError::internal(format!("提交清理事务失败: {e}")))?;
+
     Ok(())
 }
 
@@ -246,21 +325,91 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_by_count_deletes_excess() {
+        let conn = init_db_in_memory().unwrap();
+        let dir = test_images_dir();
+        // 5 条,上限 3 → 删 2 条最旧的
+        make_item(&conn, "A", 5 * 86_400_000, 100);
+        make_item(&conn, "B", 4 * 86_400_000, 100);
+        make_item(&conn, "C", 3 * 86_400_000, 100);
+        make_item(&conn, "D", 2 * 86_400_000, 100);
+        make_item(&conn, "E", 1 * 86_400_000, 100);
+
+        let deleted = cleanup_by_count(&conn, 3, &dir).unwrap();
+        assert_eq!(deleted, 2, "应删 2 条超限");
+        assert_eq!(count_items(&conn), 3, "应剩 3 条");
+
+        // 最旧的 A、B 被删,C/D/E 保留
+        let titles: Vec<String> = conn
+            .prepare("SELECT title FROM clipboard_items ORDER BY last_copied_at DESC")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+        assert_eq!(titles, vec!["E", "D", "C"]);
+    }
+
+    #[test]
+    fn cleanup_by_count_zero_noop() {
+        let conn = init_db_in_memory().unwrap();
+        let dir = test_images_dir();
+        make_item(&conn, "A", 0, 100);
+
+        let deleted = cleanup_by_count(&conn, 0, &dir).unwrap();
+        assert_eq!(deleted, 0);
+    }
+
+    #[test]
+    fn cleanup_by_count_under_limit_noop() {
+        let conn = init_db_in_memory().unwrap();
+        let dir = test_images_dir();
+        make_item(&conn, "A", 0, 100);
+        make_item(&conn, "B", 0, 100);
+
+        let deleted = cleanup_by_count(&conn, 10, &dir).unwrap();
+        assert_eq!(deleted, 0);
+    }
+
+    #[test]
     fn total_storage_bytes_empty_is_zero() {
         let conn = init_db_in_memory().unwrap();
         assert_eq!(total_storage_bytes(&conn).unwrap(), 0);
     }
 
     #[test]
-    fn run_cleanup_runs_both_strategies() {
+    fn run_cleanup_runs_all_strategies() {
         let conn = init_db_in_memory().unwrap();
         let dir = test_images_dir();
-        // 10 天前的 + 1 天前的,各 1MB,保留 7 天 + 上限 0(不限)
+        // 10 天前的 + 1 天前的,各 1MB
         make_item(&conn, "旧", 10 * 86_400_000, 1024 * 1024);
         make_item(&conn, "新", 1 * 86_400_000, 1024 * 1024);
 
         // 保留 7 天 → 删旧的那条
-        run_cleanup(&conn, 7, 0, &dir).unwrap();
+        run_cleanup(&conn, 7, 0, 0, &dir).unwrap();
         assert_eq!(count_items(&conn), 1, "应只剩 1 条(7天保留删了旧的)");
+    }
+
+    #[test]
+    fn run_cleanup_all_disabled_noop() {
+        let conn = init_db_in_memory().unwrap();
+        let dir = test_images_dir();
+        make_item(&conn, "A", 0, 100);
+
+        run_cleanup(&conn, 0, 0, 0, &dir).unwrap();
+        assert_eq!(count_items(&conn), 1);
+    }
+
+    #[test]
+    fn run_cleanup_count_strategy() {
+        let conn = init_db_in_memory().unwrap();
+        let dir = test_images_dir();
+        make_item(&conn, "A", 5 * 86_400_000, 100);
+        make_item(&conn, "B", 3 * 86_400_000, 100);
+        make_item(&conn, "C", 1 * 86_400_000, 100);
+
+        // 上限 1 条 → 删 2 条最旧
+        run_cleanup(&conn, 0, 0, 1, &dir).unwrap();
+        assert_eq!(count_items(&conn), 1);
     }
 }

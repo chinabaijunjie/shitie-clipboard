@@ -5,9 +5,9 @@
 //! - `hide_main_window`:统一 hide 入口(带 SUPPRESS_BLUR_HIDE guard 防 Focused(false) 连锁)
 //! - `show_main_window`:show + focus + 清 guard
 //!
-//! 🔴 关键陷阱(tauri #13511):hide() 会触发 Focused(false) → 如果失焦 handler 也调 hide(),
-//! 会连锁抖动。解决方案:全局 AtomicBool guard,程序主动 hide 前置位,Focused(false) 检查
-//! 该标志跳过。与 self_write_flag(防 copy_back 反馈循环)同一套原子标志套路。
+//! 🔴 关键陷阱(Tauri 2 已知行为):hide() 会触发 Focused(false) → 如果失焦 handler 也调
+//! hide(),会连锁抖动。解决方案:全局 AtomicBool guard,程序主动 hide 前置位,Focused(false)
+//! 检查该标志跳过。与 self_write_flag(防 copy_back 反馈循环)同一套原子标志套路。
 //!
 //! 模块化(§1.21):本模块只管窗口可见性,不管窗口创建(tauri.conf.json 配)/
 //! 不管事件绑定(lib.rs on_window_event)/ 不管快捷键注册(lib.rs setup)。
@@ -39,6 +39,7 @@ pub fn should_hide_on_blur(hide_on_blur: bool) -> bool {
 ///
 /// - is_visible=true → 应该 hide(toggle 关闭)
 /// - is_visible=false → 应该 show(toggle 打开)
+#[cfg(test)]
 pub fn toggle_action(is_visible: bool) -> WindowAction {
     if is_visible {
         WindowAction::Hide
@@ -48,6 +49,7 @@ pub fn toggle_action(is_visible: bool) -> WindowAction {
 }
 
 /// toggle 的动作枚举(用于纯函数测试)。
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowAction {
     Show,
@@ -59,9 +61,10 @@ pub enum WindowAction {
 /// 全局快捷键和托盘左键都调此函数。
 pub fn toggle_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
-        match toggle_action(win.is_visible().unwrap_or(false)) {
-            WindowAction::Show => show_main_window(app),
-            WindowAction::Hide => hide_main_window(app),
+        match win.is_visible() {
+            Ok(true) => hide_main_window(app),
+            Ok(false) => show_main_window(app),
+            Err(e) => log::warn!("[window] is_visible 失败,跳过 toggle: {e}"),
         }
     }
 }
@@ -74,15 +77,21 @@ pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) {
     // 置位 guard:阻止后续 Focused(false) 连锁触发二次 hide
     SUPPRESS_BLUR_HIDE.store(true, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
-        let _ = win.hide();
+        if let Err(e) = win.hide() {
+            log::warn!("[window] hide 失败: {e}");
+        }
     }
 }
 
 /// 显示主窗口(show + focus + 清 guard)。
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
-        let _ = win.show();
-        let _ = win.set_focus();
+        if let Err(e) = win.show() {
+            log::warn!("[window] show 失败: {e}");
+        }
+        if let Err(e) = win.set_focus() {
+            log::warn!("[window] set_focus 失败: {e}");
+        }
     }
     // 清 guard:窗口已显示,后续失焦是真实用户操作,应该正常响应
     SUPPRESS_BLUR_HIDE.store(false, Ordering::SeqCst);

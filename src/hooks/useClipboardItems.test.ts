@@ -361,3 +361,59 @@ describe('useClipboardItems 搜索状态机', () => {
     expect(result.current.items[0].id).toBe(2)
   })
 })
+
+// ============================================================
+// moveToFront action 集成测试(renderHook)
+// ============================================================
+
+describe('useClipboardItems moveToFront action', () => {
+  it('把指定 id 的条目移到最前', async () => {
+    const list = [makeItem(1, 'A'), makeItem(2, 'B'), makeItem(3, 'C')]
+    mockState.callData = { list_items: list }
+
+    const { result } = renderHook(() => useClipboardItems())
+    await flushAsync()
+
+    expect(result.current.items.map((i) => i.id)).toEqual([1, 2, 3])
+
+    // 把 id=3 移到最前
+    act(() => {
+      result.current.moveToFront(3)
+    })
+
+    expect(result.current.items.map((i) => i.id)).toEqual([3, 1, 2])
+  })
+
+  it('不存在的 id → 列表不变', async () => {
+    const list = [makeItem(1, 'A'), makeItem(2, 'B')]
+    mockState.callData = { list_items: list }
+
+    const { result } = renderHook(() => useClipboardItems())
+    await flushAsync()
+
+    act(() => {
+      result.current.moveToFront(999)
+    })
+
+    expect(result.current.items.map((i) => i.id)).toEqual([1, 2])
+  })
+
+  it('连续 moveToFront 不丢失中间状态(函数式 setState)', async () => {
+    const list = [makeItem(1, 'A'), makeItem(2, 'B'), makeItem(3, 'C')]
+    mockState.callData = { list_items: list }
+
+    const { result } = renderHook(() => useClipboardItems())
+    await flushAsync()
+
+    // 先移 id=2,再移 id=3
+    act(() => {
+      result.current.moveToFront(2)
+    })
+    act(() => {
+      result.current.moveToFront(3)
+    })
+
+    // 最终顺序:3 在最前(后移的),2 其次,1 最后
+    expect(result.current.items.map((i) => i.id)).toEqual([3, 2, 1])
+  })
+})

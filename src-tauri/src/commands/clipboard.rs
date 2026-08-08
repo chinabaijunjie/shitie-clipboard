@@ -232,14 +232,24 @@ fn read_image_content(
 // Tauri command 包装(接 State,薄转发)
 // ============================================================
 
-/// 查历史列表。`limit` 默认 50。
+/// 查历史列表。`limit` 默认从设置读(用户配置的 max_items)。
 #[tauri::command]
 pub fn list_items(
     state: State<'_, crate::AppState>,
     limit: Option<i64>,
 ) -> Result<Vec<ClipboardItem>, AppError> {
+    let effective_limit = match limit {
+        Some(l) => l,
+        None => {
+            // 从设置读 max_items(用户可配),0(不限)时用 DEFAULT_LIST_LIMIT 兜底
+            let guard = state.settings();
+            let s = guard.lock().expect("Settings Mutex 中毒");
+            let max = s.max_items;
+            if max > 0 { max } else { DEFAULT_LIST_LIMIT }
+        }
+    };
     let conn = state.db();
-    list_items_with_conn(&conn, limit.unwrap_or(DEFAULT_LIST_LIMIT), state.images_dir())
+    list_items_with_conn(&conn, effective_limit, state.images_dir())
 }
 
 /// 删除单条(含图片引用计数)。

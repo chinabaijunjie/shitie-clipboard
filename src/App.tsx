@@ -11,14 +11,47 @@ import { useState } from 'react'
 import { SpotlightPanel } from '@components/SpotlightPanel'
 import { SettingsPanel } from '@components/SettingsPanel'
 import { useSettings } from '@hooks/useSettings'
+import { cn } from '@lib/utils'
 
 type View = 'main' | 'settings'
 
 function App() {
   const [view, setView] = useState<View>('main')
-  const { settings, update } = useSettings()
+  const { settings, loading, error, update } = useSettings()
 
-  if (view === 'settings' && settings) {
+  if (view === 'settings') {
+    if (loading) {
+      return (
+        <div
+          data-tauri-drag-region
+          className={cn(
+            'flex h-full w-full items-center justify-center rounded-lg border border-border bg-background text-foreground shadow-2xl',
+          )}
+        >
+          <span className="text-xs text-muted-foreground">加载设置中…</span>
+        </div>
+      )
+    }
+    if (error || !settings) {
+      return (
+        <div
+          data-tauri-drag-region
+          className={cn(
+            'flex h-full w-full flex-col items-center justify-center gap-3 rounded-lg border border-border bg-background text-foreground shadow-2xl',
+          )}
+        >
+          <span className="text-xs text-destructive">
+            设置加载失败:{error ?? '未知错误'}
+          </span>
+          <button
+            onClick={() => setView('main')}
+            className="rounded px-3 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            ← 返回
+          </button>
+        </div>
+      )
+    }
     return (
       <SettingsPanel
         settings={settings}

@@ -183,24 +183,29 @@ impl ClipboardHandler for ClipboardChangeHandler {
                     log::warn!("[clipboard] emit 前端失败: {e}");
                 }
 
-                // M3:自动清理(保留天数 + 容量上限)
-                // 每次 insert 后触发,从 AppState 读设置决定是否清理
+                // M3:自动清理(保留天数 + 容量上限 + 条数上限)
+                // 每次成功写入后触发,从 AppState 读设置决定是否清理
                 if let Some(state) = self.app.try_state::<crate::AppState>() {
-                    let (retention_days, max_storage_mb) = {
+                    let (retention_days, max_storage_mb, max_items) = {
                         let guard = state.settings();
                         let s = guard.lock().expect("Settings Mutex 中毒");
-                        (s.retention_days, s.max_storage_mb)
+                        (s.retention_days, s.max_storage_mb, s.max_items)
                     };
-                    if retention_days > 0 || max_storage_mb > 0 {
+                    if crate::commands::settings::should_run_cleanup(retention_days, max_storage_mb)
+                        || max_items > 0
+                    {
                         if let Err(e) = crate::storage::cleanup::run_cleanup(
                             &self.db,
                             retention_days,
                             max_storage_mb,
+                            max_items,
                             &self.images_dir,
                         ) {
                             log::warn!("[clipboard] 自动清理失败: {} {}", e.code, e.message);
                         }
                     }
+                } else {
+                    log::warn!("[clipboard] AppState 未就绪,跳过自动清理");
                 }
             }
             Err(e) => {

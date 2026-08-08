@@ -13,6 +13,16 @@ use tauri::State;
 use crate::error::{codes, AppError};
 use crate::settings::{self, Settings};
 
+/// 判断快捷键是否变化(纯函数,可单测)。
+pub fn shortcut_changed(old: &Settings, new: &Settings) -> bool {
+    old.shortcut != new.shortcut
+}
+
+/// 判断是否需要触发自动清理(retention 或 capacity 任一启用)(纯函数,可单测)。
+pub fn should_run_cleanup(retention_days: i64, max_storage_mb: i64) -> bool {
+    retention_days > 0 || max_storage_mb > 0
+}
+
 /// 读当前设置。
 #[tauri::command]
 pub fn get_settings(state: State<'_, crate::AppState>) -> Result<Settings, AppError> {
@@ -27,21 +37,23 @@ pub fn get_settings(state: State<'_, crate::AppState>) -> Result<Settings, AppEr
 /// - autostart 由前端直接调 autostart 插件(不走 update_settings),此处不管
 ///
 /// ⚠️ 快捷键 register 失败时回滚 settings(保持旧快捷键)+ 返回错误。
+///
+/// 🔒 并发安全(C1 修复):整个「读旧值 + unregister/register + save + 写内存」
+/// 纳入一次 settings Mutex 锁保护,避免并发调用导致 unregister/register 交错。
 #[tauri::command]
 pub fn update_settings(
     app: tauri::AppHandle,
     state: State<'_, crate::AppState>,
     new_settings: Settings,
 ) -> Result<Settings, AppError> {
-    // 读旧设置(用于检测 shortcut 变化)
-    let old_settings = {
-        let guard = state.settings();
-        guard.lock().expect("Settings Mutex 中毒").clone()
-    };
+    // 整个临界区持锁:读旧值 → 快捷键联动 → 持久化 → 写内存
+    let guard = state.settings();
+    let mut current = guard.lock().expect("Settings Mutex 中毒");
+
+    let old_settings = current.clone();
 
     // 快捷键变化时先注销旧的 + 注册新的(失败则回滚)
-    let shortcut_changed = old_settings.shortcut != new_settings.shortcut;
-    if shortcut_changed {
+    if shortcut_changed(&old_settings, &new_settings) {
         use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
         let gs = app.global_shortcut();
@@ -52,7 +64,12 @@ pub fn update_settings(
         // 注册新快捷键
         gs.register(new_settings.shortcut.as_str()).map_err(|e| {
             // 注册失败:尝试恢复旧快捷键
-            let _ = gs.register(old_settings.shortcut.as_str());
+            if let Err(re) = gs.register(old_settings.shortcut.as_str()) {
+                log::error!(
+                    "[shortcut] 回滚旧快捷键 {} 也失败: {re}",
+                    old_settings.shortcut
+                );
+            }
             AppError::new(
                 codes::SHORTCUT_REGISTER_FAILED,
                 format!("注册快捷键 {} 失败: {e}", new_settings.shortcut),
@@ -64,10 +81,8 @@ pub fn update_settings(
     settings::save_settings(&app, &new_settings)?;
 
     // 更新内存中的设置
-    {
-        let guard = state.settings();
-        *guard.lock().expect("Settings Mutex 中毒") = new_settings.clone();
-    }
+    *current = new_settings.clone();
+    drop(current); // 显式释放锁(虽然 drop guard 也行,这里清晰)
 
     log::info!(
         "[settings] 更新设置: shortcut={} launch_visible={} max_items={} retention_days={} max_storage_mb={} hide_on_blur={}",
@@ -80,4 +95,65 @@ pub fn update_settings(
     );
 
     Ok(new_settings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_settings(shortcut: &str) -> Settings {
+        Settings {
+            shortcut: shortcut.to_string(),
+            ..Settings::default()
+        }
+    }
+
+    #[test]
+    fn shortcut_changed_detects_difference() {
+        let old = make_settings("Cmd+Shift+V");
+        let new = make_settings("Cmd+Shift+Q");
+        assert!(shortcut_changed(&old, &new));
+    }
+
+    #[test]
+    fn shortcut_unchanged_returns_false() {
+        let old = make_settings("Cmd+Shift+V");
+        let new = make_settings("Cmd+Shift+V");
+        assert!(!shortcut_changed(&old, &new));
+    }
+
+    #[test]
+    fn shortcut_changed_other_fields_dont_matter() {
+        let old = Settings {
+            shortcut: "Cmd+Shift+V".into(),
+            max_items: 50,
+            ..Settings::default()
+        };
+        let new = Settings {
+            shortcut: "Cmd+Shift+V".into(),
+            max_items: 200,
+            ..Settings::default()
+        };
+        assert!(!shortcut_changed(&old, &new), "只改 max_items,shortcut 没变");
+    }
+
+    #[test]
+    fn should_run_cleanup_both_zero_returns_false() {
+        assert!(!should_run_cleanup(0, 0));
+    }
+
+    #[test]
+    fn should_run_cleanup_retention_only() {
+        assert!(should_run_cleanup(7, 0));
+    }
+
+    #[test]
+    fn should_run_cleanup_capacity_only() {
+        assert!(should_run_cleanup(0, 50));
+    }
+
+    #[test]
+    fn should_run_cleanup_both_enabled() {
+        assert!(should_run_cleanup(7, 50));
+    }
 }
