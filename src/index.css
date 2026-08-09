@@ -77,8 +77,10 @@
     --ring: 211 100% 52%;
 
     /* UI 专用变量 */
-    /* 毛玻璃外壳:0.72→0.85 实机调校(0.72 太透,桌面杂色干扰可读性) */
-    --window-bg: rgba(28, 28, 30, 0.85);
+    /* 毛玻璃外壳:RGB + 透明度分离,透明度可由用户动态调整 */
+    --window-rgb: 28, 28, 30;            /* #1C1C1E */
+    --window-opacity: 0.85;              /* 透明度 15%(用户可调 15%-100%) */
+    --window-bg: rgba(var(--window-rgb), var(--window-opacity));
     --shadow-window: 0 22px 70px 4px rgba(0, 0, 0, 0.45),
       0 8px 24px rgba(0, 0, 0, 0.18),
       inset 0 0.5px 0 rgba(255, 255, 255, 0.12);
@@ -139,7 +141,9 @@
     --ring: 211 100% 50%;
 
     /* UI 专用变量 */
-    --window-bg: rgba(255, 255, 255, 0.88);  /* 白 88%(实机调:spec 0.82 偏透) */
+    --window-rgb: 255, 255, 255;         /* 白 */
+    --window-opacity: 0.85;              /* 透明度 15%(与深色统一) */
+    --window-bg: rgba(var(--window-rgb), var(--window-opacity));
     --shadow-window: 0 22px 70px 4px rgba(0, 0, 0, 0.14),
       0 8px 24px rgba(0, 0, 0, 0.06),
       inset 0 0.5px 0 rgba(255, 255, 255, 0.6);
@@ -195,7 +199,9 @@
     --ring: 38 100% 55%;
 
     /* UI 专用变量 */
-    --window-bg: rgba(42, 42, 45, 0.88);  /* #2A2A2D 88%(实机调:spec 0.78 偏透) */
+    --window-rgb: 42, 42, 45;            /* #2A2A2D */
+    --window-opacity: 0.85;              /* 透明度 15%(与深色统一) */
+    --window-bg: rgba(var(--window-rgb), var(--window-opacity));
     --shadow-window: 0 22px 70px 4px rgba(0, 0, 0, 0.4),
       0 8px 24px rgba(0, 0, 0, 0.16),
       inset 0 0.5px 0 rgba(255, 255, 255, 0.08);

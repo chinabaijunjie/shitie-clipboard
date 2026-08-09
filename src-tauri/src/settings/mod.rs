@@ -3,7 +3,7 @@
 //! M3 新增。使用 tauri-plugin-store(settings.json in app_data_dir)持久化。
 //! 与 rusqlite(历史数据)职责分离。
 //!
-//! 配置项(8 项):
+//! 配置项(9 项):
 //! - shortcut:全局唤起快捷键(默认 "Cmd+Shift+V")
 //! - launch_visible:启动时打开窗口(默认 true)
 //! - max_items:历史记录上限(默认 50)
@@ -12,6 +12,7 @@
 //! - hide_on_blur:失焦自动隐藏(默认 true)
 //! - enable_sensitive_filter:敏感内容过滤(默认 true,M4 新增)
 //! - theme:界面配色主题(默认 "dark",多主题切换新增)
+//! - window_opacity:窗口背景透明度百分比(默认 15,15=微透/100=全透明)
 //!
 //! autostart 状态由 tauri-plugin-autostart 管理(写 LaunchAgent plist),不进 settings.json。
 //!
@@ -61,6 +62,9 @@ pub struct Settings {
     /// 界面配色主题("dark" / "light" / "mid")。
     #[serde(rename = "theme", default = "default_theme")]
     pub theme: String,
+    /// 窗口背景透明度(15-100,值越大越透明。15=微透,100=全透明)。
+    #[serde(rename = "windowOpacity", default = "default_window_opacity")]
+    pub window_opacity: i64,
 }
 
 fn default_shortcut() -> String {
@@ -81,6 +85,9 @@ fn default_enable_sensitive_filter() -> bool {
 fn default_theme() -> String {
     "dark".to_string()
 }
+fn default_window_opacity() -> i64 {
+    15
+}
 
 impl Default for Settings {
     fn default() -> Self {
@@ -93,6 +100,7 @@ impl Default for Settings {
             hide_on_blur: default_hide_on_blur(),
             enable_sensitive_filter: default_enable_sensitive_filter(),
             theme: default_theme(),
+            window_opacity: default_window_opacity(),
         }
     }
 }
@@ -178,6 +186,7 @@ mod tests {
         assert!(s.hide_on_blur);
         assert!(s.enable_sensitive_filter);
         assert_eq!(s.theme, "dark");
+        assert_eq!(s.window_opacity, 15);
     }
 
     #[test]
@@ -191,6 +200,7 @@ mod tests {
             hide_on_blur: false,
             enable_sensitive_filter: false,
             theme: "light".into(),
+            window_opacity: 45,
         };
         let json = serde_json::to_string(&s).unwrap();
         let decoded: Settings = serde_json::from_str(&json).unwrap();
@@ -210,6 +220,7 @@ mod tests {
         assert!(obj.contains_key("hideOnBlur"));
         assert!(obj.contains_key("enableSensitiveFilter"));
         assert!(obj.contains_key("theme"));
+        assert!(obj.contains_key("windowOpacity"));
         // 不含 snake_case
         assert!(!obj.contains_key("launch_visible"));
         assert!(!obj.contains_key("max_items"));
@@ -227,6 +238,7 @@ mod tests {
         assert!(s.hide_on_blur);
         assert!(s.enable_sensitive_filter);
         assert_eq!(s.theme, "dark");
+        assert_eq!(s.window_opacity, 15);
     }
 
     #[test]
@@ -263,6 +275,7 @@ mod tests {
             hide_on_blur: false,
             enable_sensitive_filter: false,
             theme: "mid".into(),
+            window_opacity: 75,
         };
         let merged = merge_settings(&base, &patch);
         assert_eq!(merged, patch);

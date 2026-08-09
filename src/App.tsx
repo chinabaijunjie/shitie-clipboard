@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react'
 
 import { SpotlightPanel } from '@components/SpotlightPanel'
 import { SettingsPanel } from '@components/SettingsPanel'
-import { applyTheme } from '@core/theme'
+import { applyTheme, applyWindowOpacity } from '@core/theme'
 import { useSettings } from '@hooks/useSettings'
 import { cn } from '@lib/utils'
 
@@ -29,6 +29,13 @@ function App() {
       applyTheme(settings.theme)
     }
   }, [settings?.theme]) // eslint-disable-line react-hooks/exhaustive-deps -- settings.theme 足够精确
+
+  // 窗口透明度变化时 → 同步 DOM --window-opacity 变量
+  useEffect(() => {
+    if (settings) {
+      applyWindowOpacity(settings.windowOpacity)
+    }
+  }, [settings?.windowOpacity]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (view === 'settings') {
     if (loading) {

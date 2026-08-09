@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Check } from 'lucide-react'
 
 import { cn } from '@lib/utils'
+import { WINDOW_OPACITY_OPTIONS } from '@core/theme'
 import { isValidShortcut, parseKeyEvent, formatShortcut } from '@core/settings/shortcut'
 import type { Settings } from '@core/settings/models'
 import { ThemeSwitcher } from '@components/ThemeSwitcher'
@@ -188,6 +189,13 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
           <ThemeSwitcher
             value={settings.theme}
             onChange={(theme) => void save({ theme })}
+          />
+        </SettingRow>
+        <SettingRow label="背景透明度" desc="值越大越透明(15% 微透 ~ 100% 全透明)">
+          <Select
+            value={settings.windowOpacity}
+            options={WINDOW_OPACITY_OPTIONS.map((v) => ({ value: v, label: `${v}%` }))}
+            onChange={(v) => void save({ windowOpacity: v })}
           />
         </SettingRow>
         <SettingRow label="开机自启" desc="登录时自动启动(后台运行)">

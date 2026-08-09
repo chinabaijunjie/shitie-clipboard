@@ -26,6 +26,7 @@ export const SettingsSchema = z.object({
   hideOnBlur: z.boolean(),
   enableSensitiveFilter: z.boolean(),
   theme: z.enum(THEME_NAMES),
+  windowOpacity: z.number().int().min(15).max(100),
 })
 
 export interface Settings {
@@ -44,4 +45,6 @@ export interface Settings {
   readonly enableSensitiveFilter: boolean
   /** 界面配色主题 */
   readonly theme: ThemeName
+  /** 窗口背景透明度(15-100,值越大越透明) */
+  readonly windowOpacity: number
 }

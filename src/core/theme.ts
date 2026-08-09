@@ -1,7 +1,7 @@
 /**
  * 主题管理 — 纯函数,无 React 依赖
  *
- * 职责(单一):管理 <html> 上的 .theme-* class + localStorage 缓存。
+ * 职责(单一):管理 <html> 上的 .theme-* class + localStorage 缓存 + 窗口透明度。
  * 不关心 UI 渲染(那是 ThemeSwitcher 的事),不关心持久化到 settings.json(那是 useSettings 的事)。
  *
  * 两层持久化:
@@ -53,4 +53,18 @@ export function getInitialTheme(): ThemeName {
     // localStorage 不可用 —— 用默认值
   }
   return 'dark'
+}
+
+/** 透明度选项(15%-100%,每隔 10% 一档) */
+export const WINDOW_OPACITY_OPTIONS = [15, 25, 35, 45, 55, 65, 75, 85, 95, 100] as const
+
+/**
+ * 应用窗口透明度到 DOM。
+ *
+ * 设置 --window-opacity CSS 变量(alpha 值)。
+ * opacity=15 → alpha 0.85(微透),opacity=100 → alpha 0(全透明)。
+ */
+export function applyWindowOpacity(opacity: number): void {
+  const alpha = Math.max(0, Math.min(1, 1 - opacity / 100))
+  document.documentElement.style.setProperty('--window-opacity', alpha.toString())
 }
