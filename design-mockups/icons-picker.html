@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拾贴 · Icon 方案挑选</title>
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --card: #1c1c1e;
+    --card-hover: #2a2a2e;
+    --text: #f5f5f7;
+    --text-dim: #8e8e93;
+    --accent: #5ac8fa;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+    padding: 48px 24px;
+    line-height: 1.6;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .header h1 {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .header h1 .accent { color: var(--accent); }
+  .header .subtitle {
+    color: var(--text-dim);
+    font-size: 16px;
+  }
+  .header .meta {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-top: 12px;
+    opacity: 0.6;
+  }
+
+  .group {
+    max-width: 1100px;
+    margin: 0 auto 56px;
+  }
+  .group-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 24px 20px;
+    text-align: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    position: relative;
+  }
+  .card:hover {
+    background: var(--card-hover);
+    border-color: rgba(90, 200, 250, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(90, 200, 250, 0.08);
+  }
+
+  .card .id-tag {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(90, 200, 250, 0.1);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Monaco', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  .icon-preview {
+    width: 120px;
+    height: 120px;
+    margin: 8px auto 20px;
+    border-radius: 24px;
+    overflow: hidden;
+  }
+  .icon-preview svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* dock 预览效果(带阴影,模拟桌面图标) */
+  .icon-preview.dock-style {
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+  }
+
+  .card .name {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .card .desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.45;
+  }
+
+  /* 大尺寸预览区 */
+  .showcase {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .showcase-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+  }
+  .showcase-item .size-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    font-family: 'SF Mono', monospace;
+  }
+
+  .footer-note {
+    max-width: 1100px;
+    margin: 48px auto 0;
+    padding: 24px;
+    background: rgba(90, 200, 250, 0.05);
+    border: 1px solid rgba(90, 200, 250, 0.15);
+    border-radius: 12px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+  .footer-note strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>拾<span class="accent">贴</span></h1>
+  <div class="subtitle">Clipboard Manager · Icon 方案挑选</div>
+  <div class="meta">主体:青色夹子 + 深色剪贴板 · 风格:苹果深色毛玻璃 · 尺寸:1024×1024 源文件</div>
+</div>
+
+<!-- ========== 第一组:经典夹子板 ========== -->
+<div class="group">
+  <div class="group-title">第一组 · 经典夹子板(青色夹子 + 深色板)</div>
+  <div class="grid">
+
+    <!-- A01:经典横杆夹 -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">A01</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-a01" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1a1a2e"/>
+              <stop offset="100%" stop-color="#0a0a14"/>
+            </linearGradient>
+            <linearGradient id="clip-a01" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#6dd5fa"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+          </defs>
+          <!-- 圆角背景 -->
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-a01)"/>
+          <!-- 剪贴板主体 -->
+          <rect x="256" y="232" width="512" height="620" rx="36" fill="#2a2a3e" stroke="rgba(255,255,255,0.06)" stroke-width="2"/>
+          <!-- 纸张 -->
+          <rect x="300" y="360" width="424" height="440" rx="12" fill="#e8e8ec" opacity="0.92"/>
+          <!-- 纸张上的文字线 -->
+          <rect x="340" y="420" width="260" height="8" rx="4" fill="#c8c8d0"/>
+          <rect x="340" y="452" width="340" height="8" rx="4" fill="#d0d0d8"/>
+          <rect x="340" y="484" width="200" height="8" rx="4" fill="#d0d0d8"/>
+          <rect x="340" y="516" width="300" height="8" rx="4" fill="#d0d0d8"/>
+          <!-- 横杆夹 -->
+          <rect x="412" y="196" width="200" height="76" rx="20" fill="url(#clip-a01)"/>
+          <rect x="412" y="220" width="200" height="6" rx="3" fill="rgba(255,255,255,0.25)"/>
+          <!-- 夹子旋钮 -->
+          <circle cx="512" cy="234" r="20" fill="#1a1a2e" opacity="0.4"/>
+        </svg>
+      </div>
+      <div class="name">经典横杆夹</div>
+      <div class="desc">经典金属横杆夹 + 纸张文字线,最正统的剪贴板形象</div>
+    </div>
+
+    <!-- A02:弹簧夹(顶部凸起) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">A02</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-a02" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#16213e"/>
+              <stop offset="100%" stop-color="#0a0a14"/>
+            </linearGradient>
+            <linearGradient id="clip-a02" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="100%" stop-color="#2a9df4"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-a02)"/>
+          <!-- 板 -->
+          <rect x="260" y="240" width="504" height="612" rx="32" fill="#1e1e32" stroke="rgba(255,255,255,0.05)" stroke-width="2"/>
+          <!-- 纸 -->
+          <rect x="306" y="330" width="412" height="472" rx="10" fill="#f0f0f4" opacity="0.9"/>
+          <rect x="346" y="400" width="240" height="7" rx="3.5" fill="#cccfd8"/>
+          <rect x="346" y="428" width="320" height="7" rx="3.5" fill="#d4d6de"/>
+          <rect x="346" y="456" width="180" height="7" rx="3.5" fill="#d4d6de"/>
+          <!-- 弹簧夹主体(顶部凸起的梯形) -->
+          <path d="M448 140 L576 140 L596 232 L428 232 Z" fill="url(#clip-a02)"/>
+          <!-- 夹子高光 -->
+          <path d="M456 152 L568 152 L572 180 L452 180 Z" fill="rgba(255,255,255,0.2)"/>
+          <!-- 夹子底部压在纸上 -->
+          <rect x="428" y="226" width="168" height="20" rx="6" fill="url(#clip-a02)"/>
+        </svg>
+      </div>
+      <div class="name">弹簧夹</div>
+      <div class="desc">顶部凸起的弹簧夹造型,夹子感更强更有立体感</div>
+    </div>
+
+    <!-- A03:极简夹子(无纸张细节) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">A03</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-a03" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1c1c2e"/>
+              <stop offset="100%" stop-color="#0c0c16"/>
+            </linearGradient>
+            <linearGradient id="clip-a03" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#5ac8fa"/>
+              <stop offset="100%" stop-color="#007aff"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-a03)"/>
+          <!-- 板(纯色无纸张) -->
+          <rect x="272" y="228" width="480" height="628" rx="40" fill="#232336"/>
+          <!-- 板上的三条极简横线 -->
+          <rect x="360" y="400" width="304" height="6" rx="3" fill="rgba(90,200,250,0.25)"/>
+          <rect x="360" y="440" width="240" height="6" rx="3" fill="rgba(90,200,250,0.18)"/>
+          <rect x="360" y="480" width="280" height="6" rx="3" fill="rgba(90,200,250,0.18)"/>
+          <!-- 极简夹子(小圆角矩形) -->
+          <rect x="430" y="190" width="164" height="72" rx="18" fill="url(#clip-a03)"/>
+          <rect x="430" y="206" width="164" height="5" rx="2.5" fill="rgba(255,255,255,0.3)"/>
+        </svg>
+      </div>
+      <div class="name">极简夹子</div>
+      <div class="desc">去掉纸张细节,纯色板 + 青色线条暗示内容,极简苹果风</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== 第二组:层叠/历史感 ========== -->
+<div class="group">
+  <div class="group-title">第二组 · 层叠感(呼应「拾」= 拾起/积累)</div>
+  <div class="grid">
+
+    <!-- B01:板后露出卡片(层叠暗示) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">B01</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-b01" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1a1a2e"/>
+              <stop offset="100%" stop-color="#0a0a14"/>
+            </linearGradient>
+            <linearGradient id="clip-b01" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#6dd5fa"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-b01)"/>
+          <!-- 后方露出的卡片(层叠暗示) -->
+          <rect x="330" y="380" width="420" height="480" rx="16" fill="#1a1a2a" stroke="rgba(90,200,250,0.15)" stroke-width="2" transform="rotate(6 540 620)"/>
+          <rect x="300" y="360" width="420" height="490" rx="16" fill="#222238" stroke="rgba(255,255,255,0.05)" stroke-width="2" transform="rotate(-3 510 605)"/>
+          <!-- 主板 -->
+          <rect x="268" y="240" width="488" height="600" rx="32" fill="#2a2a3e"/>
+          <!-- 主纸 -->
+          <rect x="308" y="340" width="408" height="450" rx="10" fill="#eaeaee" opacity="0.9"/>
+          <rect x="348" y="400" width="240" height="7" rx="3.5" fill="#cccfd8"/>
+          <rect x="348" y="428" width="320" height="7" rx="3.5" fill="#d4d6de"/>
+          <rect x="348" y="456" width="200" height="7" rx="3.5" fill="#d4d6de"/>
+          <!-- 夹子 -->
+          <rect x="420" y="196" width="184" height="72" rx="18" fill="url(#clip-b01)"/>
+          <rect x="420" y="214" width="184" height="5" rx="2.5" fill="rgba(255,255,255,0.3)"/>
+        </svg>
+      </div>
+      <div class="name">层叠板</div>
+      <div class="desc">主板后方露出倾斜卡片角,暗示「拾起了很多历史」</div>
+    </div>
+
+    <!-- B02:拾取动作(夹子 + 上浮卡片区) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">B02</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-b02" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#16213e"/>
+              <stop offset="100%" stop-color="#0a0a14"/>
+            </linearGradient>
+            <linearGradient id="clip-b02" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="100%" stop-color="#2a9df4"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-b02)"/>
+          <!-- 底部散落的小卡片(被拾起前的状态) -->
+          <rect x="240" y="600" width="140" height="100" rx="12" fill="#1e1e34" stroke="rgba(90,200,250,0.12)" stroke-width="1.5" transform="rotate(-12 310 650)"/>
+          <rect x="640" y="620" width="140" height="100" rx="12" fill="#1e1e34" stroke="rgba(90,200,250,0.12)" stroke-width="1.5" transform="rotate(10 710 670)"/>
+          <!-- 主剪贴板(居中靠上) -->
+          <rect x="288" y="200" width="448" height="560" rx="32" fill="#2a2a3e"/>
+          <rect x="328" y="300" width="368" height="400" rx="10" fill="#eaeaee" opacity="0.9"/>
+          <rect x="360" y="360" width="220" height="7" rx="3.5" fill="#cccfd8"/>
+          <rect x="360" y="388" width="290" height="7" rx="3.5" fill="#d4d6de"/>
+          <rect x="360" y="416" width="180" height="7" rx="3.5" fill="#d4d6de"/>
+          <!-- 夹子 -->
+          <rect x="436" y="160" width="152" height="68" rx="16" fill="url(#clip-b02)"/>
+          <rect x="436" y="176" width="152" height="5" rx="2.5" fill="rgba(255,255,255,0.3)"/>
+        </svg>
+      </div>
+      <div class="name">拾取板</div>
+      <div class="desc">底部散落卡片 + 上方夹板,「从一堆里拾起来」</div>
+    </div>
+
+    <!-- B03:书脊/册子感(拾贴=收集成册) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">B03</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-b03" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1c1c2e"/>
+              <stop offset="100%" stop-color="#0c0c16"/>
+            </linearGradient>
+            <linearGradient id="clip-b03" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#5ac8fa"/>
+              <stop offset="100%" stop-color="#007aff"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-b03)"/>
+          <!-- 左侧装订线/书脊(册子感) -->
+          <rect x="244" y="232" width="60" height="620" rx="12" fill="url(#clip-b03)" opacity="0.7"/>
+          <circle cx="274" cy="340" r="10" fill="#0c0c16"/>
+          <circle cx="274" cy="540" r="10" fill="#0c0c16"/>
+          <circle cx="274" cy="740" r="10" fill="#0c0c16"/>
+          <!-- 主板 -->
+          <rect x="300" y="232" width="460" height="620" rx="28" fill="#232336"/>
+          <rect x="340" y="340" width="380" height="420" rx="10" fill="#eaeaee" opacity="0.9"/>
+          <rect x="380" y="400" width="240" height="7" rx="3.5" fill="#cccfd8"/>
+          <rect x="380" y="432" width="300" height="7" rx="3.5" fill="#d4d6de"/>
+          <rect x="380" y="464" width="200" height="7" rx="3.5" fill="#d4d6de"/>
+          <rect x="380" y="496" width="260" height="7" rx="3.5" fill="#d4d6de"/>
+          <!-- 顶部夹子 -->
+          <rect x="452" y="190" width="156" height="68" rx="16" fill="url(#clip-b03)"/>
+          <rect x="452" y="206" width="156" height="5" rx="2.5" fill="rgba(255,255,255,0.3)"/>
+        </svg>
+      </div>
+      <div class="name">拾贴册</div>
+      <div class="desc">左侧装订孔 + 夹子,「拾贴成册」的收集册意象</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== 第三组:毛玻璃质感强化 ========== -->
+<div class="group">
+  <div class="group-title">第三组 · 毛玻璃质感(呼应深色毛玻璃 UI)</div>
+  <div class="grid">
+
+    <!-- C01:毛玻璃半透板 -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">C01</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-c01" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1e3a5f"/>
+              <stop offset="50%" stop-color="#16213e"/>
+              <stop offset="100%" stop-color="#0a0a1a"/>
+            </linearGradient>
+            <linearGradient id="glass-c01" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.18)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0.06)"/>
+            </linearGradient>
+            <linearGradient id="clip-c01" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-c01)"/>
+          <!-- 毛玻璃半透板 -->
+          <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#glass-c01)" stroke="rgba(90,200,250,0.3)" stroke-width="2"/>
+          <!-- 板内文字线(半透明) -->
+          <rect x="340" y="380" width="280" height="6" rx="3" fill="rgba(255,255,255,0.3)"/>
+          <rect x="340" y="416" width="350" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
+          <rect x="340" y="452" width="220" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
+          <rect x="340" y="488" width="310" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
+          <!-- 顶部夹子 -->
+          <rect x="420" y="188" width="184" height="74" rx="18" fill="url(#clip-c01)"/>
+          <rect x="420" y="206" width="184" height="5" rx="2.5" fill="rgba(255,255,255,0.4)"/>
+          <circle cx="512" cy="225" r="16" fill="#16213e" opacity="0.5"/>
+        </svg>
+      </div>
+      <div class="name">毛玻璃板</div>
+      <div class="desc">半透明青色玻璃板 + 内部文字线,与 UI 毛玻璃主题完全统一</div>
+    </div>
+
+    <!-- C02:渐变青光板 -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">C02</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="bg-c02" cx="50%" cy="30%" r="80%">
+              <stop offset="0%" stop-color="#1a2a4a"/>
+              <stop offset="100%" stop-color="#080812"/>
+            </radialGradient>
+            <linearGradient id="board-c02" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#2a3a52"/>
+              <stop offset="100%" stop-color="#181c28"/>
+            </linearGradient>
+            <linearGradient id="clip-c02" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#64d8f5"/>
+              <stop offset="50%" stop-color="#34ace0"/>
+              <stop offset="100%" stop-color="#007aff"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-c02)"/>
+          <!-- 板(深色渐变,模拟毛玻璃厚度) -->
+          <rect x="270" y="234" width="484" height="616" rx="36" fill="url(#board-c02)" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+          <!-- 顶部高光(玻璃反光) -->
+          <rect x="290" y="252" width="444" height="80" rx="20" fill="rgba(255,255,255,0.04)"/>
+          <!-- 纸张 -->
+          <rect x="312" y="350" width="400" height="440" rx="10" fill="#eaeaf0" opacity="0.85"/>
+          <rect x="352" y="410" width="250" height="7" rx="3.5" fill="#c8ccda"/>
+          <rect x="352" y="440" width="320" height="7" rx="3.5" fill="#d2d6e0"/>
+          <rect x="352" y="470" width="190" height="7" rx="3.5" fill="#d2d6e0"/>
+          <!-- 青光夹子 -->
+          <rect x="424" y="192" width="176" height="72" rx="18" fill="url(#clip-c02)"/>
+          <rect x="424" y="208" width="176" height="5" rx="2.5" fill="rgba(255,255,255,0.4)"/>
+        </svg>
+      </div>
+      <div class="name">青光板</div>
+      <div class="desc">板有玻璃厚度渐变 + 夹子带青蓝渐变光泽,质感最强</div>
+    </div>
+
+    <!-- C03:光晕夹子(夹子发光) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">C03</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-c03" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1a1a2e"/>
+              <stop offset="100%" stop-color="#0a0a14"/>
+            </linearGradient>
+            <radialGradient id="glow-c03" cx="50%" cy="22%" r="35%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.35)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0)"/>
+            </radialGradient>
+            <linearGradient id="clip-c03" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-c03)"/>
+          <!-- 夹子光晕 -->
+          <rect width="1024" height="1024" rx="224" fill="url(#glow-c03)"/>
+          <!-- 板 -->
+          <rect x="272" y="240" width="480" height="612" rx="36" fill="#1e1e30" stroke="rgba(255,255,255,0.06)" stroke-width="2"/>
+          <!-- 纸 -->
+          <rect x="312" y="350" width="400" height="440" rx="10" fill="#e8e8ee" opacity="0.88"/>
+          <rect x="352" y="410" width="240" height="7" rx="3.5" fill="#caccda"/>
+          <rect x="352" y="440" width="310" height="7" rx="3.5" fill="#d2d4de"/>
+          <rect x="352" y="470" width="180" height="7" rx="3.5" fill="#d2d4de"/>
+          <!-- 发光夹子 -->
+          <rect x="422" y="190" width="180" height="74" rx="18" fill="url(#clip-c03)"/>
+          <rect x="422" y="208" width="180" height="5" rx="2.5" fill="rgba(255,255,255,0.45)"/>
+          <circle cx="512" cy="227" r="16" fill="#0a0a14" opacity="0.4"/>
+        </svg>
+      </div>
+      <div class="name">光晕夹</div>
+      <div class="desc">夹子顶部带青色光晕扩散,「亮起来的剪贴板」,吸睛</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== 第四组:特色变体 ========== -->
+<div class="group">
+  <div class="group-title">第四组 · 特色变体(几何/抽象/双夹)</div>
+  <div class="grid">
+
+    <!-- D01:几何线条风(Spotlight 呼应) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">D01</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-d01" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1a1a2e"/>
+              <stop offset="100%" stop-color="#0a0a14"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-d01)"/>
+          <!-- 几何线条板(只描边) -->
+          <rect x="288" y="252" width="448" height="576" rx="32" fill="none" stroke="#5ac8fa" stroke-width="10" opacity="0.9"/>
+          <!-- 内部文字线 -->
+          <line x1="368" y1="400" x2="656" y2="400" stroke="#5ac8fa" stroke-width="8" stroke-linecap="round" opacity="0.5"/>
+          <line x1="368" y1="448" x2="600" y2="448" stroke="#5ac8fa" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
+          <line x1="368" y1="496" x2="624" y2="496" stroke="#5ac8fa" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
+          <line x1="368" y1="544" x2="560" y2="544" stroke="#5ac8fa" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
+          <!-- 夹子(实心填充) -->
+          <rect x="440" y="204" width="144" height="68" rx="16" fill="#5ac8fa"/>
+          <rect x="440" y="220" width="144" height="5" rx="2.5" fill="rgba(255,255,255,0.35)"/>
+        </svg>
+      </div>
+      <div class="name">线条派</div>
+      <div class="desc">纯青色描边线条,极简几何,Spotlight 般干净利落</div>
+    </div>
+
+    <!-- D02:回填箭头(夹子 + 回流箭头) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">D02</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-d02" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1c1c2e"/>
+              <stop offset="100%" stop-color="#0c0c16"/>
+            </linearGradient>
+            <linearGradient id="clip-d02" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#6dd5fa"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-d02)"/>
+          <!-- 板 -->
+          <rect x="272" y="240" width="480" height="612" rx="36" fill="#232336"/>
+          <!-- 纸 + 文字 -->
+          <rect x="312" y="340" width="400" height="440" rx="10" fill="#eaeaee" opacity="0.9"/>
+          <rect x="352" y="400" width="220" height="7" rx="3.5" fill="#ccced8"/>
+          <rect x="352" y="432" width="300" height="7" rx="3.5" fill="#d4d6de"/>
+          <!-- 回流箭头(右下角弧形箭头指向板,暗示「贴回去」) -->
+          <path d="M680 640 Q720 560 660 500" fill="none" stroke="#5ac8fa" stroke-width="14" stroke-linecap="round" opacity="0.9"/>
+          <path d="M648 520 L660 496 L684 508" fill="none" stroke="#5ac8fa" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+          <!-- 夹子 -->
+          <rect x="424" y="192" width="176" height="72" rx="18" fill="url(#clip-d02)"/>
+          <rect x="424" y="208" width="176" height="5" rx="2.5" fill="rgba(255,255,255,0.3)"/>
+        </svg>
+      </div>
+      <div class="name">回流箭头</div>
+      <div class="desc">夹子板 + 回流弧形箭头,暗示「复制了还能贴回去」</div>
+    </div>
+
+    <!-- D03:双内容块(暗示多格式) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">D03</div>
+      <div class="icon-preview dock-style">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg-d03" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#16213e"/>
+              <stop offset="100%" stop-color="#0a0a14"/>
+            </linearGradient>
+            <linearGradient id="clip-d03" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="100%" stop-color="#2a9df4"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#bg-d03)"/>
+          <!-- 板 -->
+          <rect x="272" y="240" width="480" height="612" rx="36" fill="#1e1e32"/>
+          <!-- 纸 -->
+          <rect x="312" y="340" width="400" height="440" rx="10" fill="#eaeaee" opacity="0.9"/>
+          <!-- 上半:文字行 -->
+          <rect x="352" y="380" width="200" height="6" rx="3" fill="#caccda"/>
+          <rect x="352" y="404" width="280" height="6" rx="3" fill="#d4d6de"/>
+          <rect x="352" y="428" width="160" height="6" rx="3" fill="#d4d6de"/>
+          <!-- 分隔线 -->
+          <line x1="352" y1="468" x2="672" y2="468" stroke="#d4d6de" stroke-width="2"/>
+          <!-- 下半:小图片方块(暗示多格式:文字+图片) -->
+          <rect x="352" y="500" width="100" height="100" rx="8" fill="#5ac8fa" opacity="0.8"/>
+          <rect x="472" y="510" width="120" height="6" rx="3" fill="#caccda"/>
+          <rect x="472" y="534" width="90" height="6" rx="3" fill="#d4d6de"/>
+          <rect x="472" y="558" width="110" height="6" rx="3" fill="#d4d6de"/>
+          <rect x="472" y="582" width="70" height="6" rx="3" fill="#d4d6de"/>
+          <!-- 夹子 -->
+          <rect x="424" y="192" width="176" height="72" rx="18" fill="url(#clip-d03)"/>
+          <rect x="424" y="208" width="176" height="5" rx="2.5" fill="rgba(255,255,255,0.3)"/>
+        </svg>
+      </div>
+      <div class="name">双内容块</div>
+      <div class="desc">纸上有文字行 + 图片方块,暗示「文字图片都能管」</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="footer-note">
+  <strong>挑选说明:</strong><br>
+  • 每个图标左上角有 <strong>ID</strong>(如 A01、B03),选定后告诉我 ID 即可<br>
+  • 所有图标都是 <strong>1024×1024 SVG 矢量源文件</strong>,选定后我会导出全套(icns/ico/png)<br>
+  • 主体统一为:<strong>青色夹子 + 深色板</strong>,差异在夹子造型 / 层叠感 / 质感 / 特色元素<br>
+  • 点击卡片可高亮选中,方便对比<br>
+  • 如果某个方案「大部分喜欢但某处想改」,也可以告诉我,我可以基于它微调
+</div>
+
+</body>
+</html>

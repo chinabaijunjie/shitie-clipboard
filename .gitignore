@@ -38,6 +38,9 @@ src-tauri/gen/
 *.app
 *.tsbuildinfo
 
+# 图标旧文件备份(icon 替换时的安全副本,不入仓库)
+src-tauri/icons/backup-old-*/
+
 # Git worktrees(多窗口并行开发隔离目录)
 .worktrees/
 

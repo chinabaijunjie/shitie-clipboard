@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拾贴 · 定稿版 E01+金边</title>
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --card: #1c1c1e;
+    --text: #f5f5f7;
+    --text-dim: #8e8e93;
+    --accent: #5ac8fa;
+    --gold: #e8c87a;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(90,200,250,0.06) 0%, transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    padding: 48px 24px;
+    min-height: 100vh;
+  }
+  .header { text-align: center; margin-bottom: 48px; }
+  .header h1 { font-size: 42px; font-weight: 700; }
+  .header h1 .accent { color: var(--accent); }
+  .header h1 .gold { color: var(--gold); }
+  .header .subtitle { color: var(--text-dim); font-size: 16px; margin-top: 6px; }
+
+  .main-preview {
+    max-width: 600px;
+    margin: 0 auto 56px;
+    text-align: center;
+  }
+  .hero-icon {
+    width: 280px; height: 280px;
+    margin: 0 auto 24px;
+    filter: drop-shadow(0 12px 48px rgba(0,0,0,0.6));
+  }
+  .hero-icon svg { width: 100%; height: 100%; border-radius: 60px; }
+  .hero-label {
+    font-size: 22px; font-weight: 600;
+  }
+  .hero-label .id {
+    color: var(--accent); font-family: 'SF Mono', monospace; font-size: 16px;
+    background: rgba(90,200,250,0.12); padding: 4px 12px; border-radius: 8px;
+    margin-left: 8px;
+  }
+
+  .sizes-section {
+    max-width: 900px; margin: 0 auto 56px;
+  }
+  .section-title {
+    font-size: 14px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 1.5px;
+    margin-bottom: 24px; text-align: center;
+  }
+  .sizes-row {
+    display: flex; align-items: flex-end; justify-content: center;
+    gap: 36px; flex-wrap: wrap;
+  }
+  .size-item { text-align: center; }
+  .size-item svg {
+    filter: drop-shadow(0 4px 16px rgba(0,0,0,0.5));
+    border-radius: 22%;
+  }
+  .size-item .size-label {
+    font-size: 12px; color: var(--text-dim); margin-top: 10px;
+    font-family: 'SF Mono', monospace;
+  }
+
+  .dark-bg-test {
+    max-width: 900px; margin: 0 auto;
+    padding: 40px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 20px;
+    text-align: center;
+  }
+  .dark-bg-test .section-title { color: rgba(255,255,255,0.6); }
+  .dock-row {
+    display: flex; align-items: flex-end; justify-content: center;
+    gap: 16px;
+  }
+  .dock-item svg { filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4)); border-radius: 22%; }
+
+  .footer-note {
+    max-width: 900px; margin: 48px auto 0;
+    padding: 24px;
+    background: rgba(232,200,122,0.06);
+    border: 1px solid rgba(232,200,122,0.2);
+    border-radius: 12px;
+    font-size: 14px; color: var(--text-dim); line-height: 1.8;
+  }
+  .footer-note strong { color: var(--text); }
+  .footer-note .g { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>拾<span class="gold">贴</span></h1>
+  <div class="subtitle">定稿版 · E01 主体 + 金色描边 · 毛玻璃高级感</div>
+</div>
+
+<!-- ====== 主预览 ====== -->
+<div class="main-preview">
+  <div class="hero-icon">
+    <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- 深色背景 -->
+        <linearGradient id="bg-final" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#1e3a5f"/>
+          <stop offset="50%" stop-color="#16213e"/>
+          <stop offset="100%" stop-color="#0a0a1a"/>
+        </linearGradient>
+        <!-- 毛玻璃板 -->
+        <linearGradient id="glass-final" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="rgba(90,200,250,0.22)"/>
+          <stop offset="100%" stop-color="rgba(90,200,250,0.08)"/>
+        </linearGradient>
+        <!-- 青色夹子 -->
+        <linearGradient id="clip-final" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7fd8f5"/>
+          <stop offset="50%" stop-color="#3eb5e8"/>
+          <stop offset="100%" stop-color="#2980b9"/>
+        </linearGradient>
+        <!-- 金色描边 -->
+        <linearGradient id="gold-final" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#f0d090"/>
+          <stop offset="40%" stop-color="#e8c87a"/>
+          <stop offset="70%" stop-color="#c9a04e"/>
+          <stop offset="100%" stop-color="#b08828"/>
+        </linearGradient>
+        <!-- 顶部白色高光 -->
+        <linearGradient id="shine-final" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="rgba(255,255,255,0)"/>
+          <stop offset="50%" stop-color="rgba(255,255,255,0.5)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+        </linearGradient>
+        <!-- 青色辉光 -->
+        <radialGradient id="glow-final" cx="50%" cy="20%" r="40%">
+          <stop offset="0%" stop-color="rgba(90,200,250,0.35)"/>
+          <stop offset="100%" stop-color="rgba(90,200,250,0)"/>
+        </radialGradient>
+      </defs>
+
+      <!-- 圆角背景 -->
+      <rect width="1024" height="1024" rx="224" fill="url(#bg-final)"/>
+      <!-- 青色辉光层 -->
+      <rect width="1024" height="1024" rx="224" fill="url(#glow-final)"/>
+
+      <!-- ===== 毛玻璃板(金色描边) ===== -->
+      <rect x="264" y="228" width="496" height="624" rx="36"
+            fill="url(#glass-final)"
+            stroke="url(#gold-final)" stroke-width="3.5"/>
+      <!-- 顶部高光带(玻璃反光) -->
+      <rect x="284" y="248" width="456" height="44" rx="18" fill="url(#shine-final)" opacity="0.28"/>
+      <!-- 金色顶部点缀高光 -->
+      <rect x="284" y="248" width="456" height="10" rx="5" fill="rgba(240,208,144,0.2)"/>
+
+      <!-- ===== 文字线 ===== -->
+      <rect x="340" y="386" width="300" height="7" rx="3.5" fill="rgba(255,255,255,0.38)"/>
+      <rect x="340" y="422" width="360" height="7" rx="3.5" fill="rgba(255,255,255,0.24)"/>
+      <rect x="340" y="458" width="240" height="7" rx="3.5" fill="rgba(255,255,255,0.24)"/>
+      <rect x="340" y="494" width="320" height="7" rx="3.5" fill="rgba(255,255,255,0.24)"/>
+
+      <!-- ===== 青色夹子(金色描边) ===== -->
+      <rect x="416" y="186" width="192" height="80" rx="20"
+            fill="url(#clip-final)"
+            stroke="url(#gold-final)" stroke-width="2.5"/>
+      <!-- 夹子白色高光带 -->
+      <rect x="424" y="198" width="176" height="18" rx="9" fill="rgba(255,255,255,0.38)"/>
+      <!-- 夹子顶部金色细线高光 -->
+      <rect x="424" y="196" width="176" height="4" rx="2" fill="rgba(240,208,144,0.3)"/>
+      <!-- 旋钮 -->
+      <circle cx="512" cy="226" r="18" fill="#0a1a2e" opacity="0.4" stroke="url(#gold-final)" stroke-width="1.5"/>
+      <circle cx="512" cy="226" r="8" fill="rgba(127,216,245,0.65)"/>
+    </svg>
+  </div>
+  <div class="hero-label">
+    拾贴 定稿版 <span class="id">E01-Gold</span>
+  </div>
+</div>
+
+<!-- ====== 多尺寸预览(验证小尺寸是否清晰) ====== -->
+<div class="sizes-section">
+  <div class="section-title">多尺寸预览(验证小尺寸可辨识度)</div>
+  <div class="sizes-row">
+
+    <div class="size-item">
+      <svg width="128" height="128" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="s128-bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="50%" stop-color="#16213e"/><stop offset="100%" stop-color="#0a0a1a"/></linearGradient>
+          <linearGradient id="s128-glass" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="rgba(90,200,250,0.22)"/><stop offset="100%" stop-color="rgba(90,200,250,0.08)"/></linearGradient>
+          <linearGradient id="s128-clip" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#7fd8f5"/><stop offset="50%" stop-color="#3eb5e8"/><stop offset="100%" stop-color="#2980b9"/></linearGradient>
+          <linearGradient id="s128-gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f0d090"/><stop offset="50%" stop-color="#e8c87a"/><stop offset="100%" stop-color="#b08828"/></linearGradient>
+          <radialGradient id="s128-glow" cx="50%" cy="20%" r="40%"><stop offset="0%" stop-color="rgba(90,200,250,0.35)"/><stop offset="100%" stop-color="rgba(90,200,250,0)"/></radialGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="224" fill="url(#s128-bg)"/>
+        <rect width="1024" height="1024" rx="224" fill="url(#s128-glow)"/>
+        <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#s128-glass)" stroke="url(#s128-gold)" stroke-width="4"/>
+        <rect x="340" y="386" width="300" height="9" rx="4.5" fill="rgba(255,255,255,0.4)"/>
+        <rect x="340" y="424" width="360" height="9" rx="4.5" fill="rgba(255,255,255,0.25)"/>
+        <rect x="340" y="462" width="240" height="9" rx="4.5" fill="rgba(255,255,255,0.25)"/>
+        <rect x="340" y="500" width="320" height="9" rx="4.5" fill="rgba(255,255,255,0.25)"/>
+        <rect x="412" y="182" width="200" height="88" rx="22" fill="url(#s128-clip)" stroke="url(#s128-gold)" stroke-width="4"/>
+        <rect x="422" y="196" width="180" height="22" rx="11" fill="rgba(255,255,255,0.4)"/>
+        <circle cx="512" cy="226" r="22" fill="#0a1a2e" opacity="0.4" stroke="url(#s128-gold)" stroke-width="2.5"/>
+        <circle cx="512" cy="226" r="10" fill="rgba(127,216,245,0.65)"/>
+      </svg>
+      <div class="size-label">128px</div>
+    </div>
+
+    <div class="size-item">
+      <svg width="64" height="64" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="s64-bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#0a0a1a"/></linearGradient>
+          <linearGradient id="s64-glass" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="rgba(90,200,250,0.25)"/><stop offset="100%" stop-color="rgba(90,200,250,0.1)"/></linearGradient>
+          <linearGradient id="s64-clip" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#7fd8f5"/><stop offset="100%" stop-color="#2980b9"/></linearGradient>
+          <linearGradient id="s64-gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f0d090"/><stop offset="100%" stop-color="#b08828"/></linearGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="224" fill="url(#s64-bg)"/>
+        <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#s64-glass)" stroke="url(#s64-gold)" stroke-width="6"/>
+        <rect x="340" y="390" width="320" height="12" rx="6" fill="rgba(255,255,255,0.4)"/>
+        <rect x="340" y="440" width="360" height="12" rx="6" fill="rgba(255,255,255,0.28)"/>
+        <rect x="340" y="490" width="260" height="12" rx="6" fill="rgba(255,255,255,0.28)"/>
+        <rect x="408" y="178" width="208" height="92" rx="24" fill="url(#s64-clip)" stroke="url(#s64-gold)" stroke-width="6"/>
+        <rect x="420" y="194" width="184" height="26" rx="13" fill="rgba(255,255,255,0.42)"/>
+        <circle cx="512" cy="224" r="26" fill="#0a1a2e" opacity="0.4" stroke="url(#s64-gold)" stroke-width="4"/>
+      </svg>
+      <div class="size-label">64px</div>
+    </div>
+
+    <div class="size-item">
+      <svg width="32" height="32" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="s32-bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#0a0a1a"/></linearGradient>
+          <linearGradient id="s32-clip" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#7fd8f5"/><stop offset="100%" stop-color="#2980b9"/></linearGradient>
+          <linearGradient id="s32-gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f0d090"/><stop offset="100%" stop-color="#b08828"/></linearGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="224" fill="url(#s32-bg)"/>
+        <!-- 32px:简化,只保留板+夹子+金边,去掉文字线(小尺寸会糊) -->
+        <rect x="260" y="230" width="504" height="620" rx="40" fill="rgba(90,200,250,0.15)" stroke="url(#s32-gold)" stroke-width="10"/>
+        <rect x="400" y="170" width="224" height="100" rx="26" fill="url(#s32-clip)" stroke="url(#s32-gold)" stroke-width="10"/>
+        <rect x="416" y="188" width="192" height="28" rx="14" fill="rgba(255,255,255,0.45)"/>
+      </svg>
+      <div class="size-label">32px<br><span style="opacity:0.5">托盘/标题栏</span></div>
+    </div>
+
+    <div class="size-item">
+      <svg width="16" height="16" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="s16-bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#0a0a1a"/></linearGradient>
+          <linearGradient id="s16-clip" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#7fd8f5"/><stop offset="100%" stop-color="#2980b9"/></linearGradient>
+          <linearGradient id="s16-gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f0d090"/><stop offset="100%" stop-color="#b08828"/></linearGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="224" fill="url(#s16-bg)"/>
+        <!-- 16px:极简,只留板+夹子色块+金边 -->
+        <rect x="250" y="235" width="524" height="610" rx="44" fill="rgba(90,200,250,0.15)" stroke="url(#s16-gold)" stroke-width="16"/>
+        <rect x="390" y="160" width="244" height="110" rx="28" fill="url(#s16-clip)" stroke="url(#s16-gold)" stroke-width="16"/>
+      </svg>
+      <div class="size-label">16px<br><span style="opacity:0.5">favicon</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ====== 深色桌面模拟(Dock 效果) ====== -->
+<div class="dark-bg-test">
+  <div class="section-title">桌面 Dock 模拟(深色壁纸上的实际观感)</div>
+  <div class="dock-row">
+    <div class="dock-item">
+      <svg width="72" height="72" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="d-bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="50%" stop-color="#16213e"/><stop offset="100%" stop-color="#0a0a1a"/></linearGradient>
+          <linearGradient id="d-glass" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="rgba(90,200,250,0.22)"/><stop offset="100%" stop-color="rgba(90,200,250,0.08)"/></linearGradient>
+          <linearGradient id="d-clip" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#7fd8f5"/><stop offset="50%" stop-color="#3eb5e8"/><stop offset="100%" stop-color="#2980b9"/></linearGradient>
+          <linearGradient id="d-gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f0d090"/><stop offset="50%" stop-color="#e8c87a"/><stop offset="100%" stop-color="#b08828"/></linearGradient>
+          <radialGradient id="d-glow" cx="50%" cy="20%" r="40%"><stop offset="0%" stop-color="rgba(90,200,250,0.35)"/><stop offset="100%" stop-color="rgba(90,200,250,0)"/></radialGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="224" fill="url(#d-bg)"/>
+        <rect width="1024" height="1024" rx="224" fill="url(#d-glow)"/>
+        <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#d-glass)" stroke="url(#d-gold)" stroke-width="4.5"/>
+        <rect x="340" y="386" width="300" height="9" rx="4.5" fill="rgba(255,255,255,0.4)"/>
+        <rect x="340" y="424" width="360" height="9" rx="4.5" fill="rgba(255,255,255,0.25)"/>
+        <rect x="340" y="462" width="240" height="9" rx="4.5" fill="rgba(255,255,255,0.25)"/>
+        <rect x="340" y="500" width="320" height="9" rx="4.5" fill="rgba(255,255,255,0.25)"/>
+        <rect x="412" y="182" width="200" height="88" rx="22" fill="url(#d-clip)" stroke="url(#d-gold)" stroke-width="5"/>
+        <rect x="422" y="196" width="180" height="22" rx="11" fill="rgba(255,255,255,0.4)"/>
+        <circle cx="512" cy="226" r="22" fill="#0a1a2e" opacity="0.4" stroke="url(#d-gold)" stroke-width="3"/>
+        <circle cx="512" cy="226" r="10" fill="rgba(127,216,245,0.65)"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<div class="footer-note">
+  <strong>定稿说明 · <span class="g">E01-Gold</span>:</strong><br>
+  • <strong>主体</strong>:E01 精致毛玻璃(青色辉光 + 顶部高光带 + 精致夹子旋钮)<br>
+  • <strong>描边</strong>:板的边框 + 夹子的边框 + 旋钮描边,全部改为 <span class="g">金色渐变</span>(#f0d090 → #e8c87a → #b08828)<br>
+  • <strong>配色逻辑</strong>:青色为主调(板/夹子/辉光)+ 金色为点缀(描边),青金搭配 = 高级感<br>
+  • <strong>小尺寸适配</strong>:32px 去掉文字线只留板+夹子+金边;16px 极简色块,保证可辨识<br><br>
+  <strong>确认这个版本没问题的话,告诉我,我就:</strong><br>
+  ① 导出 1024×1024 高清源图 → 生成全套 icon(.icns / .ico / 32/128/128@2x .png)<br>
+  ② 替换 <code>src-tauri/icons/</code> 下的旧图标<br>
+  ③ 同步更新 <code>tauri.conf.json</code> 的 productName → 「拾贴」
+</div>
+
+</body>
+</html>

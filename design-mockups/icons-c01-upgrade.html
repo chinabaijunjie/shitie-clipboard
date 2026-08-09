@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拾贴 · C01 升级版 · 毛玻璃高级感</title>
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --card: #1c1c1e;
+    --text: #f5f5f7;
+    --text-dim: #8e8e93;
+    --accent: #5ac8fa;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(90,200,250,0.06) 0%, transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    padding: 48px 24px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .header { text-align: center; margin-bottom: 16px; }
+  .header h1 { font-size: 42px; font-weight: 700; letter-spacing: -0.5px; }
+  .header h1 .accent { color: var(--accent); }
+  .header .subtitle { color: var(--text-dim); font-size: 16px; margin-top: 4px; }
+  .compare-bar {
+    max-width: 1100px;
+    margin: 40px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 48px;
+    padding: 28px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+  .compare-bar .label {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 12px;
+  }
+  .compare-bar .arrow { font-size: 32px; color: var(--accent); opacity: 0.5; }
+  .compare-bar .icon-box { text-align: center; }
+  .compare-bar .icon-box svg {
+    width: 100px; height: 100px;
+    filter: drop-shadow(0 4px 16px rgba(0,0,0,0.5));
+    border-radius: 22px;
+  }
+
+  .group { max-width: 1100px; margin: 0 auto 56px; }
+  .group-title {
+    font-size: 14px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 1.5px;
+    margin-bottom: 20px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 24px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 32px 24px 24px;
+    text-align: center;
+    transition: all 0.35s cubic-bezier(0.4,0,0.2,1);
+    cursor: pointer;
+    position: relative;
+  }
+  .card:hover {
+    border-color: rgba(90,200,250,0.4);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(90,200,250,0.1);
+  }
+  .card .id-tag {
+    position: absolute; top: 14px; left: 16px;
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    background: rgba(90,200,250,0.12);
+    padding: 4px 10px; border-radius: 6px;
+    font-family: 'SF Mono', monospace;
+  }
+  .card .badge {
+    position: absolute; top: 14px; right: 16px;
+    font-size: 10px; font-weight: 600;
+    padding: 4px 8px; border-radius: 6px;
+    background: rgba(255,255,255,0.06); color: var(--text-dim);
+  }
+  .icon-preview {
+    width: 140px; height: 140px;
+    margin: 8px auto 22px;
+    border-radius: 28px;
+    overflow: hidden;
+  }
+  .icon-preview svg {
+    width: 100%; height: 100%; display: block;
+    filter: drop-shadow(0 6px 20px rgba(0,0,0,0.45));
+  }
+  .card .name { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .card .desc { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+  .footer-note {
+    max-width: 1100px; margin: 0 auto;
+    padding: 24px;
+    background: rgba(90,200,250,0.05);
+    border: 1px solid rgba(90,200,250,0.15);
+    border-radius: 12px;
+    font-size: 13px; color: var(--text-dim); line-height: 1.8;
+  }
+  .footer-note strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>拾<span class="accent">贴</span> · C01 升级版</h1>
+  <div class="subtitle">毛玻璃质感 ✓ + 青色基调 ✓ —— 加高级感 · 加存在感 · 加精致细节</div>
+</div>
+
+<!-- 对比条:C01 原版 → 升级方向 -->
+<div class="compare-bar">
+  <div class="icon-box">
+    <!-- C01 原版 -->
+    <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="old-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#1e3a5f"/><stop offset="50%" stop-color="#16213e"/><stop offset="100%" stop-color="#0a0a1a"/>
+        </linearGradient>
+        <linearGradient id="old-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="rgba(90,200,250,0.18)"/><stop offset="100%" stop-color="rgba(90,200,250,0.06)"/>
+        </linearGradient>
+        <linearGradient id="old-clip" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7fd8f5"/><stop offset="100%" stop-color="#2980b9"/>
+        </linearGradient>
+      </defs>
+      <rect width="1024" height="1024" rx="224" fill="url(#old-bg)"/>
+      <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#old-glass)" stroke="rgba(90,200,250,0.3)" stroke-width="2"/>
+      <rect x="340" y="380" width="280" height="6" rx="3" fill="rgba(255,255,255,0.3)"/>
+      <rect x="340" y="416" width="350" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
+      <rect x="340" y="452" width="220" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
+      <rect x="420" y="188" width="184" height="74" rx="18" fill="url(#old-clip)"/>
+      <rect x="420" y="206" width="184" height="5" rx="2.5" fill="rgba(255,255,255,0.4)"/>
+      <circle cx="512" cy="225" r="16" fill="#16213e" opacity="0.5"/>
+    </svg>
+    <div class="label">C01 原版<br><span style="opacity:0.5">偏低调</span></div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="icon-box">
+    <!-- 升级预览(取 E01 代表) -->
+    <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="new-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#1e3a5f"/><stop offset="50%" stop-color="#16213e"/><stop offset="100%" stop-color="#0a0a1a"/>
+        </linearGradient>
+        <linearGradient id="new-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="rgba(90,200,250,0.22)"/><stop offset="100%" stop-color="rgba(90,200,250,0.08)"/>
+        </linearGradient>
+        <linearGradient id="new-clip" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7fd8f5"/><stop offset="50%" stop-color="#3eb5e8"/><stop offset="100%" stop-color="#2980b9"/>
+        </linearGradient>
+        <linearGradient id="new-shine" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="rgba(255,255,255,0)"/><stop offset="50%" stop-color="rgba(255,255,255,0.5)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+        </linearGradient>
+        <radialGradient id="new-glow" cx="50%" cy="20%" r="40%">
+          <stop offset="0%" stop-color="rgba(90,200,250,0.35)"/><stop offset="100%" stop-color="rgba(90,200,250,0)"/>
+        </radialGradient>
+      </defs>
+      <rect width="1024" height="1024" rx="224" fill="url(#new-bg)"/>
+      <rect width="1024" height="1024" rx="224" fill="url(#new-glow)"/>
+      <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#new-glass)" stroke="rgba(90,200,250,0.5)" stroke-width="2.5"/>
+      <rect x="280" y="244" width="464" height="40" rx="18" fill="url(#new-shine)" opacity="0.3"/>
+      <rect x="340" y="386" width="300" height="7" rx="3.5" fill="rgba(255,255,255,0.35)"/>
+      <rect x="340" y="422" width="360" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+      <rect x="340" y="458" width="240" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+      <rect x="340" y="494" width="320" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+      <rect x="416" y="186" width="192" height="80" rx="20" fill="url(#new-clip)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+      <rect x="424" y="198" width="176" height="18" rx="9" fill="rgba(255,255,255,0.35)"/>
+      <circle cx="512" cy="226" r="18" fill="#0a1a2e" opacity="0.4"/>
+      <circle cx="512" cy="226" r="8" fill="rgba(127,216,245,0.6)"/>
+    </svg>
+    <div class="label">升级版<br><span style="color:#5ac8fa">有质感有存在感</span></div>
+  </div>
+</div>
+
+<!-- ========== 升级方案 ========== -->
+<div class="group">
+  <div class="group-title">升级方案(基于 C01 毛玻璃 · 加强质感 / 细节 / 存在感)</div>
+  <div class="grid">
+
+    <!-- E01:精致毛玻璃(高光带 + 旋钮 + 光晕) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">E01</div>
+      <div class="badge">推荐</div>
+      <div class="icon-preview">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="e01-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1e3a5f"/>
+              <stop offset="50%" stop-color="#16213e"/>
+              <stop offset="100%" stop-color="#0a0a1a"/>
+            </linearGradient>
+            <linearGradient id="e01-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.22)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0.08)"/>
+            </linearGradient>
+            <linearGradient id="e01-clip" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="50%" stop-color="#3eb5e8"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+            <linearGradient id="e01-shine" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="rgba(255,255,255,0)"/>
+              <stop offset="50%" stop-color="rgba(255,255,255,0.5)"/>
+              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+            </linearGradient>
+            <radialGradient id="e01-glow" cx="50%" cy="20%" r="40%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.35)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0)"/>
+            </radialGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#e01-bg)"/>
+          <rect width="1024" height="1024" rx="224" fill="url(#e01-glow)"/>
+          <!-- 毛玻璃板(加亮描边) -->
+          <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#e01-glass)" stroke="rgba(90,200,250,0.5)" stroke-width="2.5"/>
+          <!-- 顶部高光带(玻璃反光) -->
+          <rect x="280" y="244" width="464" height="44" rx="18" fill="url(#e01-shine)" opacity="0.3"/>
+          <!-- 文字线 -->
+          <rect x="340" y="386" width="300" height="7" rx="3.5" fill="rgba(255,255,255,0.35)"/>
+          <rect x="340" y="422" width="360" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <rect x="340" y="458" width="240" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <rect x="340" y="494" width="320" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <!-- 精致夹子(高光带 + 描边 + 旋钮) -->
+          <rect x="416" y="186" width="192" height="80" rx="20" fill="url(#e01-clip)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+          <rect x="424" y="198" width="176" height="18" rx="9" fill="rgba(255,255,255,0.35)"/>
+          <!-- 旋钮(带内圈高光) -->
+          <circle cx="512" cy="226" r="18" fill="#0a1a2e" opacity="0.4"/>
+          <circle cx="512" cy="226" r="8" fill="rgba(127,216,245,0.6)"/>
+        </svg>
+      </div>
+      <div class="name">精致毛玻璃</div>
+      <div class="desc">C01 基础 + 顶部高光带 + 夹子描边旋钮 + 青色辉光。质感最均衡</div>
+    </div>
+
+    <!-- E02:厚玻璃(强边框 + 内阴影 + 浮起纸张) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">E02</div>
+      <div class="icon-preview">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="e02-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1a2a4a"/>
+              <stop offset="100%" stop-color="#080812"/>
+            </linearGradient>
+            <linearGradient id="e02-frame" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="rgba(120,220,255,0.6)"/>
+              <stop offset="50%" stop-color="rgba(90,200,250,0.3)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0.15)"/>
+            </linearGradient>
+            <linearGradient id="e02-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="rgba(40,80,120,0.4)"/>
+              <stop offset="100%" stop-color="rgba(20,40,70,0.25)"/>
+            </linearGradient>
+            <linearGradient id="e02-clip" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="50%" stop-color="#3eb5e8"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+            <filter id="e02-shadow" x="-10%" y="-10%" width="120%" height="120%">
+              <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity="0.4"/>
+            </filter>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#e02-bg)"/>
+          <!-- 厚玻璃框(双层描边模拟厚度) -->
+          <rect x="262" y="226" width="500" height="628" rx="38" fill="none" stroke="url(#e02-frame)" stroke-width="4"/>
+          <rect x="272" y="236" width="480" height="608" rx="30" fill="url(#e02-glass)" stroke="rgba(90,200,250,0.2)" stroke-width="1.5"/>
+          <!-- 浮起的纸张(带投影) -->
+          <rect x="312" y="350" width="400" height="440" rx="14" fill="rgba(240,240,248,0.95)" filter="url(#e02-shadow)"/>
+          <rect x="352" y="400" width="250" height="7" rx="3.5" fill="#c4c8d6"/>
+          <rect x="352" y="430" width="320" height="7" rx="3.5" fill="#d0d4e0"/>
+          <rect x="352" y="460" width="190" height="7" rx="3.5" fill="#d0d4e0"/>
+          <rect x="352" y="490" width="280" height="7" rx="3.5" fill="#d0d4e0"/>
+          <!-- 夹子 -->
+          <rect x="418" y="188" width="188" height="78" rx="20" fill="url(#e02-clip)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+          <rect x="426" y="200" width="172" height="16" rx="8" fill="rgba(255,255,255,0.35)"/>
+          <circle cx="512" cy="227" r="16" fill="#0a1a2e" opacity="0.4"/>
+        </svg>
+      </div>
+      <div class="name">厚玻璃框</div>
+      <div class="desc">双层青色描边模拟玻璃厚度 + 纸张浮起投影。最有立体层次</div>
+    </div>
+
+    <!-- E03:辉光主板(整板发青光 + 强存在感) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">E03</div>
+      <div class="icon-preview">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="e03-bg" cx="50%" cy="35%" r="75%">
+              <stop offset="0%" stop-color="#15263e"/>
+              <stop offset="100%" stop-color="#08080f"/>
+            </radialGradient>
+            <linearGradient id="e03-board" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.35)"/>
+              <stop offset="60%" stop-color="rgba(50,150,210,0.2)"/>
+              <stop offset="100%" stop-color="rgba(30,100,160,0.12)"/>
+            </linearGradient>
+            <linearGradient id="e03-clip" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#a0e8ff"/>
+              <stop offset="50%" stop-color="#5ac8fa"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+            <radialGradient id="e03-aura" cx="50%" cy="45%" r="45%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.3)"/>
+              <stop offset="70%" stop-color="rgba(90,200,250,0.08)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0)"/>
+            </radialGradient>
+            <linearGradient id="e03-edge" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="rgba(160,232,255,0.8)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0.2)"/>
+            </linearGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#e03-bg)"/>
+          <!-- 整体辉光 -->
+          <rect width="1024" height="1024" rx="224" fill="url(#e03-aura)"/>
+          <!-- 发光主板 -->
+          <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#e03-board)" stroke="url(#e03-edge)" stroke-width="3"/>
+          <!-- 顶部强高光 -->
+          <rect x="284" y="248" width="456" height="50" rx="20" fill="rgba(255,255,255,0.12)"/>
+          <!-- 文字线(更亮) -->
+          <rect x="340" y="386" width="300" height="7" rx="3.5" fill="rgba(255,255,255,0.4)"/>
+          <rect x="340" y="422" width="360" height="7" rx="3.5" fill="rgba(255,255,255,0.25)"/>
+          <rect x="340" y="458" width="240" height="7" rx="3.5" fill="rgba(255,255,255,0.25)"/>
+          <rect x="340" y="494" width="320" height="7" rx="3.5" fill="rgba(255,255,255,0.25)"/>
+          <!-- 强发光夹子 -->
+          <rect x="416" y="186" width="192" height="80" rx="20" fill="url(#e03-clip)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+          <rect x="424" y="198" width="176" height="20" rx="10" fill="rgba(255,255,255,0.45)"/>
+          <circle cx="512" cy="226" r="18" fill="#0a1a2e" opacity="0.35"/>
+          <circle cx="512" cy="226" r="9" fill="rgba(160,232,255,0.7)"/>
+        </svg>
+      </div>
+      <div class="name">辉光主板</div>
+      <div class="desc">整块板发青光 + 强描边 + 高亮夹子。存在感最强,最吸睛</div>
+    </div>
+
+    <!-- E04:金边青玻璃(青金配色 · 最高级) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">E04</div>
+      <div class="icon-preview">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="e04-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#162238"/>
+              <stop offset="100%" stop-color="#080810"/>
+            </linearGradient>
+            <linearGradient id="e04-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#e8c87a"/>
+              <stop offset="50%" stop-color="#c9a04e"/>
+              <stop offset="100%" stop-color="#a07820"/>
+            </linearGradient>
+            <linearGradient id="e04-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.2)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0.07)"/>
+            </linearGradient>
+            <linearGradient id="e04-clip" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+            <radialGradient id="e04-glow" cx="50%" cy="25%" r="35%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.25)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0)"/>
+            </radialGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#e04-bg)"/>
+          <rect width="1024" height="1024" rx="224" fill="url(#e04-glow)"/>
+          <!-- 金色描边毛玻璃板 -->
+          <rect x="264" y="228" width="496" height="624" rx="36" fill="url(#e04-glass)" stroke="url(#e04-gold)" stroke-width="3.5"/>
+          <!-- 顶部金色高光 -->
+          <rect x="280" y="246" width="464" height="36" rx="16" fill="rgba(232,200,122,0.15)"/>
+          <!-- 文字线 -->
+          <rect x="340" y="386" width="300" height="7" rx="3.5" fill="rgba(255,255,255,0.35)"/>
+          <rect x="340" y="422" width="360" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <rect x="340" y="458" width="240" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <rect x="340" y="494" width="320" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <!-- 金边青夹子 -->
+          <rect x="416" y="186" width="192" height="80" rx="20" fill="url(#e04-clip)" stroke="url(#e04-gold)" stroke-width="2.5"/>
+          <rect x="424" y="198" width="176" height="16" rx="8" fill="rgba(255,255,255,0.35)"/>
+          <circle cx="512" cy="226" r="17" fill="#0a1a2e" opacity="0.4" stroke="url(#e04-gold)" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="name">金边青玻璃</div>
+      <div class="desc">青色玻璃 + 金色描边。青金配色最高级,但仍是青色为主调</div>
+    </div>
+
+    <!-- E05:深空青(极暗背景 + 夹板对比最强) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">E05</div>
+      <div class="icon-preview">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="e05-bg" cx="50%" cy="50%" r="70%">
+              <stop offset="0%" stop-color="#101822"/>
+              <stop offset="100%" stop-color="#040408"/>
+            </radialGradient>
+            <linearGradient id="e05-board" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1e3850"/>
+              <stop offset="100%" stop-color="#0c1a28"/>
+            </linearGradient>
+            <linearGradient id="e05-clip" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="50%" stop-color="#3eb5e8"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+            <linearGradient id="e05-edge" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="rgba(127,216,245,0.7)"/>
+              <stop offset="100%" stop-color="rgba(127,216,245,0.15)"/>
+            </linearGradient>
+            <radialGradient id="e05-glow" cx="50%" cy="45%" r="40%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.18)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0)"/>
+            </radialGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#e05-bg)"/>
+          <rect width="1024" height="1024" rx="224" fill="url(#e05-glow)"/>
+          <!-- 深色毛玻璃板 -->
+          <rect x="262" y="226" width="500" height="628" rx="38" fill="url(#e05-board)" stroke="url(#e05-edge)" stroke-width="3"/>
+          <!-- 顶部高光 -->
+          <rect x="282" y="248" width="460" height="42" rx="18" fill="rgba(127,216,245,0.08)"/>
+          <!-- 纸(略冷白) -->
+          <rect x="310" y="348" width="404" height="444" rx="12" fill="rgba(238,242,246,0.9)"/>
+          <rect x="352" y="398" width="250" height="7" rx="3.5" fill="#b8c4d0"/>
+          <rect x="352" y="430" width="320" height="7" rx="3.5" fill="#c4ced8"/>
+          <rect x="352" y="462" width="190" height="7" rx="3.5" fill="#c4ced8"/>
+          <rect x="352" y="494" width="280" height="7" rx="3.5" fill="#c4ced8"/>
+          <!-- 高亮夹子(深空背景下最跳) -->
+          <rect x="416" y="186" width="192" height="80" rx="20" fill="url(#e05-clip)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+          <rect x="424" y="198" width="176" height="18" rx="9" fill="rgba(255,255,255,0.4)"/>
+          <circle cx="512" cy="226" r="17" fill="#040408" opacity="0.5"/>
+          <circle cx="512" cy="226" r="8" fill="rgba(127,216,245,0.5)"/>
+        </svg>
+      </div>
+      <div class="name">深空青</div>
+      <div class="desc">极暗背景 + 冷白纸 + 青夹子,对比度最强,高级冷峻</div>
+    </div>
+
+    <!-- E06:层叠毛玻璃(C01质感 + B01层叠) -->
+    <div class="card" onclick="this.style.borderColor='#5ac8fa'">
+      <div class="id-tag">E06</div>
+      <div class="icon-preview">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="e06-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1e3a5f"/>
+              <stop offset="100%" stop-color="#0a0a1a"/>
+            </linearGradient>
+            <linearGradient id="e06-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.2)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0.07)"/>
+            </linearGradient>
+            <linearGradient id="e06-clip" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#7fd8f5"/>
+              <stop offset="50%" stop-color="#3eb5e8"/>
+              <stop offset="100%" stop-color="#2980b9"/>
+            </linearGradient>
+            <radialGradient id="e06-glow" cx="50%" cy="30%" r="40%">
+              <stop offset="0%" stop-color="rgba(90,200,250,0.25)"/>
+              <stop offset="100%" stop-color="rgba(90,200,250,0)"/>
+            </radialGradient>
+          </defs>
+          <rect width="1024" height="1024" rx="224" fill="url(#e06-bg)"/>
+          <rect width="1024" height="1024" rx="224" fill="url(#e06-glow)"/>
+          <!-- 后方倾斜卡片(层叠) -->
+          <rect x="350" y="380" width="380" height="460" rx="20" fill="rgba(90,200,250,0.08)" stroke="rgba(90,200,250,0.2)" stroke-width="2" transform="rotate(7 540 610)"/>
+          <rect x="320" y="360" width="380" height="470" rx="20" fill="rgba(90,200,250,0.1)" stroke="rgba(90,200,250,0.25)" stroke-width="2" transform="rotate(-4 510 595)"/>
+          <!-- 主毛玻璃板 -->
+          <rect x="262" y="228" width="500" height="624" rx="36" fill="url(#e06-glass)" stroke="rgba(90,200,250,0.5)" stroke-width="2.5"/>
+          <!-- 顶部高光 -->
+          <rect x="280" y="246" width="464" height="40" rx="18" fill="rgba(255,255,255,0.08)"/>
+          <!-- 文字线 -->
+          <rect x="340" y="386" width="300" height="7" rx="3.5" fill="rgba(255,255,255,0.35)"/>
+          <rect x="340" y="422" width="360" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <rect x="340" y="458" width="240" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <rect x="340" y="494" width="320" height="7" rx="3.5" fill="rgba(255,255,255,0.22)"/>
+          <!-- 精致夹子 -->
+          <rect x="416" y="186" width="192" height="80" rx="20" fill="url(#e06-clip)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+          <rect x="424" y="198" width="176" height="18" rx="9" fill="rgba(255,255,255,0.35)"/>
+          <circle cx="512" cy="226" r="18" fill="#0a1a2e" opacity="0.4"/>
+          <circle cx="512" cy="226" r="8" fill="rgba(127,216,245,0.6)"/>
+        </svg>
+      </div>
+      <div class="name">层叠毛玻璃</div>
+      <div class="desc">E01 质感 + 后方倾斜卡片层叠,质感 + 历史感双修</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="footer-note">
+  <strong>升级要点(对比 C01 原版):</strong><br>
+  • <strong>夹子</strong>:纯渐变 → 渐变 + 白色高光带 + 描边 + 旋钮(精致感 ↑)<br>
+  • <strong>板</strong>:均质半透明 → 加顶部高光带 / 强描边 / 厚度感(层次 ↑)<br>
+  • <strong>背景</strong>:加青色辉光 / 光晕,让图标有「发光存在感」<br>
+  • <strong>文字线</strong>:3 条 → 4 条,且亮度提升(信息量 ↑)<br><br>
+  <strong>各方案性格:</strong><br>
+  • <strong>E01</strong> — 最均衡,质感适度不夸张(推荐首选)<br>
+  • <strong>E02</strong> — 厚玻璃框 + 浮起纸张,立体感最强<br>
+  • <strong>E03</strong> — 整板发光,存在感/吸睛度最强<br>
+  • <strong>E04</strong> — 青金配色,最高级奢华感<br>
+  • <strong>E05</strong> — 极暗深空,对比度最强,冷峻高级<br>
+  • <strong>E06</strong> — E01 + 层叠卡片,质感 + 历史感双修
+</div>
+
+</body>
+</html>
