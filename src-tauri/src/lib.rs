@@ -32,6 +32,12 @@ use tauri::{Manager, Window};
 
 /// 应用全局状态。
 ///
+/// 用户主动退出标志(托盘菜单「退出拾贴」置 true)。
+///
+/// `app.exit(0)` 会触发 `RunEvent::ExitRequested`,而 M3 的常驻逻辑会 `prevent_exit()` 拦截。
+/// 用此标志区分:用户主动退出(放行)vs 窗口关闭触发的退出请求(拦截常驻)。
+static USER_REQUESTED_EXIT: AtomicBool = AtomicBool::new(false);
+
 /// 持有:
 /// - 主 DB 连接(给 command 读列表/回填用,Mutex 包,command handler 短时持锁)
 /// - 剪贴板监听句柄(drop 即停止监听)
@@ -159,7 +165,11 @@ pub fn run() {
                     .show_menu_on_left_click(false)
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "show" => window_control::show_main_window(app),
-                        "quit" => app.exit(0),
+                        "quit" => {
+                            // 置标志位:让 ExitRequested 放行,不被 prevent_exit 拦截
+                            USER_REQUESTED_EXIT.store(true, Ordering::SeqCst);
+                            app.exit(0);
+                        }
                         _ => {}
                     })
                     .on_tray_icon_event(|tray, event| {
@@ -261,9 +271,15 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
             // M3:拦截退出请求 → 保持进程常驻(末窗口关闭不应退出 app)
-            // 退出只能从托盘菜单「退出」触发(app.exit(0) 绕过此拦截)
+            // 但用户从托盘菜单「退出拾贴」时放行(USER_REQUESTED_EXIT 标志位)
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
+                if USER_REQUESTED_EXIT.load(Ordering::SeqCst) {
+                    // 用户主动退出,放行
+                    USER_REQUESTED_EXIT.store(false, Ordering::SeqCst);
+                } else {
+                    // 窗口关闭触发的退出请求,拦截 → 保持常驻
+                    api.prevent_exit();
+                }
             }
         });
 }
