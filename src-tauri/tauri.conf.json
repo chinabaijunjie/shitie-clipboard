@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Clipboard Manager",
+  "productName": "拾贴",
   "version": "1.0.0",
   "identifier": "com.example.clipboard-manager",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Clipboard Manager",
+        "title": "拾贴",
         "width": 600,
         "height": 600,
         "resizable": false,

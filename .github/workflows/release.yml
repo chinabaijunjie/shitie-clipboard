@@ -1,9 +1,9 @@
 # Release CI — push tag v* 自动跨平台打包,上传到 GitHub Release
 #
 # 产物:
-#   macOS arm64:  Clipboard Manager_<version>_aarch64.dmg
-#   macOS x86_64: Clipboard Manager_<version>_x64.dmg
-#   Windows:      Clipboard Manager_<version>_x64-setup.exe + .msi
+#   macOS arm64:  拾贴_<version>_aarch64.dmg
+#   macOS x86_64: 拾贴_<version>_x64.dmg
+#   Windows:      拾贴_<version>_x64-setup.exe + .msi
 #
 # 未签名:macOS 用户需「系统设置→隐私与安全性」手动放行,
 #         Windows 弹 SmartScreen 警告点「仍要运行」。
@@ -72,7 +72,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Clipboard Manager ${{ github.ref_name }}'
+          releaseName: '拾贴 ${{ github.ref_name }}'
           releaseBody: 'See the assets to download and install.'
           releaseDraft: true
           prerelease: false

@@ -15,7 +15,7 @@ status: ready-to-use
 **复制以下整段**到新窗口:
 
 ```
-继续 Clipboard Manager 工作。
+继续拾贴工作。
 
 ## 当前状态 & 下次目标
 

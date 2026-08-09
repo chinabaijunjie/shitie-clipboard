@@ -8,7 +8,7 @@ status: active
 
 # 全局 TODO
 
-> 本工程是 Clipboard Manager(轻量常驻的剪贴板历史管理桌面应用),
+> 本工程是拾贴(轻量常驻的剪贴板历史管理桌面应用),
 > 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3/M4(A+B+C+UI)+ 多主题切换 + UI 增强迭代 已完成。
 
 ## 🎯 下次目标

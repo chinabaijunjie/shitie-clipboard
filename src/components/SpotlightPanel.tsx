@@ -219,7 +219,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
           data-tauri-drag-region
           className="text-xs font-semibold tracking-tightish select-none text-foreground"
         >
-          Clipboard Manager
+          拾贴
         </span>
         <div className="flex items-center gap-1.5">
           <button

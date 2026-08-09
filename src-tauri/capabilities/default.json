@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "默认权限 — Clipboard Manager 主窗口所需能力",
+  "description": "默认权限 — 拾贴主窗口所需能力",
   "windows": ["main"],
   "permissions": [
     "core:default",

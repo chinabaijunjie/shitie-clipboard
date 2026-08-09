@@ -1,4 +1,4 @@
-# Clipboard Manager — 剪贴板历史管理工具
+# 拾贴 — 剪贴板历史管理工具
 
 > 本文件是 **规则手册 + 知识库入口**。
 >
@@ -7,7 +7,7 @@
 
 ## 项目简介
 
-**Clipboard Manager** 是轻量常驻的剪贴板历史管理桌面应用。
+**拾贴** 是轻量常驻的剪贴板历史管理桌面应用。
 
 **技术栈**：Tauri 2.x(Rust) + React 18 + TypeScript + Tailwind CSS + shadcn/ui
 
