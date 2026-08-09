@@ -77,6 +77,9 @@ pub struct ClipboardItem {
     pub title: String,
     /// 内容类型
     pub content_kind: ContentKind,
+    /// 内容子类型("link" / "markdown" / None)。仅 text/rich 类型可能有值。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_subtype: Option<String>,
     /// 图片缩略图绝对路径(仅 image/mixed 类型有,前端用 convertFileSrc 显示)。
     /// None = 非图片或无缩略图。
     ///
@@ -129,9 +132,9 @@ pub struct StorageByKind {
     pub file: i64,
     /// 混合类型
     pub mixed: i64,
-    /// 链接(预留 — 后期智能识别,当前始终 0)
+    /// 链接(text/rich 中识别为 link 的子类型)
     pub link: i64,
-    /// Markdown(预留 — 后期智能识别,当前始终 0)
+    /// Markdown(text/rich 中识别为 markdown 的子类型)
     pub markdown: i64,
 }
 

@@ -16,6 +16,7 @@
 //! 本模块代码平台无关,M3 加 Windows 时此处零改动。
 
 pub mod capture;
+pub mod classify;
 pub mod filter;
 pub mod handler;
 pub mod image_store;

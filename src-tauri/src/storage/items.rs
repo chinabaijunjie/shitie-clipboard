@@ -14,6 +14,7 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::clipboard::classify::{detect_subtype, ContentSubtype};
 use crate::clipboard::types::RelPath;
 use crate::error::AppError;
 use crate::models::{truncate_title, ClipboardItem, ContentKind, StorageByKind};
@@ -80,11 +81,13 @@ pub fn insert_or_update(
         }
         None => {
             // 不存在:INSERT items(含 search_text,触发器自动索引 FTS)
+            let subtype = detect_subtype(text);
+            let subtype_str = if subtype.is_some() { Some(subtype.as_db_str()) } else { None };
             conn.execute(
                 "INSERT INTO clipboard_items \
-                 (first_copied_at, last_copied_at, copy_count, title, content_kind, search_text) \
-                 VALUES (?1, ?2, 1, ?3, ?4, ?5)",
-                params![now, now, title, ContentKind::Text.as_db_str(), &search_text],
+                 (first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, search_text) \
+                 VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6)",
+                params![now, now, title, ContentKind::Text.as_db_str(), subtype_str, &search_text],
             )
             .map_err(|e| AppError::internal(format!("INSERT items 失败: {e}")))?;
             let new_id = conn.last_insert_rowid();
@@ -238,11 +241,26 @@ pub fn insert_or_update_multi(
             id
         }
         None => {
+            // 内容子类型识别:只对 text/rich 类型识别 link/markdown
+            let subtype = match kind {
+                ContentKind::Text | ContentKind::Rich => {
+                    match plain_text {
+                        Some(bytes) => {
+                            let text = String::from_utf8_lossy(bytes);
+                            detect_subtype(&text)
+                        }
+                        None => ContentSubtype::None,
+                    }
+                }
+                _ => ContentSubtype::None,
+            };
+            let subtype_str = if subtype.is_some() { Some(subtype.as_db_str()) } else { None };
+
             tx.execute(
                 "INSERT INTO clipboard_items \
-                 (first_copied_at, last_copied_at, copy_count, title, content_kind, search_text) \
-                 VALUES (?1, ?2, 1, ?3, ?4, ?5)",
-                params![now, now, &title, kind.as_db_str(), &search_text],
+                 (first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, search_text) \
+                 VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6)",
+                params![now, now, &title, kind.as_db_str(), subtype_str, &search_text],
             )
             .map_err(|e| AppError::internal(format!("INSERT items 失败: {e}")))?;
             let new_id = tx.last_insert_rowid();
@@ -266,7 +284,7 @@ pub fn insert_or_update_multi(
 pub fn get_item(conn: &Connection, id: i64, images_dir: &Path) -> Result<ClipboardItem, AppError> {
     let mut item = conn
         .query_row(
-            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind \
+            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
              FROM clipboard_items WHERE id = ?1",
             params![id],
             row_to_item,
@@ -287,7 +305,7 @@ pub fn get_item(conn: &Connection, id: i64, images_dir: &Path) -> Result<Clipboa
 pub fn list(conn: &Connection, limit: i64, images_dir: &Path) -> Result<Vec<ClipboardItem>, AppError> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind \
+            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
              FROM clipboard_items ORDER BY last_copied_at DESC LIMIT ?1",
         )
         .map_err(|e| AppError::internal(format!("prepare list 失败: {e}")))?;
@@ -392,38 +410,46 @@ pub fn delete(conn: &Connection, id: i64, images_dir: &Path) -> Result<(), AppEr
     Ok(())
 }
 
-/// 按 contentKind 分组统计条数。
+/// 按 contentKind + content_subtype 分组统计条数。
 ///
-/// 返回 HashMap<String, i64>(key = "text"/"rich"/"image"/"file"/"mixed")。
-pub fn count_by_kind(conn: &Connection) -> Result<HashMap<String, i64>, AppError> {
+/// 返回 HashMap<(kind, subtype), i64>(key = ("text", Some("link")) / ("image", None) 等)。
+pub fn count_by_kind(conn: &Connection) -> Result<HashMap<(String, Option<String>), i64>, AppError> {
     let mut map = HashMap::new();
     let mut stmt = conn
-        .prepare("SELECT content_kind, COUNT(*) FROM clipboard_items GROUP BY content_kind")
+        .prepare("SELECT content_kind, content_subtype, COUNT(*) FROM clipboard_items GROUP BY content_kind, content_subtype")
         .map_err(|e| AppError::internal(format!("prepare count_by_kind 失败: {e}")))?;
     let rows = stmt
         .query_map([], |r| {
             let kind: String = r.get(0)?;
-            let count: i64 = r.get(1)?;
-            Ok((kind, count))
+            let subtype: Option<String> = r.get(1)?;
+            let count: i64 = r.get(2)?;
+            Ok((kind, subtype, count))
         })
         .map_err(|e| AppError::internal(format!("query count_by_kind 失败: {e}")))?;
     for row in rows.filter_map(Result::ok) {
-        map.insert(row.0, row.1);
+        map.insert((row.0, row.1), row.2);
     }
     Ok(map)
 }
 
-/// 把 count_by_kind 的 HashMap 转成 StorageByKind(含预留字段归零)。
-pub fn storage_by_kind_from_map(map: &HashMap<String, i64>) -> StorageByKind {
+/// 把 count_by_kind 的 HashMap 转成 StorageByKind。
+///
+/// link / markdown 从 text+rich 里拆出来(subtype='link'/'markdown' 的不计入 text/rich)。
+pub fn storage_by_kind_from_map(map: &HashMap<(String, Option<String>), i64>) -> StorageByKind {
+    let get = |kind: &str, subtype: Option<&str>| -> i64 {
+        *map.get(&(kind.to_string(), subtype.map(|s| s.to_string()))).unwrap_or(&0)
+    };
+
     StorageByKind {
-        text: *map.get("text").unwrap_or(&0),
-        rich: *map.get("rich").unwrap_or(&0),
-        image: *map.get("image").unwrap_or(&0),
-        file: *map.get("file").unwrap_or(&0),
-        mixed: *map.get("mixed").unwrap_or(&0),
-        // 预留:当前不做智能识别
-        link: 0,
-        markdown: 0,
+        // text:无 subtype 或 subtype=None 的 text 类型
+        text: get("text", None),
+        rich: get("rich", None),
+        image: get("image", None),
+        file: get("file", None),
+        mixed: get("mixed", None),
+        // 有 subtype 的(text/rich 里的 link/markdown)
+        link: get("text", Some("link")) + get("rich", Some("link")),
+        markdown: get("text", Some("markdown")) + get("rich", Some("markdown")),
     }
 }
 
@@ -595,6 +621,7 @@ pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clipboard
         copy_count: row.get(3)?,
         title: row.get(4)?,
         content_kind: ContentKind::from_db_str(row.get::<_, String>(5)?.as_str()),
+        content_subtype: row.get::<_, Option<String>>(6)?,
         thumb_path: None,
     })
 }
@@ -1167,11 +1194,12 @@ mod tests {
         let conn = db();
         let dir = test_images_dir();
 
-        // 插入 3 条 text
+        // 插入 2 条纯文本
         insert_or_update(&conn, "text1", &dir).unwrap();
         insert_or_update(&conn, "text2", &dir).unwrap();
-        insert_or_update(&conn, "text3", &dir).unwrap();
-        // 插入 1 条 file(用 multi + file-url)
+        // 插入 1 条链接(会被识别为 text+link)
+        insert_or_update(&conn, "https://github.com", &dir).unwrap();
+        // 插入 1 条 file
         let file_url = b"file:///tmp/test.pdf".to_vec();
         insert_or_update_multi(
             &conn,
@@ -1187,9 +1215,12 @@ mod tests {
         .unwrap();
 
         let map = count_by_kind(&conn).unwrap();
-        assert_eq!(*map.get("text").unwrap_or(&0), 3);
-        assert_eq!(*map.get("file").unwrap_or(&0), 1);
-        assert_eq!(*map.get("image").unwrap_or(&0), 0);
+        // text 无 subtype:2 条
+        assert_eq!(*map.get(&("text".to_string(), None)).unwrap_or(&0), 2);
+        // text + link:1 条
+        assert_eq!(*map.get(&("text".to_string(), Some("link".to_string()))).unwrap_or(&0), 1);
+        // file:1 条
+        assert_eq!(*map.get(&("file".to_string(), None)).unwrap_or(&0), 1);
     }
 
     #[test]
@@ -1200,18 +1231,20 @@ mod tests {
     }
 
     #[test]
-    fn storage_by_kind_from_map_fills_defaults() {
+    fn storage_by_kind_splits_subtypes() {
         let mut map = HashMap::new();
-        map.insert("text".to_string(), 5);
-        map.insert("image".to_string(), 2);
+        map.insert(("text".to_string(), None), 5);
+        map.insert(("text".to_string(), Some("link".to_string())), 3);
+        map.insert(("text".to_string(), Some("markdown".to_string())), 2);
+        map.insert(("rich".to_string(), Some("link".to_string())), 1);
+        map.insert(("image".to_string(), None), 4);
+
         let bk = storage_by_kind_from_map(&map);
-        assert_eq!(bk.text, 5);
-        assert_eq!(bk.image, 2);
-        assert_eq!(bk.rich, 0, "缺失的 kind 应为 0");
-        assert_eq!(bk.file, 0);
-        assert_eq!(bk.mixed, 0);
-        assert_eq!(bk.link, 0, "预留字段应为 0");
-        assert_eq!(bk.markdown, 0, "预留字段应为 0");
+        assert_eq!(bk.text, 5, "纯 text(无 subtype)");
+        assert_eq!(bk.link, 4, "text+rich 的 link 合计: 3+1");
+        assert_eq!(bk.markdown, 2, "text 的 markdown");
+        assert_eq!(bk.image, 4);
+        assert_eq!(bk.rich, 0, "无纯 rich(有 link 的被拆走了)");
     }
 
     #[test]

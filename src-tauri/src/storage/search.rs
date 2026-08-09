@@ -146,7 +146,7 @@ fn search_by_fts(conn: &Connection, query: &str, limit: i64) -> Result<Vec<Clipb
 
     let mut stmt = conn
         .prepare(
-            "SELECT i.id, i.first_copied_at, i.last_copied_at, i.copy_count, i.title, i.content_kind \
+            "SELECT i.id, i.first_copied_at, i.last_copied_at, i.copy_count, i.title, i.content_kind, i.content_subtype \
              FROM clipboard_fts \
              JOIN clipboard_items i ON i.id = clipboard_fts.rowid \
              WHERE clipboard_fts MATCH ?1 \
@@ -167,7 +167,7 @@ fn search_by_like(conn: &Connection, ch: &str, limit: i64) -> Result<Vec<Clipboa
     let pattern = format!("%{ch}%");
     let mut stmt = conn
         .prepare(
-            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind \
+            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
              FROM clipboard_items \
              WHERE search_text LIKE ?1 \
              ORDER BY last_copied_at DESC \

@@ -20,6 +20,8 @@ export const ClipboardItemSchema = z.object({
   copyCount: z.number(),
   title: z.string(),
   contentKind: z.enum(['text', 'rich', 'image', 'file', 'mixed']),
+  // 内容子类型(link/markdown,仅 text/rich 可能有值)。可选。
+  contentSubtype: z.enum(['link', 'markdown']).nullable().optional(),
   // 图片缩略图绝对路径(仅 image/mixed 有,前端 convertFileSrc 转 asset URL)。可选。
   thumbPath: z.string().nullable().optional(),
 })
@@ -39,6 +41,8 @@ export interface ClipboardItem {
   readonly title: string
   /** 内容类型 */
   readonly contentKind: ContentKind
+  /** 内容子类型(link/markdown,仅 text/rich 可能有值) */
+  readonly contentSubtype?: 'link' | 'markdown' | null
   /** 图片缩略图绝对路径(仅 image/mixed 有,前端 convertFileSrc 转 asset URL) */
   readonly thumbPath?: string | null
 }
@@ -54,9 +58,9 @@ export interface StorageByKind {
   readonly image: number
   readonly file: number
   readonly mixed: number
-  /** 预留:链接(后期智能识别,当前始终 0) */
+  /** 链接(text/rich 中识别为 link 的子类型) */
   readonly link: number
-  /** 预留:Markdown(后期智能识别,当前始终 0) */
+  /** Markdown(text/rich 中识别为 markdown 的子类型) */
   readonly markdown: number
 }
 

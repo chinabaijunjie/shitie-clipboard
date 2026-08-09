@@ -97,9 +97,9 @@ export function StorageStatsPanel({
           <StatCard icon={ImageIcon} label="图片" count={byKind.image} />
           <StatCard icon={FileText} label="文件" count={byKind.file} />
           <StatCard icon={Layers} label="混合" count={byKind.mixed} />
-          {/* 预留位:半透明 */}
-          <StatCard icon={Link2} label="链接" count={byKind.link} reserved />
-          <StatCard icon={FileCode} label="Markdown" count={byKind.markdown} reserved />
+          {/* 链接 + Markdown(写入时智能识别) */}
+          <StatCard icon={Link2} label="链接" count={byKind.link} />
+          <StatCard icon={FileCode} label="Markdown" count={byKind.markdown} />
         </div>
       )}
 
