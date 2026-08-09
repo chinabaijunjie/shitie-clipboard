@@ -338,10 +338,10 @@ mod tests {
     #[test]
     fn classify_captures_windows_plain_text() {
         // Windows 记事本复制:Unicode Text Format
-        let formats = utis(&["Unicode Text Format"]);
+        let formats = utis(&["CF_UNICODETEXT"]);
         match classify_formats(&formats) {
             CaptureDecision::Capture(utis) => {
-                assert_eq!(utis, vec!["Unicode Text Format".to_string()]);
+                assert_eq!(utis, vec!["CF_UNICODETEXT".to_string()]);
             }
             _ => panic!("Windows 纯文本应被捕获"),
         }
@@ -350,10 +350,10 @@ mod tests {
     #[test]
     fn classify_captures_windows_browser_copy() {
         // Windows 浏览器复制:text + html
-        let formats = utis(&["Unicode Text Format", "HTML Format"]);
+        let formats = utis(&["CF_UNICODETEXT", "HTML Format"]);
         match classify_formats(&formats) {
             CaptureDecision::Capture(utis) => {
-                assert!(utis.contains(&"Unicode Text Format".to_string()));
+                assert!(utis.contains(&"CF_UNICODETEXT".to_string()));
                 assert!(utis.contains(&"HTML Format".to_string()));
             }
             _ => panic!("Windows 浏览器复制应被捕获"),
@@ -363,7 +363,7 @@ mod tests {
     #[test]
     fn kind_windows_plain_text() {
         assert_eq!(
-            classify_content_kind(&utis(&["Unicode Text Format"])),
+            classify_content_kind(&utis(&["CF_UNICODETEXT"])),
             ContentKind::Text
         );
     }

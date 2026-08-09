@@ -28,21 +28,25 @@ pub const UTI_TIFF: &str = "public.tiff";
 pub const UTI_FILE_URL: &str = "public.file-url";
 
 // ============================================================
-// Windows 剪贴板格式名(Win32 注册格式名,与 macOS UTI 完全不同)
+// Windows 剪贴板格式名(Win32 格式常量名,与 macOS UTI 完全不同)
 // ============================================================
 
-/// Windows 纯文本(CF_UNICODETEXT)。
-pub const WIN_TEXT: &str = "Unicode Text Format";
-/// Windows 旧式文本(CF_TEXT / OEM_TEXT)。
-pub const WIN_TEXT_ANSI: &str = "Text Format";
-/// Windows 富文本(RTF)。
+/// Windows Unicode 文本(CF_UNICODETEXT,记事本/浏览器纯文本复制的主要格式)。
+pub const WIN_TEXT: &str = "CF_UNICODETEXT";
+/// Windows ANSI 文本(CF_TEXT,旧式 ANSI 文本)。
+pub const WIN_TEXT_ANSI: &str = "CF_TEXT";
+/// Windows OEM 文本(CF_OEMTEXT,DOS 时代格式,通常和 CF_TEXT 一起出现)。
+pub const WIN_TEXT_OEM: &str = "CF_OEMTEXT";
+/// Windows 富文本(Rich Text Format,Word/WPS 等复制时出现)。
 pub const WIN_RTF: &str = "Rich Text Format";
-/// Windows HTML。
+/// Windows HTML(HTML Format,浏览器复制时出现)。
 pub const WIN_HTML: &str = "HTML Format";
-/// Windows PNG。
+/// Windows PNG(PNG,截图工具复制时出现)。
 pub const WIN_PNG: &str = "PNG";
-/// Windows DIB(设备无关位图,截图常见)。
+/// Windows DIB(CF_DIB,设备无关位图,截图最常见的位图格式)。
 pub const WIN_DIB: &str = "CF_DIB";
+/// Windows 文件列表(CF_HDROP,文件管理器复制文件时出现)。
+pub const WIN_HDROP: &str = "CF_HDROP";
 
 // ============================================================
 // 白名单(照搬 Maccy supportedTypes + Windows 格式名)
@@ -50,7 +54,7 @@ pub const WIN_DIB: &str = "CF_DIB";
 
 /// 应捕获的 UTI/格式名集合。不在白名单里的格式直接忽略。
 ///
-/// macOS 用 UTI(public.*),Windows 用 Win32 注册格式名(如 "Unicode Text Format")。
+/// macOS 用 UTI(public.*),Windows 用 Win32 格式常量名(如 "CF_UNICODETEXT")。
 /// 两套格式名完全不同,必须都列入白名单。
 pub const WHITELIST_UTIS: &[&str] = &[
     // macOS UTI
@@ -61,12 +65,14 @@ pub const WHITELIST_UTIS: &[&str] = &[
     UTI_TIFF,
     UTI_FILE_URL,
     // Windows 格式名
-    WIN_TEXT,
-    WIN_TEXT_ANSI,
-    WIN_RTF,
-    WIN_HTML,
-    WIN_PNG,
-    WIN_DIB,
+    WIN_TEXT,       // CF_UNICODETEXT
+    WIN_TEXT_ANSI,  // CF_TEXT
+    WIN_TEXT_OEM,   // CF_OEMTEXT
+    WIN_RTF,        // Rich Text Format
+    WIN_HTML,       // HTML Format
+    WIN_PNG,        // PNG
+    WIN_DIB,        // CF_DIB
+    WIN_HDROP,      // CF_HDROP(文件复制)
 ];
 
 // ============================================================
@@ -136,7 +142,7 @@ pub fn is_whitelisted(uti: &str) -> bool {
 
 /// 判断格式名是否为纯文本(macOS + Windows)。
 pub fn is_text(uti: &str) -> bool {
-    uti == UTI_PLAIN_TEXT || uti == WIN_TEXT || uti == WIN_TEXT_ANSI
+    uti == UTI_PLAIN_TEXT || uti == WIN_TEXT || uti == WIN_TEXT_ANSI || uti == WIN_TEXT_OEM
 }
 
 /// 判断格式名是否为富文本/HTML(macOS + Windows)。
@@ -149,9 +155,9 @@ pub fn is_image(uti: &str) -> bool {
     uti == UTI_PNG || uti == UTI_TIFF || uti == WIN_PNG || uti == WIN_DIB
 }
 
-/// 判断格式名是否为文件 URL(目前仅 macOS)。
+/// 判断格式名是否为文件(macOS file-url + Windows CF_HDROP)。
 pub fn is_file_url(uti: &str) -> bool {
-    uti == UTI_FILE_URL
+    uti == UTI_FILE_URL || uti == WIN_HDROP
 }
 
 // ============================================================
@@ -176,10 +182,11 @@ pub fn uti_to_content_format(uti: &str) -> Option<ContentFormat> {
         UTI_PNG | UTI_TIFF => Some(ContentFormat::Image),
         UTI_FILE_URL => Some(ContentFormat::Files),
         // Windows 格式名
-        WIN_TEXT | WIN_TEXT_ANSI => Some(ContentFormat::Text),
+        WIN_TEXT | WIN_TEXT_ANSI | WIN_TEXT_OEM => Some(ContentFormat::Text),
         WIN_RTF => Some(ContentFormat::Rtf),
         WIN_HTML => Some(ContentFormat::Html),
         WIN_PNG | WIN_DIB => Some(ContentFormat::Image),
+        WIN_HDROP => Some(ContentFormat::Files),
         // 非白名单 UTI 返回 None(不读)
         _ => None,
     }
@@ -267,14 +274,14 @@ mod tests {
 
     #[test]
     fn uti_helpers_recognize_windows_formats() {
-        assert!(is_text("Unicode Text Format"));
-        assert!(is_text("Text Format"));
+        assert!(is_text("CF_UNICODETEXT"));
+        assert!(is_text("CF_TEXT"));
         assert!(is_rich("Rich Text Format"));
         assert!(is_rich("HTML Format"));
         assert!(is_image("PNG"));
         assert!(is_image("CF_DIB"));
         assert!(!is_text("PNG"));
-        assert!(!is_image("Unicode Text Format"));
+        assert!(!is_image("CF_UNICODETEXT"));
     }
 
     #[test]
