@@ -15,8 +15,8 @@ use rusqlite::Connection;
 use tauri::State;
 
 use crate::error::{codes, AppError};
-use crate::models::ClipboardItem;
-use crate::storage::items;
+use crate::models::{ClipboardItem, StorageStats};
+use crate::storage::{cleanup, items};
 
 /// 列表默认条数上限(前端不传 limit 时)。
 const DEFAULT_LIST_LIMIT: i64 = 50;
@@ -294,6 +294,30 @@ pub fn copy_back(
         )
     })?;
     copy_back_with_conn(&conn, &clipboard, id, state.images_dir())
+}
+
+/// 存储统计(设置面板「存储」模块用)。
+#[tauri::command]
+pub fn get_storage_stats(state: State<'_, crate::AppState>) -> Result<StorageStats, AppError> {
+    let conn = state.db();
+    let kind_map = items::count_by_kind(&conn)?;
+    let by_kind = items::storage_by_kind_from_map(&kind_map);
+    let total: i64 = by_kind.text + by_kind.rich + by_kind.image + by_kind.file + by_kind.mixed;
+    let storage_bytes = cleanup::total_storage_bytes(&conn)?;
+    Ok(StorageStats {
+        total,
+        by_kind,
+        storage_bytes,
+    })
+}
+
+/// 清空所有历史(DB + 图片文件)。
+#[tauri::command]
+pub fn clear_history(state: State<'_, crate::AppState>) -> Result<(), AppError> {
+    let conn = state.db();
+    let count = items::delete_all(&conn, state.images_dir())?;
+    log::info!("[commands] 用户手动清空历史,删除 {} 条", count);
+    Ok(())
 }
 
 #[cfg(test)]

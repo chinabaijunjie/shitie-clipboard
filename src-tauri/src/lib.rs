@@ -25,7 +25,7 @@ mod window_control;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use commands::clipboard::{copy_back, delete_item, list_items, search_items};
+use commands::clipboard::{clear_history, copy_back, delete_item, get_storage_stats, list_items, search_items};
 use commands::ping::ping;
 use commands::settings::{get_settings, update_settings};
 use tauri::{Manager, Window};
@@ -243,6 +243,8 @@ pub fn run() {
             search_items,
             get_settings,
             update_settings,
+            get_storage_stats,
+            clear_history,
             hide_window,
         ])
         // M3:窗口事件 — 失焦隐藏 + close 拦截转 hide

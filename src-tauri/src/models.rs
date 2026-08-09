@@ -100,6 +100,41 @@ pub fn truncate_title(text: &str) -> String {
     text.chars().take(TITLE_MAX_CHARS).collect()
 }
 
+/// 存储统计(设置面板「存储」模块用,序列化给前端)。
+///
+/// `by_kind` 按 contentKind 分组计数;`link` / `markdown` 是预留位,
+/// 当前始终为 0(后期加智能检测逻辑后填充)。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageStats {
+    /// 历史记录总条数
+    pub total: i64,
+    /// 按类型分组计数
+    pub by_kind: StorageByKind,
+    /// 磁盘占用字节数(DB BLOB + 图片文件 size 列总和)
+    pub storage_bytes: i64,
+}
+
+/// 按内容类型的分类计数。
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageByKind {
+    /// 纯文本
+    pub text: i64,
+    /// 富文本(含 RTF/HTML)
+    pub rich: i64,
+    /// 图片
+    pub image: i64,
+    /// 文件引用
+    pub file: i64,
+    /// 混合类型
+    pub mixed: i64,
+    /// 链接(预留 — 后期智能识别,当前始终 0)
+    pub link: i64,
+    /// Markdown(预留 — 后期智能识别,当前始终 0)
+    pub markdown: i64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

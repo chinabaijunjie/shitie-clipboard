@@ -11,11 +11,12 @@
 //! 决定不做——万条内无感,见 wiki/dev/m4-research.md §3.3 G3)。
 
 use rusqlite::{params, Connection};
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::clipboard::types::RelPath;
 use crate::error::AppError;
-use crate::models::{truncate_title, ClipboardItem, ContentKind};
+use crate::models::{truncate_title, ClipboardItem, ContentKind, StorageByKind};
 use crate::storage::search::bigram_cjk;
 
 /// 纯文本的 UTI。
@@ -389,6 +390,84 @@ pub fn delete(conn: &Connection, id: i64, images_dir: &Path) -> Result<(), AppEr
     conn.execute("DELETE FROM clipboard_items WHERE id = ?1", params![id])
         .map_err(|e| AppError::internal(format!("删除条目 {} 失败: {}", id, e)))?;
     Ok(())
+}
+
+/// 按 contentKind 分组统计条数。
+///
+/// 返回 HashMap<String, i64>(key = "text"/"rich"/"image"/"file"/"mixed")。
+pub fn count_by_kind(conn: &Connection) -> Result<HashMap<String, i64>, AppError> {
+    let mut map = HashMap::new();
+    let mut stmt = conn
+        .prepare("SELECT content_kind, COUNT(*) FROM clipboard_items GROUP BY content_kind")
+        .map_err(|e| AppError::internal(format!("prepare count_by_kind 失败: {e}")))?;
+    let rows = stmt
+        .query_map([], |r| {
+            let kind: String = r.get(0)?;
+            let count: i64 = r.get(1)?;
+            Ok((kind, count))
+        })
+        .map_err(|e| AppError::internal(format!("query count_by_kind 失败: {e}")))?;
+    for row in rows.filter_map(Result::ok) {
+        map.insert(row.0, row.1);
+    }
+    Ok(map)
+}
+
+/// 把 count_by_kind 的 HashMap 转成 StorageByKind(含预留字段归零)。
+pub fn storage_by_kind_from_map(map: &HashMap<String, i64>) -> StorageByKind {
+    StorageByKind {
+        text: *map.get("text").unwrap_or(&0),
+        rich: *map.get("rich").unwrap_or(&0),
+        image: *map.get("image").unwrap_or(&0),
+        file: *map.get("file").unwrap_or(&0),
+        mixed: *map.get("mixed").unwrap_or(&0),
+        // 预留:当前不做智能识别
+        link: 0,
+        markdown: 0,
+    }
+}
+
+/// 清空所有历史(DB 行 + 图片文件)。
+///
+/// 先逐条引用计数删除图片,再 `DELETE FROM clipboard_items`(CASCADE 清 formats)。
+/// 包 unchecked_transaction,中途失败回滚。
+/// 返回删除的条目数。
+pub fn delete_all(conn: &Connection, images_dir: &Path) -> Result<usize, AppError> {
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| AppError::internal(format!("开启清空事务失败: {e}")))?;
+
+    // 查所有图片 file_path → 逐个引用计数删除磁盘文件
+    let image_paths: Vec<RelPath> = tx
+        .prepare("SELECT DISTINCT file_path FROM clipboard_formats WHERE file_path IS NOT NULL")
+        .map_err(|e| AppError::internal(format!("prepare 查图片路径失败: {e}")))?
+        .query_map([], |r| {
+            let s: String = r.get(0)?;
+            Ok(RelPath::new(s))
+        })
+        .map_err(|e| AppError::internal(format!("查图片路径失败: {e}")))?
+        .filter_map(Result::ok)
+        .collect();
+
+    for fp in &image_paths {
+        // 引用计数删除(此时 DB 行还在,每张图至少引用 ≥ 1)
+        crate::clipboard::image_store::delete_if_last_reference(&tx, fp, images_dir)?;
+    }
+
+    // 统计条数(删之前)
+    let count: i64 = tx
+        .query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r.get(0))
+        .map_err(|e| AppError::internal(format!("统计条数失败: {e}")))?;
+
+    // 清空 DB(CASCADE 自动清 formats)
+    tx.execute("DELETE FROM clipboard_items", [])
+        .map_err(|e| AppError::internal(format!("清空 clipboard_items 失败: {e}")))?;
+
+    tx.commit()
+        .map_err(|e| AppError::internal(format!("提交清空事务失败: {e}")))?;
+
+    log::info!("[storage] 清空历史:删除了 {} 条记录, {} 个图片文件", count, image_paths.len());
+    Ok(count as usize)
 }
 
 // ============================================================
@@ -1079,5 +1158,103 @@ mod tests {
         let item = insert_or_update_multi(&conn, &formats, ContentKind::Image, "孤儿图", &images_dir).unwrap();
         // delete 应成功(磁盘文件不存在不算错误)
         delete(&conn, item.id, &images_dir).unwrap();
+    }
+
+    // ===== count_by_kind / delete_all 测试 =====
+
+    #[test]
+    fn count_by_kind_groups_correctly() {
+        let conn = db();
+        let dir = test_images_dir();
+
+        // 插入 3 条 text
+        insert_or_update(&conn, "text1", &dir).unwrap();
+        insert_or_update(&conn, "text2", &dir).unwrap();
+        insert_or_update(&conn, "text3", &dir).unwrap();
+        // 插入 1 条 file(用 multi + file-url)
+        let file_url = b"file:///tmp/test.pdf".to_vec();
+        insert_or_update_multi(
+            &conn,
+            &[FormatInput {
+                uti: crate::clipboard::uti::UTI_FILE_URL,
+                data: &file_url,
+                file_path: None,
+            }],
+            ContentKind::File,
+            "test.pdf",
+            &dir,
+        )
+        .unwrap();
+
+        let map = count_by_kind(&conn).unwrap();
+        assert_eq!(*map.get("text").unwrap_or(&0), 3);
+        assert_eq!(*map.get("file").unwrap_or(&0), 1);
+        assert_eq!(*map.get("image").unwrap_or(&0), 0);
+    }
+
+    #[test]
+    fn count_by_kind_empty_db() {
+        let conn = db();
+        let map = count_by_kind(&conn).unwrap();
+        assert!(map.is_empty(), "空 DB 应返回空 map");
+    }
+
+    #[test]
+    fn storage_by_kind_from_map_fills_defaults() {
+        let mut map = HashMap::new();
+        map.insert("text".to_string(), 5);
+        map.insert("image".to_string(), 2);
+        let bk = storage_by_kind_from_map(&map);
+        assert_eq!(bk.text, 5);
+        assert_eq!(bk.image, 2);
+        assert_eq!(bk.rich, 0, "缺失的 kind 应为 0");
+        assert_eq!(bk.file, 0);
+        assert_eq!(bk.mixed, 0);
+        assert_eq!(bk.link, 0, "预留字段应为 0");
+        assert_eq!(bk.markdown, 0, "预留字段应为 0");
+    }
+
+    #[test]
+    fn delete_all_clears_everything() {
+        let conn = db();
+        let dir = test_images_dir();
+
+        // 插入若干条
+        insert_or_update(&conn, "text1", &dir).unwrap();
+        insert_or_update(&conn, "text2", &dir).unwrap();
+        let file_url = b"file:///tmp/a.pdf".to_vec();
+        insert_or_update_multi(
+            &conn,
+            &[FormatInput {
+                uti: crate::clipboard::uti::UTI_FILE_URL,
+                data: &file_url,
+                file_path: None,
+            }],
+            ContentKind::File,
+            "a.pdf",
+            &dir,
+        )
+        .unwrap();
+
+        let deleted = delete_all(&conn, &dir).unwrap();
+        assert_eq!(deleted, 3);
+
+        // DB 应完全清空
+        let item_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(item_count, 0);
+        let fmt_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM clipboard_formats", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(fmt_count, 0, "formats 也应被 CASCADE 清空");
+    }
+
+    #[test]
+    fn delete_all_on_empty_db() {
+        let conn = db();
+        let dir = test_images_dir();
+        let deleted = delete_all(&conn, &dir).unwrap();
+        assert_eq!(deleted, 0, "空 DB 清空应返回 0");
     }
 }

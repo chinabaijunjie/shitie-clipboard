@@ -42,3 +42,45 @@ export interface ClipboardItem {
   /** 图片缩略图绝对路径(仅 image/mixed 有,前端 convertFileSrc 转 asset URL) */
   readonly thumbPath?: string | null
 }
+
+// ============================================================
+// 存储统计(设置面板「存储」模块)
+// ============================================================
+
+/** 按内容类型的分类计数 */
+export interface StorageByKind {
+  readonly text: number
+  readonly rich: number
+  readonly image: number
+  readonly file: number
+  readonly mixed: number
+  /** 预留:链接(后期智能识别,当前始终 0) */
+  readonly link: number
+  /** 预留:Markdown(后期智能识别,当前始终 0) */
+  readonly markdown: number
+}
+
+/** 存储统计快照 */
+export interface StorageStats {
+  /** 历史记录总条数 */
+  readonly total: number
+  /** 按类型分组计数 */
+  readonly byKind: StorageByKind
+  /** 磁盘占用字节数 */
+  readonly storageBytes: number
+}
+
+/** StorageStats 的 Zod schema(校验后端 invoke 返回) */
+export const StorageStatsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  byKind: z.object({
+    text: z.number().int().nonnegative(),
+    rich: z.number().int().nonnegative(),
+    image: z.number().int().nonnegative(),
+    file: z.number().int().nonnegative(),
+    mixed: z.number().int().nonnegative(),
+    link: z.number().int().nonnegative(),
+    markdown: z.number().int().nonnegative(),
+  }),
+  storageBytes: z.number().int().nonnegative(),
+})

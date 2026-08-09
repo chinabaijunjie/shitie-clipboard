@@ -23,6 +23,8 @@ import { cn } from '@lib/utils'
 import { isValidShortcut, parseKeyEvent, formatShortcut } from '@core/settings/shortcut'
 import type { Settings } from '@core/settings/models'
 import { ThemeSwitcher } from '@components/ThemeSwitcher'
+import { StorageStatsPanel } from '@components/StorageStatsPanel'
+import { useStorageStats } from '@hooks/useStorageStats'
 
 interface SettingsPanelProps {
   settings: Settings
@@ -54,6 +56,7 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const shortcutRef = useRef<HTMLDivElement>(null)
+  const { stats, loading: statsLoading, clearAll } = useStorageStats()
 
   // 读取 autostart 状态(直接调插件,不走 settings.json)
   useEffect(() => {
@@ -285,6 +288,17 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
           />
         </SettingRow>
       </div>
+
+      {/* 存储统计 + 清除历史 */}
+      <StorageStatsPanel
+        total={stats?.total ?? 0}
+        byKind={stats?.byKind ?? {
+          text: 0, rich: 0, image: 0, file: 0, mixed: 0, link: 0, markdown: 0,
+        }}
+        storageBytes={stats?.storageBytes ?? 0}
+        loading={statsLoading}
+        onClear={clearAll}
+      />
 
       {/* 底栏:错误提示 / 保存提示 —— 顶部半透明分隔线 */}
       <div className="border-t border-divider px-3.5 py-1.5 text-[10px]">
