@@ -21,7 +21,7 @@ status: ready-to-use
 
 > 当前状态(版本/测试数/架构) → 见 wiki/dev/progress.md「当前状态」段
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
-> 当前任务规划 → M4(A+B+C+UI)+ 多主题切换全部完成,下一步 M4 阶段 D
+> 当前任务规划 → M4(A+B+C+UI)+ 多主题 + UI 增强迭代全部完成,下一步 M4 阶段 D
 
 ## 必读文档
 1. AGENTS.md(AI 启动 3 步 + 核心原则 7 模块化 / 8 随写随测 / §8 通用工程纪律)
@@ -30,8 +30,9 @@ status: ready-to-use
 4. wiki/dev/TODO.md(下次目标 + 待办)
 
 ## ⏰ 待触发任务提醒
-- **多主题切换已完成**(2026-08-09):深色/浅色/折中三套主题 + 分段按钮选择器 + localStorage 防闪。
-  设计稿 design-mockups/ + 规格 wiki/dev/ui-design-spec.md(三套配色已全部落地)。
+- **UI 增强迭代已完成**(2026-08-09):多主题切换 + 透明度可调 + 存储统计卡片 + 清除历史
+  + 内容识别(link/markdown) + 类型筛选 tag + 双击回填 + 类型图标 + 文件/图片路径展示。
+  Schema v3(content_subtype 列)。详见 wiki/dev/progress.md。
 - **下一步:M4 阶段 D**(Windows PD 虚拟机实测 + push tag 触发 CI 打包发布)。
   - ⚠️ CI 前置:用户需在 GitHub 建仓库 + git remote add + push tag v1.0.0
 - **可选后续**:按格式智能渲染(代码高亮/Markdown 预览,图标位已预留)

@@ -15,19 +15,22 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：多主题切换 — **✅ 完成**(2026-08-09,深色/浅色/折中三套主题 + 分段按钮切换)
+- **当前里程碑**：UI 增强迭代 — **✅ 完成**(2026-08-09,多主题+透明度+存储统计+内容识别+类型筛选+双击回填)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
   + M3 新增:全局快捷键 / 托盘 / 开机自启 / 设置持久化(Store 插件)/ 自动清理
   + M4 新增:敏感信息过滤(正则黑名单)+ 去重修复(格式覆盖/文件 URL)+ CI 跨平台打包
   + M4 UI 新增:深色毛玻璃主题(lucide-react 图标库 + 苹果配色 token + 三组件重做)
   + 多主题切换新增:浅色(.theme-light)+ 折中(.theme-mid)+ 分段按钮选择器 + localStorage 防闪
+  + UI 增强新增:窗口透明度可调 + 存储统计卡片 + 清除历史 + 内容识别(link/markdown)
+    + 类型筛选 tag + 类型图标 + 双击回填 + 图片/文件路径展示
+  + Schema v3:content_subtype 列(写入时识别 link/markdown 子类型)
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
   + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
   + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
   + tauri-plugin-global-shortcut 2 / tauri-plugin-autostart 2 / tauri-plugin-store 2(M3 新增)
   + regex 1(M4 新增,敏感信息正则匹配)
   + lucide-react 1.30(M4 UI 新增,矢量图标库)
-- **验证基线**：cargo test 189 passed + npm test 67 passed + npm build 全绿 + clippy 零 warning
+- **验证基线**：cargo test 209 passed + npm test 67 passed + npm build 全绿 + clippy 零 warning
 - **下一步**：M4 阶段 D(Windows 实测 + CI 打包发布)— 需先建 GitHub 仓库 + push tag v1.0.0
 
 ## M1 调研 + Spike 记录(2026-08-05)
@@ -343,6 +346,69 @@ PR review 留的 3 项 code quality 改进,独立改进会话清完。每项一�
 - 滚动条 hover 用 filter:brightness(1.3) 替代硬编码 hover 色(随主题自适应)
 
 **验证基线**:cargo test 189 passed + npm test 67 passed(原 55 + theme 8 + switcher 4)+ npm build ✅ + clippy 零 warning
+
+## UI 增强迭代完成记录(2026-08-09)
+
+多主题切换之后的一轮 UI/功能增强迭代,11 个 commit。涵盖交互增强 + 存储管理 + 内容识别 + 类型筛选。
+
+### 1. 双击回填(`26e9d77`)
+- ClipboardList 加 onDoubleClick → handleCopyBack(与回车同路径)
+- 底栏快捷键提示加「双击」
+- 选中项文字高亮 text-primary(三套主题各自强调色)
+- 设置标题层级修复:三等分 flex 替代 absolute(「设置」被「已保存」遮挡)
+
+### 2. 存储统计 + 清除历史(`e3e4f28` + `910f816`)
+- 后端:items.rs 加 count_by_kind(按 contentKind+subtype 分组)+ delete_all(清 DB+图片)
+- models.rs 加 StorageStats / StorageByKind 结构
+- get_storage_stats / clear_history command
+- 前端:useStorageStats hook + StorageStatsPanel(6 个分类卡片 + 总条数 + 占用 + 清除按钮)
+- 清除历史:二次确认(内联确认/取消)
+- 设置面板分组顺序调整:通用 → 行为 → 存储(统计归入存储组)
+
+### 3. 窗口透明度(`9acd6f1` + `c34f2b4`)
+- index.css:--window-bg 拆分为 --window-rgb + --window-opacity(三套主题统一)
+- Settings 加 window_opacity 字段(默认 85)+ 前端 Zod 同步
+- theme.ts:applyWindowOpacity(动态修改 CSS 变量)
+- 设置面板「通用」组加背景不透明度 Select(15%-100% 每 10% 一档)
+- ⚠️ 修正:alpha = opacity/100(原反了,100%=完全不透明)
+
+### 4. 内容类型智能识别(`a88c220`)
+- classify.rs:detect_subtype 纯函数(link=纯 URL,markdown=≥2 种结构标记)
+- Migration v3:加 content_subtype 列 + 存量回填
+- 写入时识别:insert_or_update + insert_or_update_multi 都做识别
+- 统计:count_by_kind 按 kind+subtype 分组,link/markdown 从 text 拆出
+- 前端:StorageStatsPanel 链接/Markdown 卡片去掉半透明(正式启用)
+
+### 5. 类型图标 + 文件/图片路径展示(`151663f`)
+- 列表项类型图标:文字Type/文件FileText/混合Layers/链接Link2/Markdown FileCode
+  (与统计卡片图标完全对应,图片用缩略图)
+- ClipboardItem 加 imagePath + fileUrl 字段
+- fill_image_fields 填原图绝对路径 / fill_file_url 从 formats 表读 file-url
+- 列表项图片/文件两行展示(标题+路径)
+
+### 6. 文件分类修复(`0bc3be9`)
+- 🔴 macOS 复制文件时附带的 tiff(Finder 图标预览)导致误判 Mixed/Image
+- capture_multi:有 file-url 时跳过 image 捕获
+- classify_content_kind:file + text 不算 Mixed(macOS 附带的纯文本是文件名)
+- 只有 file + rich(rtf/html)才算 Mixed
+
+### 7. 类型筛选 tag(`41032f2` + `16610b9`)
+- 后端:list_items 加 kinds 参数,支持 content_kind + content_subtype 混合筛选
+  (subtype:link / subtype:markdown 用 OR 组合;text 排除有子类型的记录)
+- 前端:useClipboardItems 加 kindFilter 状态 + reload + listen 匹配检查
+- UI:SpotlightPanel 搜索框下方 6 个 tag(文字/图片/文件/混合/链接/Markdown)
+  选中高亮,多选叠加,全未选=不过滤
+- 修复:setKindFilter 先更新 ref 再 reload(防筛选值滞后一帧)
+
+**技术决策**:
+- 文件场景的 image(tiff/icns)是 Finder 图标预览:有 file-url 时跳过 image 捕获
+- file + 纯文本不算 Mixed:macOS 附带的纯文本是文件名表示,不是独立内容
+- 内容子类型写入时识别:规则不常变,一次识别永久存储(查询时不重复计算)
+- 窗口透明度拆分 RGB+opacity:主题色和透明度独立变化
+- 设置标题三等分 flex:absolute 定位会被后续元素遮挡
+
+**验证基线**:cargo test 209 passed(+20: classify 14 + migration 2 + delete_all/count 4)
++ npm test 67 passed + npm build ✅ + clippy 零 warning
 
 ## 本工程开发历史
 
