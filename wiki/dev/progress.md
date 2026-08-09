@@ -5,6 +5,7 @@ created: 2026-06-29
 updated: 2026-08-09
 status: active
 ---
+---
 
 # 开发进度
 
@@ -14,17 +15,19 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M4 生产化(阶段 A+B+C) — **✅ 完成**(2026-08-09,打包 CI + 去重 + 敏感过滤 + PR review)
+- **当前里程碑**：M4 UI 苹果审美改造 — **✅ 完成**(2026-08-09,深色毛玻璃主题 + 三组件重做)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
   + M3 新增:全局快捷键 / 托盘 / 开机自启 / 设置持久化(Store 插件)/ 自动清理
   + M4 新增:敏感信息过滤(正则黑名单)+ 去重修复(格式覆盖/文件 URL)+ CI 跨平台打包
+  + M4 UI 新增:深色毛玻璃主题(lucide-react 图标库 + 苹果配色 token + 三组件重做)
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
   + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
   + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
   + tauri-plugin-global-shortcut 2 / tauri-plugin-autostart 2 / tauri-plugin-store 2(M3 新增)
   + regex 1(M4 新增,敏感信息正则匹配)
+  + lucide-react 1.30(M4 UI 新增,矢量图标库)
 - **验证基线**：cargo test 189 passed + npm test 55 passed + npm build 全绿 + clippy 零 warning
-- **下一步**：UI 苹果审美改造(见 [[ui-redesign-plan]])→ 完成后 M4 阶段 D(Windows 实测 + CI 打包发布)
+- **下一步**：M4 阶段 D(Windows 实测 + CI 打包发布)— 需先建 GitHub 仓库 + push tag v1.0.0
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -260,6 +263,50 @@ PR review 留的 3 项 code quality 改进,独立改进会话清完。每项一�
 - 去重格式覆盖:命中去重时 formats 整体替换(同事务),防旧格式残留
 - CI 打包:tauri-action 三平台,macos-latest 已是 ARM(双架构交叉编译)
 - 无证书不阻断打包(macOS 手动放行 / Windows SmartScreen 警告)
+
+## M4 UI 苹果审美改造完成记录(2026-08-09)
+
+深色毛玻璃主题落地 + 三组件重做,实机多轮调校。
+
+> 设计稿先行:三份 HTML 风格对比(深色毛玻璃/浅色系统/深灰折中),
+> 用户选定深色①作为主方向。完整设计规格见 [[ui-design-spec]]。
+
+- **Token 层**(`a51b93f`):
+  - index.css 重写:深色①完整配色(shadcn hsl 变量换苹果系统色)+ UI 专用 token
+    (缓动/时长/圆角分档/阴影/毛玻璃)+ 工具类(glass-window/mask-fade/scrollbar-thin/list-item hover)
+  - tailwind.config.js 重写:接线 boxShadow.window / transitionTimingFunction / borderRadius 分档 / letterSpacing
+  - main.tsx:固定 .theme-dark + .dark 双 class(主题切换架构预留)
+- **ClipboardList 重做**:
+  - CSS Grid 三列布局(auto 1fr auto)替代 flex(flex shrink-0 在 WebView 不可靠)
+  - 胶囊选中态(bg-selected + inset 高光)+ hover(原生 CSS)+ 按压(active:scale)
+  - 选中展开:文字 line-clamp-3(完整 title),图片缩略图放大 20→40px
+  - 类型图标预留位(text/image/file/code/md),无图无文件时不渲染(不留空位)
+  - 移除 copy_count 徽标(对用户无决策价值)
+- **SpotlightPanel 重做**:半透明外壳 + 标题居中可拖拽 + 搜索框卡片化 + lucide 图标
+- **SettingsPanel 重做**:半透明外壳 + 三栏标题居中 + 分组(通用/存储/行为)+ Toggle/Select 苹果化
+  + autostart 加载占位(消除初始 false→true 跳变闪烁)
+- **窗口**:tauri.conf.json 高度 480→600
+- **新增依赖**:lucide-react 1.30(矢量图标库)
+
+**实机调校(迭代修正,多轮)**:
+- 🔴 backdrop-filter 滚动闪烁:macOS WKWebView 系统级限制,去掉 blur 保留 rgba 半透明
+- 🔴 窗口灰色直角:#root 加 border-radius + overflow:hidden 裁剪
+- 🔴 hover 不生效:Tailwind hover:bg-hover 未生成 + 手写门控规则全局覆盖 hover transparent
+  → 删除门控 + 原生 CSS .list-item:hover 实现
+- 🔴 Toggle 圆点跑到轨道外:Tailwind 任意值 [18px] 未生成 → 改内联 style transform
+- 🔴 时间挤到下一行:flex shrink-0 在 WebView 不可靠 → 改 CSS Grid 固定列宽
+- 🔴 选中文字只显示两行:JS slice(60) + CSS line-clamp 双重截断 → 选中时不 slice
+- 🟡 透明度 0.72→0.85(实机反馈太透)
+- 🟡 autostart Toggle 跳变:useState(false) 初始值 + 异步查询 → 加载占位
+
+**M4 UI 期间确立的技术决策**(待沉淀 constraints.md):
+- macOS WKWebView backdrop-filter 滚动闪烁:不用 blur,用 rgba 半透明替代
+- Tailwind 任意值 [Npx] 在本项目配置下可能不生成:关键位移用内联 style
+- Tailwind hover:bg-{自定义颜色} 可能不生成:hover 用原生 CSS 类实现
+- 布局用 CSS Grid(auto 1fr auto)比 flex shrink-0 在 Tauri WebView 更可靠
+- 主题架构预留:.theme-{dark/light/mid} class + Settings theme 字段(未实现切换)
+
+**验证基线**:npm build ✅ + npm test 55 passed ✅ + typecheck ✅(无 Rust 改动)
 
 ## 本工程开发历史
 

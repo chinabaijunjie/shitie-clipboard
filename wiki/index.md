@@ -13,16 +13,17 @@ status: active
 
 ---
 
-## 🚨 当前状态(M4 A+B+C 完成,下一步 UI 改造)
+## 🚨 当前状态(M4 A+B+C+UI 完成,下一步 M4 阶段 D)
 
 > **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架。
 > **M1 已完成**(2026-08-06):macOS 剪贴板监听 MVP,端到端实测 6 项全通过。
 > **M2 已完成**(2026-08-07):搜索 + 富文本/图片支持(FTS5 bigram + 多格式 + 图片存储),5 阶段施工 + GUI 实测 + PR review(4 Critical 全修)。
 > **M3 已完成**(2026-08-08):常驻体验(全局快捷键 + 托盘 + 自启 + 设置面板 + 自动清理),6 阶段施工 + GUI 实测 + PR review(2 Critical + 8 Important 全修)。
 > **M4 A+B+C 已完成**(2026-08-09):打包 CI + 去重修复 + 敏感过滤,3 阶段施工 + PR review(2 Critical + 5 Important 全修)。
-> 详见 [[dev/progress]] + [[dev/m4-plan]](阶段A+B+C) + [[dev/m4-research]](技术依据)。
+> **M4 UI 已完成**(2026-08-09):苹果审美改造 — 深色毛玻璃主题 + 三组件重做,实机多轮调校。
+> 详见 [[dev/progress]] + [[dev/ui-design-spec]](设计规格+三主题存档)。
 >
-> **下一步:UI 苹果审美改造**(见 [[dev/ui-redesign-plan]]),完成后 M4 阶段 D(Windows 实测 + CI 打包发布)。详见 [[dev/TODO]]。
+> **下一步:M4 阶段 D**(Windows 实测 + CI 打包发布)。详见 [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
 > sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。
@@ -43,6 +44,7 @@ status: active
 | 写/改 wiki 内容（防膨胀）| [[process/knowledge-base-guide]] |
 | 查当前任务规划（M2/M3/M4）| [[dev/m2-plan]](done) / [[dev/m3-plan]](done) / [[dev/m4-plan]](A+B+C done) |
 | 查 UI 审美改造规划（M2 后执行）| [[dev/ui-redesign-plan]] |
+| 查 UI 设计规格（配色/组件/三主题存档）| [[dev/ui-design-spec]] |
 | 查 M1 技术调研/spike | [[dev/m1-research]] |
 | 查进度 / 下次目标 | [[dev/progress]] + [[dev/TODO]] |
 | 跨会话恢复 | [[dev/new-session-starter]] |
@@ -71,6 +73,7 @@ status: active
 - [[dev/m3-plan]] — M3 规划(已完成,常驻体验:快捷键/托盘/自启/设置/清理)
 - [[dev/m4-plan]] — M4 规划(阶段A+B+C已完成,打包CI/去重/敏感过滤;阶段D待UI改造后)
 - [[dev/ui-redesign-plan]] — UI 苹果审美改造规划(下一步执行,emilkowalski/skills 规则)
+- [[dev/ui-design-spec]] — UI 设计规格(M4 UI 改造施工依据 + 三主题配色存档)
 - [[dev/m2-research]] — M2 技术调研 + spike(FTS5 bigram / 图片存储 / 多格式,已完成)
 - [[dev/m3-research]] — M3 技术调研(global-shortcut / tray / autostart / store,已完成)
 - [[dev/m4-research]] — M4 技术调研(打包/CI/去重/敏感过滤,已完成)

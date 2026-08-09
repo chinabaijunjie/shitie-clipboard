@@ -21,7 +21,7 @@ status: ready-to-use
 
 > 当前状态(版本/测试数/架构) → 见 wiki/dev/progress.md「当前状态」段
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
-> 当前任务规划 → M4 A+B+C 已完成,下一步 UI 改造
+> 当前任务规划 → M4(A+B+C+UI)全部完成,下一步 M4 阶段 D
 
 ## 必读文档
 1. AGENTS.md(AI 启动 3 步 + 核心原则 7 模块化 / 8 随写随测 / §8 通用工程纪律)
@@ -30,10 +30,11 @@ status: ready-to-use
 4. wiki/dev/TODO.md(下次目标 + 待办)
 
 ## ⏰ 待触发任务提醒
-- **M4 A+B+C 已完成**(2026-08-09):打包 CI workflow + 去重修复(G1 格式覆盖/G2 文件URL) + 敏感过滤(正则黑名单) + PR review(2C+5I 全修)。
-- **下一步:UI 苹果审美改造**(见 wiki/dev/ui-redesign-plan.md)。当前 UI 太难看,改造完才值得打包测试。
-- UI 改造完成后 → M4 阶段 D(Windows PD 虚拟机实测 + push tag 触发 CI 打包发布)。
+- **M4 UI 苹果审美改造已完成**(2026-08-09):深色毛玻璃主题 + 三组件重做 + 实机多轮调校。
+  设计稿 design-mockups/ + 规格 wiki/dev/ui-design-spec.md(含三主题配色存档)。
+- **下一步:M4 阶段 D**(Windows PD 虚拟机实测 + push tag 触发 CI 打包发布)。
   - ⚠️ CI 前置:用户需在 GitHub 建仓库 + git remote add + push tag v1.0.0
+- **可选后续**:多主题切换(三套配色已预设计,架构已预留,见 ui-design-spec §4)
 
 ## 工作模式
 - 遇到决策点先跟我确认,不要自己拍板

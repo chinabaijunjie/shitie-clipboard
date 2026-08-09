@@ -9,12 +9,13 @@ status: active
 # 全局 TODO
 
 > 本工程是 Clipboard Manager(轻量常驻的剪贴板历史管理桌面应用),
-> 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3/M4(A+B+C) 已完成。
+> 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3/M4(A+B+C+UI) 已完成。
 
 ## 🎯 下次目标
 
-- **UI 苹果审美改造**(见 [[ui-redesign-plan]])— 当前 UI 太难看,改造后才值得打包测试
-- 改造完成后 → **M4 阶段 D**:Windows 实测(PD 虚拟机)+ CI 打包发布(push tag v1.0.0)
+- **M4 阶段 D**:Windows 实测(PD 虚拟机)+ CI 打包发布(push tag v1.0.0)
+  - ⚠️ 前置:用户需先在 GitHub 建仓库 + git remote add + push tag
+- **多主题切换**(可选,UI 验证稳定后):三套配色已预设计存档(见 [[ui-design-spec]] §3-§4)
 
 ## 路线图
 
@@ -23,8 +24,8 @@ status: active
 - [x] **M2**:搜索 + 富文本/图片支持(SQLite FTS5 + 多格式)— ✅ 完成(2026-08-07)
 - [x] **M3**:常驻体验(全局快捷键 + 托盘 + 自启 + 设置面板 + 自动清理)— ✅ 完成(2026-08-08)
 - [x] **M4 A+B+C**:打包 CI + 去重修复 + 敏感过滤 — ✅ 完成(2026-08-09)
-- [ ] **UI 苹果审美改造**(下一步,见 [[ui-redesign-plan]])
-- [ ] **M4 阶段 D**:Windows 实测 + CI 打包发布(UI 改造完成后)
+- [x] **M4 UI 苹果审美改造**:深色毛玻璃主题 + 三组件重做 — ✅ 完成(2026-08-09)
+- [ ] **M4 阶段 D**:Windows 实测 + CI 打包发布(下一步)
 
 ## 待办
 
@@ -65,22 +66,26 @@ status: active
 - [x] **阶段 E**:设置面板 UI(7 项配置 + 视图切换)
 - [x] **阶段 F**:自动清理(保留天数 + 容量上限 + 条数上限) + PR review
 
-### UI 苹果审美改造(M3 完成后执行,见 [[ui-redesign-plan]])
+### UI 苹果审美改造(✅ 完成,2026-08-09,见 [[ui-redesign-plan]] + [[ui-design-spec]])
 
-> ⏳ 触发条件:M3 已完成 ✅。基于 emilkowalski/skills 设计规则 + 苹果 WWDC 原则。
-> 高频常驻工具,审美改造排 M3 之后避免返工。
+> ✅ 已完成。深色毛玻璃主题(① 号方案)落地。
+> 设计稿:design-mockups/ 三份风格 HTML。完整规格:[[ui-design-spec]]。
 
-- [ ] **Token 层** — `index.css` 加缓动/颜色/圆角/阴影 token,`tailwind.config.ts` 接线
-- [ ] **毛玻璃外壳** — SpotlightPanel 根容器改 `backdrop-filter: blur()`(窗口已 transparent)
-- [ ] **配色替换** — 换苹果系统色(暗色深灰蓝 #1C1C1E 而非纯黑),亮/暗模式校对
-- [ ] **列表项重做** — 胶囊选中态 + hover 过渡 + 按压反馈 + 字距分级
-- [ ] **顶/底栏** — 硬边框 `border-b` 改渐变蒙版
-- [ ] **动效(克制)** — 只加 hover/按压/新增项/错误提示,高频操作不加动画(频率闸门)
-- [ ] **滚动条** — 隐形细滚动条
-- [ ] **自检** — emilkowalski Never Ship 清单 + `review-animations` 标准
-- [ ] **实测** — macOS 实机看毛玻璃质感
+- [x] **Token 层** — index.css 深色①完整配色 + tailwind.config.js 接线
+- [x] **半透明外壳** — SpotlightPanel + SettingsPanel(去掉 backdrop-filter 避免 WKWebView 滚动闪烁)
+- [x] **配色替换** — 换苹果系统色(暗色深灰蓝 #1C1C1E,透明度 0.85)
+- [x] **列表项重做** — CSS Grid 三列 + 胶囊选中 + hover + 按压 + 选中展开三行 + 图片放大
+- [x] **顶/底栏** — 标题居中可拖拽 + 搜索框卡片化 + 半透明分隔线
+- [x] **设置面板** — 分组 + Toggle/Select 苹果化 + autostart 加载占位
+- [x] **滚动条** — 隐形细滚动条
+- [x] **图标** — lucide-react 替换 emoji(Settings/Search/ArrowLeft/Check/FileText/Clipboard)
+- [x] **窗口圆角** — #root border-radius 裁剪隐藏灰色直角
+- [x] **实测** — macOS 实机多轮调校通过
 
 ## 想法池
 
+- [ ] **多主题切换** — 三套配色已预设计存档(深色①已落地,浅色②/折中③待实现),
+      架构已预留(见 [[ui-design-spec]] §4),用户确认 UI 稳定后按需加
+- [ ] **按格式智能渲染** — 代码语法高亮 / Markdown 预览(图标位已预留,需检测逻辑)
 - [ ] 剪贴板内容智能分类(M4 之后考虑)
 - [ ] 多设备同步(远期)
