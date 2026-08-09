@@ -131,9 +131,10 @@ pub fn search(
     } else {
         search_by_fts(conn, trimmed, limit)?
     };
-    // 补充图片类条目的缩略图路径(与 list/get_item 保持一致,否则搜索命中的图片无缩略图)
+    // 补充图片缩略图 + 文件 URL(与 list/get_item 保持一致)
     for item in &mut results {
         crate::storage::items::fill_image_fields(conn, item, images_dir)?;
+        crate::storage::items::fill_file_url(conn, item)?;
     }
     Ok(results)
 }

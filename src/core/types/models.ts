@@ -22,6 +22,10 @@ export const ClipboardItemSchema = z.object({
   contentKind: z.enum(['text', 'rich', 'image', 'file', 'mixed']),
   // 内容子类型(link/markdown,仅 text/rich 可能有值)。可选。
   contentSubtype: z.enum(['link', 'markdown']).nullable().optional(),
+  // 图片原图绝对路径(仅 image/mixed 有,供 UI 显示存储位置)。可选。
+  imagePath: z.string().nullable().optional(),
+  // 文件 URL(仅 file 有,原始文件路径引用,供 UI 显示)。可选。
+  fileUrl: z.string().nullable().optional(),
   // 图片缩略图绝对路径(仅 image/mixed 有,前端 convertFileSrc 转 asset URL)。可选。
   thumbPath: z.string().nullable().optional(),
 })
@@ -43,6 +47,10 @@ export interface ClipboardItem {
   readonly contentKind: ContentKind
   /** 内容子类型(link/markdown,仅 text/rich 可能有值) */
   readonly contentSubtype?: 'link' | 'markdown' | null
+  /** 图片原图绝对路径(仅 image/mixed 有,供 UI 显示存储位置) */
+  readonly imagePath?: string | null
+  /** 文件 URL(仅 file 有,原始文件路径引用) */
+  readonly fileUrl?: string | null
   /** 图片缩略图绝对路径(仅 image/mixed 有,前端 convertFileSrc 转 asset URL) */
   readonly thumbPath?: string | null
 }

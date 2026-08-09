@@ -55,9 +55,11 @@ pub fn classify_formats(available_utis: &[String]) -> CaptureDecision {
 /// 根据捕获的 UTI 列表推断 contentKind(纯函数)。
 ///
 /// 优先级:file-url → image(png/tiff)→ rtf/html → text。
-/// - 含 file-url → File(不管还有什么)
+/// - 含 file-url → File(文件场景的 image 是 Finder 图标预览,不算内容)
+///   - file + text/rich → Mixed(如网页另存为文件时同时有文本)
+///   - 纯 file(可能附带 image 图标)→ File
 /// - 含图片(png/tiff)→ Image(或 Mixed 若还有文本/富文本)
-/// - 含 rtf/html → Rich(或 Mixed 若还有图片)
+/// - 含 rtf/html → Rich
 /// - 只有 text → Text
 pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
     let has_text = capture_utis.iter().any(|u| u == uti::UTI_PLAIN_TEXT);
@@ -69,10 +71,11 @@ pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
         .any(|u| u == uti::UTI_PNG || u == uti::UTI_TIFF);
     let has_file = capture_utis.iter().any(|u| u == uti::UTI_FILE_URL);
 
-    // file-url 优先(文件场景标题取文件名)
+    // file-url 优先(文件场景标题取文件名)。
+    // ⚠️ 文件场景的 image(png/tiff)是 Finder 生成的文件图标预览,不是真正内容,
+    //    不计入 Mixed 判断(否则文件复制被误判为 Mixed/Image)。
     if has_file {
-        // 文件 + 其他 → Mixed;纯文件 → File
-        if has_text || has_rich || has_image {
+        if has_text || has_rich {
             return ContentKind::Mixed;
         }
         return ContentKind::File;
@@ -154,9 +157,12 @@ pub fn capture_multi(
         }
     }
 
-    // 图片格式:单独读 + 存盘
+    // 图片格式:单独读 + 存盘。
+    // ⚠️ 当含 file-url 时跳过 —— 文件场景的 image(tiff/icns)是 Finder 图标预览,
+    //    不是真正内容,存了会导致文件被误判为图片/混合类型。
+    let has_file_url = capture_utis.iter().any(|u| u == uti::UTI_FILE_URL);
     let has_image = capture_utis.iter().any(|u| u == uti::UTI_PNG || u == uti::UTI_TIFF);
-    if has_image {
+    if has_image && !has_file_url {
         if let Some(img_fmt) = capture_and_store_image(clipboard, images_dir)? {
             image_size = Some((img_fmt.image_w, img_fmt.image_h));
             formats.push(CapturedFormat {

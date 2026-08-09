@@ -80,6 +80,12 @@ pub struct ClipboardItem {
     /// 内容子类型("link" / "markdown" / None)。仅 text/rich 类型可能有值。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_subtype: Option<String>,
+    /// 图片原图绝对路径(仅 image/mixed 类型有,供 UI 显示存储位置)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_path: Option<AbsPath>,
+    /// 文件 URL(仅 file 类型有,原始文件路径引用,供 UI 显示)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_url: Option<String>,
     /// 图片缩略图绝对路径(仅 image/mixed 类型有,前端用 convertFileSrc 显示)。
     /// None = 非图片或无缩略图。
     ///

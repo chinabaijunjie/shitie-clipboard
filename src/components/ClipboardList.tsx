@@ -14,7 +14,7 @@
  */
 import { useEffect } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { FileText, Clipboard as ClipboardIcon } from 'lucide-react'
+import { FileText, Type, Layers, Link2, FileCode, Clipboard as ClipboardIcon } from 'lucide-react'
 
 import { cn } from '@lib/utils'
 import type { ClipboardItem } from '@core/types'
@@ -31,6 +31,34 @@ interface ClipboardListProps {
 
 /** 列表项预览的最大字符数(过长截断显示,完整内容在 title) */
 const PREVIEW_MAX_CHARS = 60
+
+/** 类型图标配置(图片类型不在此列 —— 用缩略图替代图标位) */
+interface TypeIconConfig {
+  icon: typeof FileText
+  color: string
+}
+
+/** 根据条目类型返回图标配置。图片返回 null(用缩略图)。 */
+function getTypeIcon(item: ClipboardItem): TypeIconConfig | null {
+  // 图片:无图标(缩略图替代)
+  if (item.thumbPath && !item.fileUrl) return null
+
+  // 文件
+  if (item.fileUrl) return { icon: FileText, color: 'var(--type-file)' }
+
+  // 子类型优先:链接 / Markdown
+  if (item.contentSubtype === 'link') return { icon: Link2, color: 'var(--accent)' }
+  if (item.contentSubtype === 'markdown') return { icon: FileCode, color: 'var(--type-md)' }
+
+  // 按 contentKind:text / rich 归为「文字」,mixed 单独
+  switch (item.contentKind) {
+    case 'mixed':
+      return { icon: Layers, color: 'var(--text-secondary)' }
+    default:
+      // text + rich:都用 Type 图标(与统计卡片「文字」对应)
+      return { icon: Type, color: 'var(--text-secondary)' }
+  }
+}
 
 /** 格式化时间为 HH:MM */
 function formatTime(epochMs: number): string {
@@ -69,8 +97,8 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
     <ul className="flex flex-col overflow-hidden">
       {items.map((item, index) => {
         const isSelected = index === selectedIndex
-        const isImage = !!item.thumbPath
-        const isFile = item.contentKind === 'file'
+        const isImage = !!item.thumbPath && !item.fileUrl
+        const isFile = !!item.fileUrl
 
         return (
           <li
@@ -100,7 +128,7 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
             )}
           >
             {/* 列1:图标/缩略图 —— 选中图片时放大到 40×40
-                isImage && item.thumbPath 双条件让 TS 自动窄化为 string,免除非空断言 */}
+                图片:缩略图;其余:类型图标(Type/FileText/Link2 等) */}
             {isImage && item.thumbPath ? (
               <img
                 src={convertFileSrc(item.thumbPath)}
@@ -111,31 +139,71 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
                 )}
                 draggable={false}
               />
-            ) : isFile ? (
-              <FileText
-                className="h-4 w-4"
-                style={{ color: 'var(--type-file)' }}
-                aria-hidden
-              />
-            ) : null}
+            ) : (() => {
+              const cfg = getTypeIcon(item)
+              const Icon = cfg?.icon
+              return Icon ? (
+                <Icon
+                  className="h-4 w-4 shrink-0"
+                  style={{ color: cfg!.color }}
+                  aria-hidden
+                />
+              ) : null
+            })()}
 
             {/* 列2:主内容
-                非选中:JS 截断 60 字符 + 单行 ellipsis(紧凑)
-                选中文字:显示完整 title,line-clamp-3 限制最多三行(让 CSS 决定截断点)
-                选中图片:仍单行(图片本身已放大) */}
-            <span
-              className={cn(
-                'min-w-0 overflow-hidden text-xs',
-                isSelected && !isImage
-                  ? 'line-clamp-3 whitespace-normal break-all'
-                  : 'text-ellipsis whitespace-nowrap',
-              )}
-              title={item.title}
-            >
-              {isSelected && !isImage
-                ? (item.title || '<空>')
-                : (item.title.slice(0, PREVIEW_MAX_CHARS) || '<空>') + (item.title.length > PREVIEW_MAX_CHARS ? '…' : '')}
-            </span>
+                图片:两行 — 第一行尺寸(title),第二行原图路径
+                非选中文字:JS 截断 60 字符 + 单行 ellipsis(紧凑)
+                选中文字:显示完整 title,line-clamp-3 限制最多三行 */}
+            {isImage ? (
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate text-xs" title={item.title}>
+                  {item.title}
+                </span>
+                {item.imagePath && (
+                  <span
+                    className={cn(
+                      'truncate text-[10px]',
+                      isSelected ? 'text-text-secondary' : 'text-text-tertiary',
+                    )}
+                    title={item.imagePath}
+                  >
+                    {item.imagePath}
+                  </span>
+                )}
+              </div>
+            ) : isFile ? (
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate text-xs" title={item.title}>
+                  {item.title}
+                </span>
+                {item.fileUrl && (
+                  <span
+                    className={cn(
+                      'truncate text-[10px]',
+                      isSelected ? 'text-text-secondary' : 'text-text-tertiary',
+                    )}
+                    title={item.fileUrl}
+                  >
+                    {item.fileUrl}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span
+                className={cn(
+                  'min-w-0 overflow-hidden text-xs',
+                  isSelected
+                    ? 'line-clamp-3 whitespace-normal break-all'
+                    : 'text-ellipsis whitespace-nowrap',
+                )}
+                title={item.title}
+              >
+                {isSelected
+                  ? (item.title || '<空>')
+                  : (item.title.slice(0, PREVIEW_MAX_CHARS) || '<空>') + (item.title.length > PREVIEW_MAX_CHARS ? '…' : '')}
+              </span>
+            )}
 
             {/* 列3:时间戳 */}
             <span className={cn(

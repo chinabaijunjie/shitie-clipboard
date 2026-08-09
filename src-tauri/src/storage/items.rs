@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::clipboard::classify::{detect_subtype, ContentSubtype};
-use crate::clipboard::types::RelPath;
+use crate::clipboard::types::{AbsPath, RelPath};
 use crate::error::AppError;
 use crate::models::{truncate_title, ClipboardItem, ContentKind, StorageByKind};
 use crate::storage::search::bigram_cjk;
@@ -296,6 +296,7 @@ pub fn get_item(conn: &Connection, id: i64, images_dir: &Path) -> Result<Clipboa
             other => AppError::internal(format!("查条目 {} 失败: {}", id, other)),
         })?;
     fill_image_fields(conn, &mut item, images_dir)?;
+    fill_file_url(conn, &mut item)?;
     Ok(item)
 }
 
@@ -318,9 +319,10 @@ pub fn list(conn: &Connection, limit: i64, images_dir: &Path) -> Result<Vec<Clip
     for row in rows {
         result.push(row.map_err(|e| AppError::internal(format!("读 list 行失败: {e}")))?);
     }
-    // 补充图片类条目的缩略图路径
+    // 补充图片类条目的缩略图路径 + 文件类条目的 file_url
     for item in &mut result {
         fill_image_fields(conn, item, images_dir)?;
+        fill_file_url(conn, item)?;
     }
     Ok(result)
 }
@@ -622,6 +624,8 @@ pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clipboard
         title: row.get(4)?,
         content_kind: ContentKind::from_db_str(row.get::<_, String>(5)?.as_str()),
         content_subtype: row.get::<_, Option<String>>(6)?,
+        image_path: None,
+        file_url: None,
         thumb_path: None,
     })
 }
@@ -656,14 +660,39 @@ pub(crate) fn fill_image_fields(
     if let Some(fp) = file_path {
         let image_rel = RelPath::new(fp);
         let thumb_rel = crate::clipboard::image_store::relative_thumb_path_from_image_pub(&image_rel);
-        // 相对路径 → 绝对路径(给前端 convertFileSrc)
+        // 缩略图相对路径 → 绝对路径(给前端 convertFileSrc)
         item.thumb_path =
             crate::clipboard::image_store::resolve_thumb_absolute(&Some(thumb_rel), images_dir);
+        // 原图相对路径 → 绝对路径(给 UI 显示存储位置)
+        item.image_path = Some(AbsPath::new(
+            images_dir.join(image_rel.as_str()).to_string_lossy().to_string(),
+        ));
     }
     Ok(())
 }
 
-/// rusqlite 的 Optional 扩展 trait(把 QueryReturnedNoRows 转成 Option)。
+/// 给文件类型 item 补充 file_url(从 formats 表读 public.file-url 的 data_blob)。
+///
+/// 仅 file/mixed 类型处理。data_blob 是原始文件路径(可能多个用 \n 拼接)。
+pub(crate) fn fill_file_url(conn: &Connection, item: &mut ClipboardItem) -> Result<(), AppError> {
+    if !matches!(item.content_kind, ContentKind::File | ContentKind::Mixed) {
+        return Ok(());
+    }
+    let blob: Option<Vec<u8>> = conn
+        .query_row(
+            "SELECT data_blob FROM clipboard_formats \
+             WHERE item_id = ?1 AND uti = ?2 AND data_blob IS NOT NULL \
+             LIMIT 1",
+            params![item.id, crate::clipboard::uti::UTI_FILE_URL],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| AppError::internal(format!("查 file-url 失败: {e}")))?;
+    if let Some(bytes) = blob {
+        item.file_url = Some(String::from_utf8_lossy(&bytes).to_string());
+    }
+    Ok(())
+}
 trait OptionalExt<T> {
     fn optional(self) -> Result<Option<T>, rusqlite::Error>;
 }
