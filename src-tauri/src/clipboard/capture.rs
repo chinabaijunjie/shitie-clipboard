@@ -64,14 +64,10 @@ pub fn classify_formats(available_utis: &[String]) -> CaptureDecision {
 /// - 含 rtf/html → Rich
 /// - 只有 text → Text
 pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
-    let has_text = capture_utis.iter().any(|u| u == uti::UTI_PLAIN_TEXT);
-    let has_rich = capture_utis
-        .iter()
-        .any(|u| u == uti::UTI_RTF || u == uti::UTI_HTML);
-    let has_image = capture_utis
-        .iter()
-        .any(|u| u == uti::UTI_PNG || u == uti::UTI_TIFF);
-    let has_file = capture_utis.iter().any(|u| u == uti::UTI_FILE_URL);
+    let has_text = capture_utis.iter().any(|u| uti::is_text(u));
+    let has_rich = capture_utis.iter().any(|u| uti::is_rich(u));
+    let has_image = capture_utis.iter().any(|u| uti::is_image(u));
+    let has_file = capture_utis.iter().any(|u| uti::is_file_url(u));
 
     // file-url 优先(文件场景标题取文件名)。
     // ⚠️ 文件场景的 image(png/tiff)是 Finder 生成的文件图标预览,不是真正内容,
@@ -140,11 +136,11 @@ pub fn capture_multi(
     let mut formats: Vec<CapturedFormat> = Vec::new();
     let mut image_size: Option<(u32, u32)> = None;
 
-    // 文本类格式:批量读
+    // 文本类格式:批量读(排除图片格式)
     let text_like_utis: Vec<&str> = capture_utis
         .iter()
         .map(|s| s.as_str())
-        .filter(|u| *u != uti::UTI_PNG && *u != uti::UTI_TIFF)
+        .filter(|u| !uti::is_image(u))
         .collect();
     if !text_like_utis.is_empty() {
         let req: Vec<ContentFormat> = text_like_utis
@@ -164,8 +160,8 @@ pub fn capture_multi(
     // 图片格式:单独读 + 存盘。
     // ⚠️ 当含 file-url 时跳过 —— 文件场景的 image(tiff/icns)是 Finder 图标预览,
     //    不是真正内容,存了会导致文件被误判为图片/混合类型。
-    let has_file_url = capture_utis.iter().any(|u| u == uti::UTI_FILE_URL);
-    let has_image = capture_utis.iter().any(|u| u == uti::UTI_PNG || u == uti::UTI_TIFF);
+    let has_file_url = capture_utis.iter().any(|u| uti::is_file_url(u));
+    let has_image = capture_utis.iter().any(|u| uti::is_image(u));
     if has_image && !has_file_url {
         if let Some(img_fmt) = capture_and_store_image(clipboard, images_dir)? {
             image_size = Some((img_fmt.image_w, img_fmt.image_h));
@@ -223,6 +219,9 @@ fn capture_and_store_image(
 /// 把 clipboard-rs 的 ClipboardContent 转成 CapturedFormat(文本/富文本/文件)。
 ///
 /// 图片格式(ClipboardContent::Image)在此不处理(图片走 capture_and_store_image 单独存盘)。
+///
+/// 注意:UTI 字段统一用 macOS 规范常量(UTI_PLAIN_TEXT 等)存储,
+/// 无论来源平台。这样 DB 里格式名一致,copy_back 和 classify_content_kind 不用关心平台差异。
 fn content_to_captured(content: ClipboardContent) -> Option<CapturedFormat> {
     match content {
         ClipboardContent::Text(s) => Some(CapturedFormat {
@@ -332,6 +331,41 @@ mod tests {
     #[test]
     fn classify_skips_empty() {
         assert_eq!(classify_formats(&[]), CaptureDecision::Skip);
+    }
+
+    // ===== Windows 格式名测试 =====
+
+    #[test]
+    fn classify_captures_windows_plain_text() {
+        // Windows 记事本复制:Unicode Text Format
+        let formats = utis(&["Unicode Text Format"]);
+        match classify_formats(&formats) {
+            CaptureDecision::Capture(utis) => {
+                assert_eq!(utis, vec!["Unicode Text Format".to_string()]);
+            }
+            _ => panic!("Windows 纯文本应被捕获"),
+        }
+    }
+
+    #[test]
+    fn classify_captures_windows_browser_copy() {
+        // Windows 浏览器复制:text + html
+        let formats = utis(&["Unicode Text Format", "HTML Format"]);
+        match classify_formats(&formats) {
+            CaptureDecision::Capture(utis) => {
+                assert!(utis.contains(&"Unicode Text Format".to_string()));
+                assert!(utis.contains(&"HTML Format".to_string()));
+            }
+            _ => panic!("Windows 浏览器复制应被捕获"),
+        }
+    }
+
+    #[test]
+    fn kind_windows_plain_text() {
+        assert_eq!(
+            classify_content_kind(&utis(&["Unicode Text Format"])),
+            ContentKind::Text
+        );
     }
 
     #[test]

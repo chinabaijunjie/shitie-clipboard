@@ -129,11 +129,13 @@ impl ClipboardHandler for ClipboardChangeHandler {
                 return;
             }
         };
+        log::info!("[clipboard] 可用格式: {:?}", available_formats);
 
         // 2. 分类:隐私跳过 / 白名单交集(纯函数决策)
         let decision = capture::classify_formats(&available_formats);
         let CaptureDecision::Capture(to_capture_utis) = decision else {
-            // 隐私跳过 或 无白名单格式,静默跳过(不是错误)
+            // 隐私跳过 或 无白名单格式
+            log::info!("[clipboard] 分类决策为 Skip(隐私跳过或无白名单匹配),不捕获");
             return;
         };
 

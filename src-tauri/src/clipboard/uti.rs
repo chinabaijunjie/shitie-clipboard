@@ -28,17 +28,45 @@ pub const UTI_TIFF: &str = "public.tiff";
 pub const UTI_FILE_URL: &str = "public.file-url";
 
 // ============================================================
-// 白名单(照搬 Maccy supportedTypes)
+// Windows 剪贴板格式名(Win32 注册格式名,与 macOS UTI 完全不同)
 // ============================================================
 
-/// 应捕获的 UTI 集合。不在白名单里的 UTI 直接忽略。
+/// Windows 纯文本(CF_UNICODETEXT)。
+pub const WIN_TEXT: &str = "Unicode Text Format";
+/// Windows 旧式文本(CF_TEXT / OEM_TEXT)。
+pub const WIN_TEXT_ANSI: &str = "Text Format";
+/// Windows 富文本(RTF)。
+pub const WIN_RTF: &str = "Rich Text Format";
+/// Windows HTML。
+pub const WIN_HTML: &str = "HTML Format";
+/// Windows PNG。
+pub const WIN_PNG: &str = "PNG";
+/// Windows DIB(设备无关位图,截图常见)。
+pub const WIN_DIB: &str = "CF_DIB";
+
+// ============================================================
+// 白名单(照搬 Maccy supportedTypes + Windows 格式名)
+// ============================================================
+
+/// 应捕获的 UTI/格式名集合。不在白名单里的格式直接忽略。
+///
+/// macOS 用 UTI(public.*),Windows 用 Win32 注册格式名(如 "Unicode Text Format")。
+/// 两套格式名完全不同,必须都列入白名单。
 pub const WHITELIST_UTIS: &[&str] = &[
+    // macOS UTI
     UTI_PLAIN_TEXT,
     UTI_RTF,
     UTI_HTML,
     UTI_PNG,
     UTI_TIFF,
     UTI_FILE_URL,
+    // Windows 格式名
+    WIN_TEXT,
+    WIN_TEXT_ANSI,
+    WIN_RTF,
+    WIN_HTML,
+    WIN_PNG,
+    WIN_DIB,
 ];
 
 // ============================================================
@@ -106,22 +134,52 @@ pub fn is_whitelisted(uti: &str) -> bool {
     WHITELIST_UTIS.contains(&uti)
 }
 
+/// 判断格式名是否为纯文本(macOS + Windows)。
+pub fn is_text(uti: &str) -> bool {
+    uti == UTI_PLAIN_TEXT || uti == WIN_TEXT || uti == WIN_TEXT_ANSI
+}
+
+/// 判断格式名是否为富文本/HTML(macOS + Windows)。
+pub fn is_rich(uti: &str) -> bool {
+    uti == UTI_RTF || uti == UTI_HTML || uti == WIN_RTF || uti == WIN_HTML
+}
+
+/// 判断格式名是否为图片(macOS + Windows)。
+pub fn is_image(uti: &str) -> bool {
+    uti == UTI_PNG || uti == UTI_TIFF || uti == WIN_PNG || uti == WIN_DIB
+}
+
+/// 判断格式名是否为文件 URL(目前仅 macOS)。
+pub fn is_file_url(uti: &str) -> bool {
+    uti == UTI_FILE_URL
+}
+
 // ============================================================
 // UTI → ContentFormat 映射(给 clipboard-rs get() 用)
 // ============================================================
 
-/// 把白名单 UTI 映射成 clipboard-rs 的 ContentFormat(用于读取)。
+/// 把白名单 UTI/格式名映射成 clipboard-rs 的 ContentFormat(用于读取)。
+///
+/// 同时支持 macOS UTI 和 Windows 格式名:
+/// - macOS: public.utf8-plain-text / public.rtf / public.html / public.png / public.tiff / public.file-url
+/// - Windows: Unicode Text Format / Rich Text Format / HTML Format / PNG / CF_DIB
 ///
 /// 注意:
-/// - PNG/TIFF 都映射成 Image(get_image PNG 优先自动处理,只读一次)
-/// - 其余白名单成员映射成对应枚举
+/// - PNG/TIFF/DIB 都映射成 Image(get_image 读取)
+/// - Windows 的 Files 格式(CF_HDROP)暂不映射(文件复制场景较少,后续补)
 pub fn uti_to_content_format(uti: &str) -> Option<ContentFormat> {
     match uti {
+        // macOS UTI
         UTI_PLAIN_TEXT => Some(ContentFormat::Text),
         UTI_RTF => Some(ContentFormat::Rtf),
         UTI_HTML => Some(ContentFormat::Html),
         UTI_PNG | UTI_TIFF => Some(ContentFormat::Image),
         UTI_FILE_URL => Some(ContentFormat::Files),
+        // Windows 格式名
+        WIN_TEXT | WIN_TEXT_ANSI => Some(ContentFormat::Text),
+        WIN_RTF => Some(ContentFormat::Rtf),
+        WIN_HTML => Some(ContentFormat::Html),
+        WIN_PNG | WIN_DIB => Some(ContentFormat::Image),
         // 非白名单 UTI 返回 None(不读)
         _ => None,
     }
@@ -193,5 +251,39 @@ mod tests {
         assert!(uti_to_content_format("NSStringPboardType").is_none());
         assert!(uti_to_content_format("dyn.xxx").is_none());
         assert!(uti_to_content_format("com.apple.linkpresentation.metadata").is_none());
+    }
+
+    // ===== Windows 格式名测试 =====
+
+    #[test]
+    fn whitelist_includes_windows_formats() {
+        assert!(is_whitelisted(WIN_TEXT));
+        assert!(is_whitelisted(WIN_TEXT_ANSI));
+        assert!(is_whitelisted(WIN_RTF));
+        assert!(is_whitelisted(WIN_HTML));
+        assert!(is_whitelisted(WIN_PNG));
+        assert!(is_whitelisted(WIN_DIB));
+    }
+
+    #[test]
+    fn uti_helpers_recognize_windows_formats() {
+        assert!(is_text("Unicode Text Format"));
+        assert!(is_text("Text Format"));
+        assert!(is_rich("Rich Text Format"));
+        assert!(is_rich("HTML Format"));
+        assert!(is_image("PNG"));
+        assert!(is_image("CF_DIB"));
+        assert!(!is_text("PNG"));
+        assert!(!is_image("Unicode Text Format"));
+    }
+
+    #[test]
+    fn uti_to_content_format_maps_windows_formats() {
+        assert!(matches!(uti_to_content_format(WIN_TEXT), Some(ContentFormat::Text)));
+        assert!(matches!(uti_to_content_format(WIN_TEXT_ANSI), Some(ContentFormat::Text)));
+        assert!(matches!(uti_to_content_format(WIN_RTF), Some(ContentFormat::Rtf)));
+        assert!(matches!(uti_to_content_format(WIN_HTML), Some(ContentFormat::Html)));
+        assert!(matches!(uti_to_content_format(WIN_PNG), Some(ContentFormat::Image)));
+        assert!(matches!(uti_to_content_format(WIN_DIB), Some(ContentFormat::Image)));
     }
 }
