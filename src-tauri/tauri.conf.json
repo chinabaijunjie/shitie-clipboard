@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "拾贴",
+  "productName": "Shitie",
   "version": "1.0.0",
   "identifier": "com.example.clipboard-manager",
   "build": {
