@@ -2,7 +2,7 @@
  * SettingsPanel — 设置面板(M3 + 苹果审美改造)
  *
  * 8 项配置(分 3 组):
- * - 通用:开机自启 / 唤起快捷键 / 启动时打开窗口
+ * - 通用:外观(主题) / 开机自启 / 唤起快捷键 / 启动时打开窗口
  * - 存储:历史记录上限 / 保留天数 / 容量上限
  * - 行为:失焦自动隐藏 / 敏感内容过滤
  *
@@ -22,6 +22,7 @@ import { ArrowLeft, Check } from 'lucide-react'
 import { cn } from '@lib/utils'
 import { isValidShortcut, parseKeyEvent, formatShortcut } from '@core/settings/shortcut'
 import type { Settings } from '@core/settings/models'
+import { ThemeSwitcher } from '@components/ThemeSwitcher'
 
 interface SettingsPanelProps {
   settings: Settings
@@ -173,6 +174,12 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
       <div className="scrollbar-thin flex-1 overflow-y-auto px-3.5 py-1">
         {/* --- 通用 --- */}
         <SettingGroupTitle>通用</SettingGroupTitle>
+        <SettingRow label="外观" desc="选择界面配色风格">
+          <ThemeSwitcher
+            value={settings.theme}
+            onChange={(theme) => void save({ theme })}
+          />
+        </SettingRow>
         <SettingRow label="开机自启" desc="登录时自动启动(后台运行)">
           {autostartLoading ? (
             /* 查询系统 LaunchAgent 状态期间显示占位,避免初始 false → true 跳变 */
@@ -273,7 +280,7 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
       </div>
 
       {/* 底栏:错误提示 / 保存提示 —— 顶部半透明分隔线 */}
-      <div className="border-t border-white/5 px-3.5 py-1.5 text-[10px]">
+      <div className="border-t border-divider px-3.5 py-1.5 text-[10px]">
         {error ? (
           <span className="text-destructive">{error}</span>
         ) : (
@@ -307,7 +314,7 @@ function SettingRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-white/5 py-2.5 last:border-b-0">
+    <div className="flex items-center justify-between border-b border-divider py-2.5 last:border-b-0">
       <div className="mr-3">
         <div className="text-xs font-medium text-foreground">{label}</div>
         <div className="mt-0.5 text-[10px] text-text-tertiary">{desc}</div>
@@ -339,10 +346,11 @@ function Toggle({
       )}
     >
       <span
-        className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-base ease-out-strong"
+        className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform duration-base ease-out-strong"
         style={{
           transform: checked ? 'translateX(16px)' : 'translateX(0)',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+          background: 'var(--toggle-thumb)',
+          boxShadow: 'var(--thumb-shadow)',
         }}
       />
     </button>

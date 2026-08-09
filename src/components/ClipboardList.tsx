@@ -79,7 +79,7 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
               ...(isSelected
                 ? {
                     backgroundColor: 'var(--bg-selected)',
-                    boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
+                    boxShadow: 'inset 0 0.5px 0 var(--selected-highlight)',
                   }
                 : {}),
               display: 'grid',

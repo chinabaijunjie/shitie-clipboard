@@ -68,6 +68,9 @@ export default {
         // 徽标 / 类型图标
         'badge-bg': 'var(--badge-bg)',
         'badge-text': 'var(--badge-text)',
+        // 多主题语义化键(随 .theme-* 切换)
+        divider: 'var(--divider)',
+        'card-raised': 'var(--card-raised)',
       },
       borderRadius: {
         // shadcn 标准(基准 --radius)

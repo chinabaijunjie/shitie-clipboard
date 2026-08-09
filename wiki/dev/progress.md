@@ -15,18 +15,19 @@ status: active
 
 - **项目**：Clipboard Manager（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：M4 UI 苹果审美改造 — **✅ 完成**(2026-08-09,深色毛玻璃主题 + 三组件重做)
+- **当前里程碑**：多主题切换 — **✅ 完成**(2026-08-09,深色/浅色/折中三套主题 + 分段按钮切换)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
   + M3 新增:全局快捷键 / 托盘 / 开机自启 / 设置持久化(Store 插件)/ 自动清理
   + M4 新增:敏感信息过滤(正则黑名单)+ 去重修复(格式覆盖/文件 URL)+ CI 跨平台打包
   + M4 UI 新增:深色毛玻璃主题(lucide-react 图标库 + 苹果配色 token + 三组件重做)
+  + 多主题切换新增:浅色(.theme-light)+ 折中(.theme-mid)+ 分段按钮选择器 + localStorage 防闪
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
   + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
   + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
   + tauri-plugin-global-shortcut 2 / tauri-plugin-autostart 2 / tauri-plugin-store 2(M3 新增)
   + regex 1(M4 新增,敏感信息正则匹配)
   + lucide-react 1.30(M4 UI 新增,矢量图标库)
-- **验证基线**：cargo test 189 passed + npm test 55 passed + npm build 全绿 + clippy 零 warning
+- **验证基线**：cargo test 189 passed + npm test 67 passed + npm build 全绿 + clippy 零 warning
 - **下一步**：M4 阶段 D(Windows 实测 + CI 打包发布)— 需先建 GitHub 仓库 + push tag v1.0.0
 
 ## M1 调研 + Spike 记录(2026-08-05)
@@ -307,6 +308,41 @@ PR review 留的 3 项 code quality 改进,独立改进会话清完。每项一�
 - 主题架构预留:.theme-{dark/light/mid} class + Settings theme 字段(未实现切换)
 
 **验证基线**:npm build ✅ + npm test 55 passed ✅ + typecheck ✅(无 Rust 改动)
+
+## 多主题切换完成记录(2026-08-09)
+
+三套主题(深色/浅色/折中)从预设计转正式,分段按钮选择器 + localStorage 防闪。
+
+- **阶段 A Token 层**(`index.css` 重写 + 硬编码修复):
+  - 共享 token(缓动/时长/圆角)抽到 `:root`,三套配色各自一个 `.theme-*` 块
+  - `.theme-dark`(默认)/ `.theme-light`(浅色系统)/ `.theme-mid`(深灰折中+暖橙)
+  - 新增 6 个语义化 token(解决跨主题硬编码颜色):`--divider` / `--card-raised` /
+    `--toggle-thumb` / `--thumb-shadow` / `--selected-highlight` / `--scrollbar-thumb`
+  - 修 7 处硬编码颜色:`border-white/5` / `border-white/10` / `bg-white/5` / `bg-white`(Toggle 圆点)/
+    `rgba(255,255,255,0.12)`(选中高光)/ `rgba(0,0,0,0.2)`(圆点阴影)/ `.scrollbar-thin` 滚动条色
+  - tailwind.config.js 加 `divider` / `card-raised` 颜色键接线
+- **阶段 B 数据层**(两端同步):
+  - Rust `Settings` struct 加 `theme: String` + `default_theme()` → `"dark"`
+  - 前端 Zod `SettingsSchema` 加 `theme: z.enum(['dark','light','mid'])` + `ThemeName` 类型
+  - 向后兼容:老 settings.json 无 theme 字段 → serde default 自动兜底 dark
+- **阶段 C 切换逻辑**:
+  - 新建 `src/core/theme.ts`:`applyTheme`(DOM class + localStorage)/ `getInitialTheme`(启动防闪)/ `isThemeName`
+  - `main.tsx`:`applyTheme(getInitialTheme())` 替代硬编码 add('theme-dark')
+  - `App.tsx`:settings theme 变化 → useEffect → applyTheme(纠正 localStorage 缓存)
+- **阶段 D UI**:
+  - 新建 `ThemeSwitcher.tsx`:分段按钮(macOS 系统设置风格),三选一,role=radiogroup
+  - `SettingsPanel.tsx`「通用」组顶部加「外观」SettingRow
+- **阶段 E 测试**:
+  - `theme.test.ts`(8 测试):isThemeName 合法/非法、applyTheme class 设置/替换/写缓存、getInitialTheme 三分支
+  - `ThemeSwitcher.test.tsx`(4 测试):渲染三选项、选中态 checked、点击触发 onChange、aria-label
+
+**技术决策**:
+- 启动防闪:localStorage 缓存优先(同步),settings.json 加载后纠正(异步)
+- .dark class 始终保留(Tailwind darkMode 触发器,让 dark: 前缀生效)
+- 实机调校透明度:浅色 0.82→0.88 / 折中 0.78→0.88(spec 原值偏透)
+- 滚动条 hover 用 filter:brightness(1.3) 替代硬编码 hover 色(随主题自适应)
+
+**验证基线**:cargo test 189 passed + npm test 67 passed(原 55 + theme 8 + switcher 4)+ npm build ✅ + clippy 零 warning
 
 ## 本工程开发历史
 

@@ -12,6 +12,10 @@
  */
 import { z } from 'zod'
 
+/** 可选主题名(深色 / 浅色 / 折中) */
+export const THEME_NAMES = ['dark', 'light', 'mid'] as const
+export type ThemeName = (typeof THEME_NAMES)[number]
+
 /** Settings 的 Zod schema(校验后端 invoke 返回,§8 边界校验) */
 export const SettingsSchema = z.object({
   shortcut: z.string(),
@@ -21,6 +25,7 @@ export const SettingsSchema = z.object({
   maxStorageMb: z.number().int().nonnegative(),
   hideOnBlur: z.boolean(),
   enableSensitiveFilter: z.boolean(),
+  theme: z.enum(THEME_NAMES),
 })
 
 export interface Settings {
@@ -37,4 +42,6 @@ export interface Settings {
   readonly hideOnBlur: boolean
   /** 敏感内容过滤(API key/token/私钥自动拦截) */
   readonly enableSensitiveFilter: boolean
+  /** 界面配色主题 */
+  readonly theme: ThemeName
 }

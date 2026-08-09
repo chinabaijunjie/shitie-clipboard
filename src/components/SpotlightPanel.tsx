@@ -240,7 +240,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
 
       {/* 搜索框 —— 圆角卡片样式(左右留白 + 半透明背景 + 圆角边框) */}
       <div className="px-3 py-2">
-        <div className="flex items-center gap-2 rounded-card border border-white/10 bg-white/5 px-3 py-1.5">
+        <div className="flex items-center gap-2 rounded-card border border-divider bg-card-raised px-3 py-1.5">
           <Search className="h-[13px] w-[13px] shrink-0 text-text-tertiary" aria-hidden />
           <input
             ref={searchInputRef}
@@ -274,7 +274,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
       </div>
 
       {/* 底栏:快捷键提示 / 操作错误 —— 顶部半透明分隔线 */}
-      <div className="border-t border-white/10 px-3.5 py-1.5 text-[10px]">
+      <div className="border-t border-divider px-3.5 py-1.5 text-[10px]">
         {actionError ? (
           <span className="text-destructive">{actionError}</span>
         ) : (

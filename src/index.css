@@ -1,8 +1,11 @@
 /**
- * 全局样式 — 苹果审美改造(深色毛玻璃 ①)
+ * 全局样式 — 多主题(深色 / 浅色 / 折中)
  *
- * 设计依据:wiki/dev/ui-design-spec.md §2 + §3.1
- * 设计稿:design-mockups/01-dark-glass.html
+ * 设计依据:wiki/dev/ui-design-spec.md §2 + §3
+ * 设计稿:design-mockups/{01-dark-glass,02-light-system,03-mid-balance}.html
+ *
+ * 三套主题用根元素 class 切换(.theme-dark / .theme-light / .theme-mid)。
+ * :root 默认 = 深色(最稳选择,剪贴板工具主流形态)。
  *
  * Token 分两类:
  * 1. shadcn 兼容变量(--background/--foreground/--primary 等,组件用 hsl(var(--x)))
@@ -23,48 +26,11 @@
  * 但配色值换苹果系统色:深灰蓝背景 #1C1C1E + iOS systemBlue。
  * ============================================================ */
 @layer base {
-  :root,
-  .theme-dark {
-    /* 背景:深灰蓝而非纯黑(苹果材质感来自非纯黑) */
-    --background: 240 6% 12%;             /* #1C1C1E */
-    --foreground: 0 0% 100%;              /* 白 */
-
-    --card: 240 6% 14%;                   /* #212122 略浅一层 */
-    --card-foreground: 0 0% 100%;
-
-    --popover: 240 6% 14%;
-    --popover-foreground: 0 0% 100%;
-
-    /* 强调色:iOS systemBlue(暗色版 #0A84FF) */
-    --primary: 211 100% 52%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 240 5% 18%;              /* #2C2C2E */
-    --secondary-foreground: 0 0% 100%;
-
-    --muted: 240 5% 18%;
-    --muted-foreground: 240 5% 65%;       /* 次级文字 */
-
-    --accent: 211 100% 52%;               /* 选中胶囊用 primary */
-    --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 100% 62%;            /* iOS systemRed #FF453A */
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 240 5% 22%;                 /* 分隔线 */
-    --input: 240 5% 22%;
-    --ring: 211 100% 52%;
-
-    --radius: 0.625rem;                   /* 10px 基准圆角 */
-  }
-
   /* ============================================================
-   * UI 专用 Token(设计规格 §2 —— 缓动/时长/圆角/阴影/毛玻璃)
-   * 不走 hsl 格式,直接用完整值(因为 backdrop-filter/box-shadow/cubic-bezier
-   * 不适合拆成 hsl 三元组)
+   * 共享 Token(三套主题通用,不随配色变)
+   * 设计规格 §2.1
    * ============================================================ */
-  :root,
-  .theme-dark {
+  :root {
     /* 缓动曲线(emilkowalski 纪律:绝不近似) */
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -79,13 +45,40 @@
     --radius-small: 6px;
     --radius-thumb: 5px;
 
-    /* 毛玻璃外壳(深色 ① 专属)
-       --window-bg 0.72→0.85 实机调校:0.72 太透,桌面杂色干扰可读性 */
-    --window-bg: rgba(28, 28, 30, 0.85);
-    /* ⚠️ --window-blur 当前未接线(backdrop-filter 因 WKWebView 闪烁弃用),仅作规格存档 */
-    --window-blur: blur(30px) saturate(180%);
+    /* shadcn 基准圆角 */
+    --radius: 0.625rem;                   /* 10px */
+  }
 
-    /* 窗口阴影:多层半透明(苹果质感核心)+ 顶边高光 */
+  /* ============================================================
+   * ① 深色毛玻璃(默认主题 —— Raycast / Spotlight 风格)
+   * 设计依据:ui-design-spec.md §3.1
+   * ============================================================ */
+  :root,
+  .theme-dark {
+    /* shadcn 兼容变量(hsl 三元组) */
+    --background: 240 6% 12%;             /* #1C1C1E */
+    --foreground: 0 0% 100%;              /* 白 */
+    --card: 240 6% 14%;                   /* #212122 */
+    --card-foreground: 0 0% 100%;
+    --popover: 240 6% 14%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 211 100% 52%;             /* iOS systemBlue 暗色版 #0A84FF */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 18%;             /* #2C2C2E */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 5% 18%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 211 100% 52%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 62%;           /* iOS systemRed #FF453A */
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 22%;
+    --input: 240 5% 22%;
+    --ring: 211 100% 52%;
+
+    /* UI 专用变量 */
+    /* 毛玻璃外壳:0.72→0.85 实机调校(0.72 太透,桌面杂色干扰可读性) */
+    --window-bg: rgba(28, 28, 30, 0.85);
     --shadow-window: 0 22px 70px 4px rgba(0, 0, 0, 0.45),
       0 8px 24px rgba(0, 0, 0, 0.18),
       inset 0 0.5px 0 rgba(255, 255, 255, 0.12);
@@ -94,21 +87,141 @@
     --bg-hover: rgba(255, 255, 255, 0.12);
     --bg-selected: hsl(211 100% 52% / 0.25);
 
-    /* 苹果 systemLabel 三级文字(带透明度,适配毛玻璃) */
+    /* 文字层级(苹果 systemLabel 三级) */
     --text-secondary: rgba(235, 235, 245, 0.6);
     --text-tertiary: rgba(235, 235, 245, 0.3);
 
     /* 状态点发光 */
     --status-ready: 211 100% 52%;
 
-    /* 徽标(×N) */
+    /* 徽标 */
     --badge-bg: rgba(255, 255, 255, 0.08);
     --badge-text: rgba(235, 235, 245, 0.6);
 
-    /* 类型图标颜色(预留位,见 ui-design-spec.md §6) */
+    /* 类型图标颜色(预留位) */
     --type-code: #ffd60a;
     --type-md: #64d2ff;
     --type-file: #30d158;
+
+    /* 语义化 token(解决跨主题硬编码颜色) */
+    --divider: rgba(255, 255, 255, 0.08);          /* 分隔线 */
+    --card-raised: rgba(255, 255, 255, 0.05);      /* 搜索框卡片浮起背景 */
+    --toggle-thumb: #ffffff;                       /* Toggle 圆点 */
+    --thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);  /* Toggle 圆点阴影 */
+    --selected-highlight: rgba(255, 255, 255, 0.12); /* 选中项顶部内高光 */
+    --scrollbar-thumb: rgba(235, 235, 245, 0.15);  /* 滚动条 */
+  }
+
+  /* ============================================================
+   * ② 浅色系统(macOS 系统设置 / iOS 风格)
+   * 设计依据:ui-design-spec.md §3.2
+   * ============================================================ */
+  .theme-light {
+    /* shadcn 兼容变量 */
+    --background: 0 0% 96%;               /* #F5F5F7 */
+    --foreground: 0 0% 11%;              /* #1D1D1F */
+    --card: 0 0% 100%;                   /* 白 */
+    --card-foreground: 0 0% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 11%;
+    --primary: 211 100% 50%;             /* iOS systemBlue 亮色版 #007AFF */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 92%;
+    --secondary-foreground: 0 0% 11%;
+    --muted: 240 5% 92%;
+    --muted-foreground: 240 4% 46%;      /* #86868B */
+    --accent: 211 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 50%;           /* #FF3B30 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 4% 88%;
+    --input: 240 4% 88%;
+    --ring: 211 100% 50%;
+
+    /* UI 专用变量 */
+    --window-bg: rgba(255, 255, 255, 0.88);  /* 白 88%(实机调:spec 0.82 偏透) */
+    --shadow-window: 0 22px 70px 4px rgba(0, 0, 0, 0.14),
+      0 8px 24px rgba(0, 0, 0, 0.06),
+      inset 0 0.5px 0 rgba(255, 255, 255, 0.6);
+
+    --bg-hover: rgba(0, 0, 0, 0.05);
+    --bg-selected: hsl(211 100% 50% / 0.12);
+
+    --text-secondary: #86868b;           /* spec 原值(浅色背景不需要透明度) */
+    --text-tertiary: #aeaeb2;
+
+    --status-ready: 211 100% 50%;
+
+    --badge-bg: rgba(60, 60, 67, 0.12);
+    --badge-text: #86868b;
+
+    --type-code: #ff9f0a;
+    --type-md: #30b0c7;
+    --type-file: #34c759;
+
+    /* 语义化 token */
+    --divider: rgba(60, 60, 67, 0.12);
+    --card-raised: rgba(0, 0, 0, 0.03);
+    --toggle-thumb: #ffffff;
+    --thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    --selected-highlight: rgba(255, 255, 255, 0.6);
+    --scrollbar-thumb: rgba(60, 60, 67, 0.2);
+  }
+
+  /* ============================================================
+   * ③ 深灰折中(暖橙强调)
+   * 设计依据:ui-design-spec.md §3.3
+   * ============================================================ */
+  .theme-mid {
+    /* shadcn 兼容变量 */
+    --background: 0 0% 17%;              /* #2A2A2D */
+    --foreground: 0 0% 96%;              /* #F5F5F7 */
+    --card: 0 0% 20%;                    /* 略浅一层 */
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 20%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 38 100% 55%;              /* iOS systemOrange #FF9F0A */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 24%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 24%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 38 100% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 28%;
+    --input: 0 0% 28%;
+    --ring: 38 100% 55%;
+
+    /* UI 专用变量 */
+    --window-bg: rgba(42, 42, 45, 0.88);  /* #2A2A2D 88%(实机调:spec 0.78 偏透) */
+    --shadow-window: 0 22px 70px 4px rgba(0, 0, 0, 0.4),
+      0 8px 24px rgba(0, 0, 0, 0.16),
+      inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+
+    --bg-hover: rgba(255, 255, 255, 0.08);
+    --bg-selected: hsl(38 100% 55% / 0.2);
+
+    --text-secondary: rgba(245, 245, 247, 0.55);
+    --text-tertiary: rgba(245, 245, 247, 0.3);
+
+    --status-ready: 38 100% 55%;
+
+    --badge-bg: rgba(255, 255, 255, 0.08);
+    --badge-text: rgba(245, 245, 247, 0.55);
+
+    --type-code: #ffd60a;
+    --type-md: #64d2ff;
+    --type-file: #30d158;
+
+    /* 语义化 token */
+    --divider: rgba(255, 255, 255, 0.08);
+    --card-raised: rgba(255, 255, 255, 0.04);
+    --toggle-thumb: #f5f5f7;
+    --thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    --selected-highlight: rgba(255, 255, 255, 0.08);
+    --scrollbar-thumb: rgba(245, 245, 247, 0.15);
   }
 }
 
@@ -181,21 +294,22 @@
 
   /**
    * 隐形细滚动条(苹果风)—— 列表/设置区共用。
+   * 颜色走 --scrollbar-thumb 变量,随主题切换。
    */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgba(235, 235, 245, 0.15) transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(235, 235, 245, 0.15);
+    background: var(--scrollbar-thumb);
     border-radius: 3px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: rgba(235, 235, 245, 0.25);
+    filter: brightness(1.3);
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;

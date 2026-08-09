@@ -29,6 +29,7 @@ status: active
 | 2026-08-09 | 主面板 + 设置面板全改 | 用户决策,体验一致性 |
 | 2026-08-09 | 列表项预留类型图标位置(text/image/file/code/md) | 为未来「按格式智能渲染」铺路,本次不实现检测逻辑 |
 | 2026-08-09 | **多主题切换不在第一版做** | 三倍维护成本 + 高频工具追求无感;架构预留,验证后按需加 |
+| 2026-08-09 | **多主题切换已落地**(深色/浅色/折中) | UI 稳定后用户要求加入。三套配色从预设计转正式。启动防闪 localStorage 缓存优先 + 分段按钮选择器 |
 
 ---
 
@@ -40,8 +41,8 @@ status: active
 |------|------|------|
 | `index.html` | 导览页(三份风格入口) | ✅ |
 | `01-dark-glass.html` | ① 深色毛玻璃(Raycast 风) | ✅ **第一版主方向** |
-| `02-light-system.html` | ② 浅色系统(macOS 设置风) | ⏳ 预设计,待未来主题切换 |
-| `03-mid-balance.html` | ③ 深灰折中(暖橙强调) | ⏳ 预设计,待未来主题切换 |
+| `02-light-system.html` | ② 浅色系统(macOS 设置风) | ✅ 已落地(.theme-light) |
+| `03-mid-balance.html` | ③ 深灰折中(暖橙强调) | ✅ 已落地(.theme-mid) |
 
 每份设计稿内部含 **主面板 / 空状态 / 设置面板** 三个标签视图,可切换查看。
 
@@ -198,9 +199,9 @@ status: active
 
 ---
 
-## §4 主题切换架构(未来实现参考)
+## §4 主题切换架构(✅ 已实现,2026-08-09)
 
-> 本次不实现。但架构预留,未来加切换时按此设计。
+> 三套主题(深色/浅色/折中)已全部落地。以下架构在实现时遵循并补充了实际决策。
 
 ### 4.1 CSS 层:主题 class
 
@@ -238,14 +239,16 @@ fn default_theme() -> String { "dark".to_string() }
 // main.tsx 启动时读 settings.theme → 在 <html> 加 .theme-{theme} class
 ```
 
-### 4.3 切换交互
+### 4.3 切换交互(✅ 已实现)
 
-设置面板「通用」组加一项:
+设置面板「通用」组顶部第一项:
 - 标签:外观
 - 描述:选择界面配色风格
-- 控件:三选一(深色 / 浅色 / 折中),即时生效 + 即时保存
+- 控件:**分段按钮**(ThemeSwitcher 组件,macOS 系统设置风格),三选一(深色 / 浅色 / 折中)
+- 即时生效 + 即时保存(save → update_settings)
 
-切换实现:`document.documentElement.className = 'theme-' + theme`,无闪烁(变量级切换,不需重载)。
+切换实现:`document.documentElement.className = 'theme-' + theme + ' dark'`,无闪烁(变量级切换,不需重载)。
+启动防闪:`main.tsx` 同步读 localStorage 缓存(`getInitialTheme`),settings 加载后纠正(`App.tsx` useEffect → `applyTheme`)。
 
 ---
 
@@ -370,7 +373,7 @@ display: flex; flex-direction: column;
 
 ## §7 不做的事(克制)
 
-- ❌ **多主题切换不在第一版做** —— 架构预留(§4),验证后按需加
+- ~~❌ **多主题切换不在第一版做**~~ → ✅ **已实现**(2026-08-09,三套主题全部落地)
 - ❌ **代码/Markdown 智能检测不在本次做** —— 预留图标位(§6),独立迭代
 - ❌ **不引入 shadcn/ui** —— 手写精雕,零新依赖
 - ❌ **不引入 Motion/Framer Motion** —— CSS transition 够用
