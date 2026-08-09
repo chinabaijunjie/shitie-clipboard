@@ -185,19 +185,6 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
       <div className="scrollbar-thin flex-1 overflow-y-auto px-3.5 py-1">
         {/* --- 通用 --- */}
         <SettingGroupTitle>通用</SettingGroupTitle>
-        <SettingRow label="外观" desc="选择界面配色风格">
-          <ThemeSwitcher
-            value={settings.theme}
-            onChange={(theme) => void save({ theme })}
-          />
-        </SettingRow>
-        <SettingRow label="背景透明度" desc="值越大越透明(15% 微透 ~ 100% 全透明)">
-          <Select
-            value={settings.windowOpacity}
-            options={WINDOW_OPACITY_OPTIONS.map((v) => ({ value: v, label: `${v}%` }))}
-            onChange={(v) => void save({ windowOpacity: v })}
-          />
-        </SettingRow>
         <SettingRow label="开机自启" desc="登录时自动启动(后台运行)">
           {autostartLoading ? (
             /* 查询系统 LaunchAgent 状态期间显示占位,避免初始 false → true 跳变 */
@@ -254,6 +241,19 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
           <Toggle
             checked={settings.launchVisible}
             onChange={(v) => void save({ launchVisible: v })}
+          />
+        </SettingRow>
+        <SettingRow label="外观" desc="选择界面配色风格">
+          <ThemeSwitcher
+            value={settings.theme}
+            onChange={(theme) => void save({ theme })}
+          />
+        </SettingRow>
+        <SettingRow label="背景不透明度" desc="值越大越不透明(15% 较透 ~ 100% 不透明)">
+          <Select
+            value={settings.windowOpacity}
+            options={WINDOW_OPACITY_OPTIONS.map((v) => ({ value: v, label: `${v}%` }))}
+            onChange={(v) => void save({ windowOpacity: v })}
           />
         </SettingRow>
 

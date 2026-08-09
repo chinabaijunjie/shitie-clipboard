@@ -12,7 +12,7 @@
 //! - hide_on_blur:失焦自动隐藏(默认 true)
 //! - enable_sensitive_filter:敏感内容过滤(默认 true,M4 新增)
 //! - theme:界面配色主题(默认 "dark",多主题切换新增)
-//! - window_opacity:窗口背景透明度百分比(默认 15,15=微透/100=全透明)
+//! - window_opacity:窗口背景不透明度百分比(默认 85,15=较透/100=完全不透明)
 //!
 //! autostart 状态由 tauri-plugin-autostart 管理(写 LaunchAgent plist),不进 settings.json。
 //!
@@ -62,7 +62,7 @@ pub struct Settings {
     /// 界面配色主题("dark" / "light" / "mid")。
     #[serde(rename = "theme", default = "default_theme")]
     pub theme: String,
-    /// 窗口背景透明度(15-100,值越大越透明。15=微透,100=全透明)。
+    /// 窗口背景不透明度(15-100,值越大越不透明。100=完全不透明)。
     #[serde(rename = "windowOpacity", default = "default_window_opacity")]
     pub window_opacity: i64,
 }
@@ -86,7 +86,7 @@ fn default_theme() -> String {
     "dark".to_string()
 }
 fn default_window_opacity() -> i64 {
-    15
+    85
 }
 
 impl Default for Settings {
@@ -186,7 +186,7 @@ mod tests {
         assert!(s.hide_on_blur);
         assert!(s.enable_sensitive_filter);
         assert_eq!(s.theme, "dark");
-        assert_eq!(s.window_opacity, 15);
+        assert_eq!(s.window_opacity, 85);
     }
 
     #[test]
@@ -238,7 +238,7 @@ mod tests {
         assert!(s.hide_on_blur);
         assert!(s.enable_sensitive_filter);
         assert_eq!(s.theme, "dark");
-        assert_eq!(s.window_opacity, 15);
+        assert_eq!(s.window_opacity, 85);
     }
 
     #[test]

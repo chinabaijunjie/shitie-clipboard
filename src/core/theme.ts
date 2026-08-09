@@ -59,12 +59,12 @@ export function getInitialTheme(): ThemeName {
 export const WINDOW_OPACITY_OPTIONS = [15, 25, 35, 45, 55, 65, 75, 85, 95, 100] as const
 
 /**
- * 应用窗口透明度到 DOM。
+ * 应用窗口不透明度到 DOM。
  *
  * 设置 --window-opacity CSS 变量(alpha 值)。
- * opacity=15 → alpha 0.85(微透),opacity=100 → alpha 0(全透明)。
+ * opacity=100 → alpha 1(完全不透明),opacity=15 → alpha 0.15(较透明)。
  */
 export function applyWindowOpacity(opacity: number): void {
-  const alpha = Math.max(0, Math.min(1, 1 - opacity / 100))
+  const alpha = Math.max(0, Math.min(1, opacity / 100))
   document.documentElement.style.setProperty('--window-opacity', alpha.toString())
 }
