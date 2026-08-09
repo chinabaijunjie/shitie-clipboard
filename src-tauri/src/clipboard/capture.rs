@@ -55,9 +55,11 @@ pub fn classify_formats(available_utis: &[String]) -> CaptureDecision {
 /// 根据捕获的 UTI 列表推断 contentKind(纯函数)。
 ///
 /// 优先级:file-url → image(png/tiff)→ rtf/html → text。
-/// - 含 file-url → File(文件场景的 image 是 Finder 图标预览,不算内容)
-///   - file + text/rich → Mixed(如网页另存为文件时同时有文本)
-///   - 纯 file(可能附带 image 图标)→ File
+/// - 含 file-url → File
+///   - file + rich(rtf/html) → Mixed(如网页另存为文件时同时有富文本内容)
+///   - ⚠️ file + text 不算 Mixed:macOS 复制文件时会附带文件名的纯文本表示,
+///     这不是独立内容,不应因此判为 Mixed。
+///   - 文件场景的 image(tiff/icns)是 Finder 图标预览,已在上游过滤
 /// - 含图片(png/tiff)→ Image(或 Mixed 若还有文本/富文本)
 /// - 含 rtf/html → Rich
 /// - 只有 text → Text
@@ -73,9 +75,11 @@ pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
 
     // file-url 优先(文件场景标题取文件名)。
     // ⚠️ 文件场景的 image(png/tiff)是 Finder 生成的文件图标预览,不是真正内容,
-    //    不计入 Mixed 判断(否则文件复制被误判为 Mixed/Image)。
+    //    已在 capture_multi 里过滤(has_file_url 时不捕获 image)。
+    // ⚠️ file + text 不算 Mixed:macOS 复制文件时附带的纯文本是文件名表示,不是独立内容。
+    //    只有 file + rich(rtf/html)才算 Mixed(文件本身含富文本内容)。
     if has_file {
-        if has_text || has_rich {
+        if has_rich {
             return ContentKind::Mixed;
         }
         return ContentKind::File;
@@ -377,8 +381,15 @@ mod tests {
 
     #[test]
     fn kind_file_priority_over_others() {
-        // file-url 优先级最高
+        // file-url 优先级最高;附带的 text(文件名)和 png(图标)不构成 Mixed
         let formats = utis(&["public.file-url", "public.utf8-plain-text", "public.png"]);
+        assert_eq!(classify_content_kind(&formats), ContentKind::File);
+    }
+
+    #[test]
+    fn kind_file_with_rich_is_mixed() {
+        // file + rich(rtf/html)才是真正的混合(文件本身含富文本内容)
+        let formats = utis(&["public.file-url", "public.rtf"]);
         assert_eq!(classify_content_kind(&formats), ContentKind::Mixed);
     }
 }
