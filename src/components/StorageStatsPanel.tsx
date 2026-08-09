@@ -79,7 +79,7 @@ export function StorageStatsPanel({
       {/* 分组标题 + 右侧总数 */}
       <div className="flex items-center justify-between pt-3 pb-1.5">
         <span className="pl-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-text-tertiary">
-          存储
+          已存储数据
         </span>
         {!loading && (
           <span className="text-[10px] text-text-tertiary">

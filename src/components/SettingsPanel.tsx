@@ -249,6 +249,21 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
           />
         </SettingRow>
 
+        {/* --- 行为 --- */}
+        <SettingGroupTitle>行为</SettingGroupTitle>
+        <SettingRow label="失焦自动隐藏" desc="点击窗口外自动隐藏(Spotlight 行为)">
+          <Toggle
+            checked={settings.hideOnBlur}
+            onChange={(v) => void save({ hideOnBlur: v })}
+          />
+        </SettingRow>
+        <SettingRow label="敏感内容过滤" desc="自动拦截 API key / Token / 私钥等敏感信息">
+          <Toggle
+            checked={settings.enableSensitiveFilter}
+            onChange={(v) => void save({ enableSensitiveFilter: v })}
+          />
+        </SettingRow>
+
         {/* --- 存储 --- */}
         <SettingGroupTitle>存储</SettingGroupTitle>
         <SettingRow label="历史记录上限" desc="最多保留多少条历史">
@@ -273,32 +288,17 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
           />
         </SettingRow>
 
-        {/* --- 行为 --- */}
-        <SettingGroupTitle>行为</SettingGroupTitle>
-        <SettingRow label="失焦自动隐藏" desc="点击窗口外自动隐藏(Spotlight 行为)">
-          <Toggle
-            checked={settings.hideOnBlur}
-            onChange={(v) => void save({ hideOnBlur: v })}
-          />
-        </SettingRow>
-        <SettingRow label="敏感内容过滤" desc="自动拦截 API key / Token / 私钥等敏感信息">
-          <Toggle
-            checked={settings.enableSensitiveFilter}
-            onChange={(v) => void save({ enableSensitiveFilter: v })}
-          />
-        </SettingRow>
+        {/* 存储统计 + 清除历史 */}
+        <StorageStatsPanel
+          total={stats?.total ?? 0}
+          byKind={stats?.byKind ?? {
+            text: 0, rich: 0, image: 0, file: 0, mixed: 0, link: 0, markdown: 0,
+          }}
+          storageBytes={stats?.storageBytes ?? 0}
+          loading={statsLoading}
+          onClear={clearAll}
+        />
       </div>
-
-      {/* 存储统计 + 清除历史 */}
-      <StorageStatsPanel
-        total={stats?.total ?? 0}
-        byKind={stats?.byKind ?? {
-          text: 0, rich: 0, image: 0, file: 0, mixed: 0, link: 0, markdown: 0,
-        }}
-        storageBytes={stats?.storageBytes ?? 0}
-        loading={statsLoading}
-        onClear={clearAll}
-      />
 
       {/* 底栏:错误提示 / 保存提示 —— 顶部半透明分隔线 */}
       <div className="border-t border-divider px-3.5 py-1.5 text-[10px]">
