@@ -54,25 +54,23 @@ pub fn classify_formats(available_utis: &[String]) -> CaptureDecision {
 
 /// 根据捕获的 UTI 列表推断 contentKind(纯函数)。
 ///
-/// 优先级:file-url → image(png/tiff)→ rtf/html → text。
-/// - 含 file-url → File
-///   - file + rich(rtf/html) → Mixed(如网页另存为文件时同时有富文本内容)
-///   - ⚠️ file + text 不算 Mixed:macOS 复制文件时会附带文件名的纯文本表示,
-///     这不是独立内容,不应因此判为 Mixed。
-///   - 文件场景的 image(tiff/icns)是 Finder 图标预览,已在上游过滤
-/// - 含图片(png/tiff)→ Image(或 Mixed 若还有文本/富文本)
-/// - 含 rtf/html → Rich
-/// - 只有 text → Text
+/// 优先级:file → image → text → rich。
+/// - 含 file → File
+///   - file + rich(rtf/html) → Mixed
+///   - ⚠️ file + text 不算 Mixed:复制文件时附带的纯文本是文件名表示,不是独立内容。
+///   - 文件场景的 image(tiff/icns)是文件管理器图标预览,已在上游过滤
+/// - 含图片(png/tiff/dib)→ Image(或 Mixed 若还有文本/富文本)
+/// - 含 text → Text(text 优先:Windows 上几乎都附带 RTF,但用户复制的就是纯文字)
+/// - 只含 rich(无 text)→ Rich
 pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
     let has_text = capture_utis.iter().any(|u| uti::is_text(u));
     let has_rich = capture_utis.iter().any(|u| uti::is_rich(u));
     let has_image = capture_utis.iter().any(|u| uti::is_image(u));
     let has_file = capture_utis.iter().any(|u| uti::is_file_url(u));
 
-    // file-url 优先(文件场景标题取文件名)。
-    // ⚠️ 文件场景的 image(png/tiff)是 Finder 生成的文件图标预览,不是真正内容,
-    //    已在 capture_multi 里过滤(has_file_url 时不捕获 image)。
-    // ⚠️ file + text 不算 Mixed:macOS 复制文件时附带的纯文本是文件名表示,不是独立内容。
+    // file 优先(文件场景标题取文件名)。
+    // ⚠️ 文件场景的 image 是文件管理器生成的图标预览,已在 capture_multi 里过滤。
+    // ⚠️ file + text 不算 Mixed:附带的纯文本是文件名表示,不是独立内容。
     //    只有 file + rich(rtf/html)才算 Mixed(文件本身含富文本内容)。
     if has_file {
         if has_rich {
@@ -87,6 +85,13 @@ pub fn classify_content_kind(capture_utis: &[String]) -> ContentKind {
             return ContentKind::Mixed;
         }
         return ContentKind::Image;
+    }
+
+    // text 优先于 rich:
+    // Windows 上几乎所有的文字复制都附带 RTF 格式,但用户复制的本质是纯文本。
+    // 只有在完全没有纯文本、只有 RTF/HTML 时才归 Rich。
+    if has_text {
+        return ContentKind::Text;
     }
 
     if has_rich {
@@ -389,9 +394,16 @@ mod tests {
     }
 
     #[test]
-    fn kind_rich_text() {
-        // text + rtf + html → Rich
+    fn kind_text_with_rtf_is_text() {
+        // text + rtf + html → Text(text 优先:Windows 上文字几乎都带 RTF)
         let formats = utis(&["public.utf8-plain-text", "public.rtf", "public.html"]);
+        assert_eq!(classify_content_kind(&formats), ContentKind::Text);
+    }
+
+    #[test]
+    fn kind_rich_only_no_text() {
+        // 只有 rtf/html(无纯文本)→ Rich
+        let formats = utis(&["public.rtf", "public.html"]);
         assert_eq!(classify_content_kind(&formats), ContentKind::Rich);
     }
 

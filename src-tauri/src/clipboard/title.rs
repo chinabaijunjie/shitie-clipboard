@@ -92,17 +92,24 @@ fn title_from_file_url(formats: &[CapturedFormat]) -> String {
     }
 }
 
-/// 从 file:// URL 提取文件名(basename)。
+/// 从文件 URL/路径提取文件名(basename)。
 ///
-/// `file:///Users/foo/report.pdf` → `report.pdf`
-/// URL 解码失败或路径为空时返回「文件」兜底。
+/// macOS:`file:///Users/foo/report.pdf` → `report.pdf`
+/// Windows:`C:\Users\foo\report.pdf` → `report.pdf`
+/// 兜底:无法识别的格式返回「文件」。
 fn file_url_to_basename(url: &str) -> String {
-    // 非 file:// URL 不是合法文件 URL,兜底
-    let path = match url.strip_prefix("file://") {
-        Some(p) => p,
-        None => return "文件".to_string(),
+    let path = if let Some(p) = url.strip_prefix("file://") {
+        // macOS file:// URL
+        p
+    } else if url.starts_with('/') || url.contains('\\') {
+        // 直接是路径(Unix 绝对路径 或 Windows 路径含 \)
+        url
+    } else {
+        return "文件".to_string();
     };
-    let basename = path.rsplit('/').next().unwrap_or("");
+
+    // 同时处理 / 和 \ 分隔符(macOS 用 /,Windows 用 \)
+    let basename = path.rsplit(['/', '\\']).next().unwrap_or("");
     if basename.is_empty() {
         "文件".to_string()
     } else {
@@ -320,5 +327,14 @@ mod tests {
         assert_eq!(file_url_to_basename("file:///a/b.txt"), "b.txt");
         assert_eq!(file_url_to_basename("file:///a/"), "文件");
         assert_eq!(file_url_to_basename("not-a-url"), "文件");
+    }
+
+    #[test]
+    fn file_url_to_basename_windows_path() {
+        // Windows 路径格式(C:\Users\...)
+        assert_eq!(file_url_to_basename("C:\\Users\\foo\\report.pdf"), "report.pdf");
+        assert_eq!(file_url_to_basename("D:\\photos\\截图.png"), "截图.png");
+        // Windows 路径末尾
+        assert_eq!(file_url_to_basename("C:\\file.txt"), "file.txt");
     }
 }
