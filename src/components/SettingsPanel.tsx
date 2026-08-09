@@ -142,27 +142,34 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
       data-tauri-drag-region
       className="glass-window flex h-full w-full flex-col text-foreground"
     >
-      {/* 顶栏:返回(左) + 标题居中 + 保存提示(右) —— 三栏布局标题居中 */}
+      {/* 顶栏:返回(左) + 标题居中 + 保存提示(右) —— 三等分 flex,标题天然居中 */}
       <div
-        className="mask-fade-bottom flex items-center justify-between px-3.5 py-2.5 select-none"
+        className="mask-fade-bottom flex items-center px-3.5 py-2.5 select-none"
         data-tauri-drag-region
       >
-        <button
-          onClick={onBack}
-          className="flex items-center gap-0.5 rounded-card-small px-1.5 py-0.5 text-xs text-primary transition-colors duration-fast ease-out-strong hover:bg-hover z-10"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-          返回
-        </button>
-        <span
-          data-tauri-drag-region
-          className="absolute left-1/2 -translate-x-1/2 text-xs font-semibold tracking-tightish select-none"
-        >
-          设置
-        </span>
-        <div className="w-16 text-right">
+        {/* 左:返回 —— 固定宽度,和右侧对称 */}
+        <div className="flex-1">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-0.5 rounded-card-small px-1.5 py-0.5 text-xs text-primary transition-colors duration-fast ease-out-strong hover:bg-hover"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            返回
+          </button>
+        </div>
+        {/* 中:标题 —— flex-1 居中文字 */}
+        <div className="flex-1 text-center">
+          <span
+            data-tauri-drag-region
+            className="text-xs font-semibold tracking-tightish select-none"
+          >
+            设置
+          </span>
+        </div>
+        {/* 右:保存提示 —— 固定宽度,和左侧对称 */}
+        <div className="flex-1 text-right">
           {saved && (
-            <span className="flex items-center justify-end gap-1 text-[10px] text-primary">
+            <span className="inline-flex items-center justify-end gap-1 text-[10px] text-primary">
               <Check className="h-3 w-3" aria-hidden />
               {saved}
             </span>
@@ -284,7 +291,7 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
         {error ? (
           <span className="text-destructive">{error}</span>
         ) : (
-          <span className="text-text-tertiary">设置即时保存</span>
+          <span className="text-primary">设置即时保存</span>
         )}
       </div>
     </div>

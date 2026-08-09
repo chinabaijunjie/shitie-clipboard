@@ -23,8 +23,10 @@ interface ClipboardListProps {
   items: ClipboardItem[]
   /** 当前选中索引(-1 表示无选中) */
   selectedIndex: number
-  /** 选中条目被点击时触发(鼠标点击) */
+  /** 选中条目被点击时触发(鼠标单击) */
   onSelect?: (index: number) => void
+  /** 选中条目被双击时触发(回填到剪贴板并关闭窗口) */
+  onCopyBack?: (index: number) => void
 }
 
 /** 列表项预览的最大字符数(过长截断显示,完整内容在 title) */
@@ -38,7 +40,7 @@ function formatTime(epochMs: number): string {
   return `${h}:${m}`
 }
 
-export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListProps) {
+export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: ClipboardListProps) {
   // 选中索引变化时,自动把选中项滚动到可视区(block:nearest 只在不可见时滚,避免抖动)
   useEffect(() => {
     if (selectedIndex < 0) return
@@ -75,6 +77,7 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
             key={item.id}
             data-index={index}
             onClick={() => onSelect?.(index)}
+            onDoubleClick={() => onCopyBack?.(index)}
             style={{
               ...(isSelected
                 ? {
@@ -93,7 +96,7 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
               'mx-2 my-1 cursor-default overflow-hidden rounded-card px-3.5 py-2.5',
               'list-item transition-[background,transform] duration-fast ease-out-strong',
               'active:scale-[0.985]',
-              isSelected ? 'text-foreground' : 'text-foreground/90',
+              isSelected ? 'text-primary' : 'text-foreground/90',
             )}
           >
             {/* 列1:图标/缩略图 —— 选中图片时放大到 40×40
@@ -135,7 +138,10 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
             </span>
 
             {/* 列3:时间戳 */}
-            <span className="whitespace-nowrap text-[10px] text-text-tertiary tracking-caption">
+            <span className={cn(
+              'whitespace-nowrap text-[10px] tracking-caption',
+              isSelected ? 'text-text-secondary' : 'text-text-tertiary',
+            )}>
               {formatTime(item.lastCopiedAt)}
             </span>
           </li>

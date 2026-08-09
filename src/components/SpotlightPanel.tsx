@@ -269,6 +269,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
             items={items}
             selectedIndex={selectedIndex}
             onSelect={setSelectedIndex}
+            onCopyBack={(index) => void handleCopyBack(index)}
           />
         )}
       </div>
@@ -282,6 +283,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
             <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">↑↓</kbd>
             {' '}导航{' · '}
             <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">⏎</kbd>
+            <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">双击</kbd>
             {' '}回填{' · '}
             <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">⌫</kbd>
             {' '}删除{' · '}
