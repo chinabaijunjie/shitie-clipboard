@@ -8,7 +8,7 @@
  * - 胶囊选中态(rounded-card + bg-selected)替代方块 bg-accent
  * - hover 过渡(duration-fast ease-out-strong)+ 按压反馈(active:scale-[0.985])
  * - 类型图标预留位(16px 固定宽,纯文字占位保持对齐)—— 为未来智能渲染铺路
- * - 字距分级(时间戳 letter-caption 正字距)
+ * - 字距分级(时间戳 tracking-caption 正字距)
  *
  * 纯展示组件,便于用 testing-library 测试渲染输出。
  */
@@ -96,10 +96,11 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
               isSelected ? 'text-foreground' : 'text-foreground/90',
             )}
           >
-            {/* 列1:图标/缩略图 —— 选中图片时放大到 40×40 */}
-            {isImage ? (
+            {/* 列1:图标/缩略图 —— 选中图片时放大到 40×40
+                isImage && item.thumbPath 双条件让 TS 自动窄化为 string,免除非空断言 */}
+            {isImage && item.thumbPath ? (
               <img
-                src={convertFileSrc(item.thumbPath!)}
+                src={convertFileSrc(item.thumbPath)}
                 alt=""
                 className={cn(
                   'rounded-thumb object-cover',

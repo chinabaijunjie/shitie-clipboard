@@ -4,7 +4,8 @@
  * 设计依据:wiki/dev/ui-design-spec.md §2 + §3.1
  *
  * 变更要点(相对 M0 默认):
- * - darkMode 改 'class' 用 .theme-dark(主题切换架构预留,见 design-spec §4)
+ * - darkMode: 'class'(Tailwind 默认监听 .dark;main.tsx 同时加 .dark + .theme-dark;
+ *   主题切换架构预留见 design-spec §4)
  * - shadcn 颜色键沿用 hsl(var(--x)),配色值在 index.css 改成苹果系统色
  * - 新增 UI 专用 token 接线:
  *   boxShadow.window / transitionTimingFunction / borderRadius 分档 / colors 扩展

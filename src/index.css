@@ -79,8 +79,10 @@
     --radius-small: 6px;
     --radius-thumb: 5px;
 
-    /* 毛玻璃外壳(深色 ① 专属) */
+    /* 毛玻璃外壳(深色 ① 专属)
+       --window-bg 0.72→0.85 实机调校:0.72 太透,桌面杂色干扰可读性 */
     --window-bg: rgba(28, 28, 30, 0.85);
+    /* ⚠️ --window-blur 当前未接线(backdrop-filter 因 WKWebView 闪烁弃用),仅作规格存档 */
     --window-blur: blur(30px) saturate(180%);
 
     /* 窗口阴影:多层半透明(苹果质感核心)+ 顶边高光 */
@@ -139,11 +141,6 @@
  * 组件工具类
  * ============================================================ */
 @layer components {
-  /**
-   * 毛玻璃窗口外壳 —— SpotlightPanel / SettingsPanel 根容器共用。
-   * 半透明背景 + 强模糊 + 多层阴影 + 顶边高光。
-   * 非 macOS 降级:@supports 回退纯色。
-   */
   /**
    * 窗口外壳 —— SpotlightPanel / SettingsPanel 根容器共用。
    * 半透明背景(透出桌面但不模糊)+ 多层阴影 + 顶边高光。

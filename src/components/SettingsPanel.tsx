@@ -65,8 +65,12 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
           setAutostartEnabled(enabled)
           setAutostartLoading(false)
         }
-      } catch {
-        if (!cancelled) setAutostartLoading(false)
+      } catch (e) {
+        if (!cancelled) {
+          console.error('[autostart] isEnabled 查询失败:', e)
+          setError('开机自启状态读取失败,请重启应用')
+          setAutostartLoading(false)
+        }
       }
     }
     void load()
