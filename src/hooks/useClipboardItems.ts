@@ -59,6 +59,10 @@ export interface UseClipboardItemsResult {
   error: string | null
   /** 当前搜索查询(null = 非搜索模式,显示全列表) */
   searchQuery: string | null
+  /** 当前类型筛选(空数组 = 不过滤) */
+  kindFilter: string[]
+  /** 设置类型筛选(空数组 = 清除筛选) */
+  setKindFilter: (kinds: string[]) => void
   /** 删除一条(同步更新本地列表)。失败抛错给调用方处理。 */
   deleteItem: (id: number) => Promise<void>
   /** 搜索(空字符串/纯空白 = 清空搜索,回退全列表) */
@@ -72,11 +76,34 @@ export function useClipboardItems(): UseClipboardItemsResult {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
-  // ref 跟踪 searchQuery,让 listen 回调(只挂载一次)能读到最新值,避免闭包过时
+  const [kindFilter, setKindFilterState] = useState<string[]>([])
+  // ref 跟踪 searchQuery / kindFilter,让 listen 回调和 reload(只挂载一次)能读到最新值
   const searchQueryRef = useRef<string | null>(null)
+  const kindFilterRef = useRef<string[]>([])
   useEffect(() => {
     searchQueryRef.current = searchQuery
   }, [searchQuery])
+  useEffect(() => {
+    kindFilterRef.current = kindFilter
+  }, [kindFilter])
+
+  // 重新加载列表(用当前 searchQuery + kindFilter 的 ref 值)
+  const reload = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const q = searchQueryRef.current
+      const kinds = kindFilterRef.current
+      const raw = q
+        ? await call<unknown>('search_items', { query: q, limit: DEFAULT_LIMIT })
+        : await call<unknown>('list_items', { limit: DEFAULT_LIMIT, kinds: kinds.length > 0 ? kinds : undefined })
+      setItems(ClipboardItemListSchema.parse(raw))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   // 初次加载 + 监听实时更新(只挂载一次,依赖 [])
   useEffect(() => {
@@ -101,13 +128,24 @@ export function useClipboardItems(): UseClipboardItemsResult {
 
     void load()
 
-    // 监听后端新增/更新事件(仅非搜索模式下更新;搜索时忽略新内容,清空搜索后自然可见)
+    // 监听后端新增/更新事件(仅非搜索模式 + 无类型筛选时更新)
     const unlistenPromise = listen<unknown>(TAURI_EVENTS.CLIPBOARD_ADDED, (event) => {
       if (cancelled) return
       if (searchQueryRef.current !== null) return // 搜索模式:忽略新内容
       try {
         // §8 边界校验:事件 payload 同样经 Zod 校验
         const item = ClipboardItemSchema.parse(event.payload)
+        // 有类型筛选时,检查新 item 是否匹配任一筛选条件
+        const kinds = kindFilterRef.current
+        if (kinds.length > 0) {
+          const matches = kinds.some((filter) => {
+            if (filter.startsWith('subtype:')) {
+              return item.contentSubtype === filter.slice('subtype:'.length)
+            }
+            return item.contentKind === filter
+          })
+          if (!matches) return
+        }
         setItems((prev) => applyAddedItem(prev, item))
       } catch (e) {
         console.error('[clipboard] added 事件 payload 校验失败:', e)
@@ -128,15 +166,22 @@ export function useClipboardItems(): UseClipboardItemsResult {
     setItems((prev) => removeItem(prev, id))
   }, [])
 
+  // 设置类型筛选(同时触发重新加载)
+  const setKindFilter = useCallback((kinds: string[]) => {
+    setKindFilterState(kinds)
+    void reload()
+  }, [reload])
+
   // useCallback 保证引用稳定(否则 debounce effect 会因依赖变化无限重建 → 闪烁)
   const search = useCallback(async (query: string) => {
     const trimmed = query.trim()
     if (trimmed === '') {
-      // 清空搜索:回退到全列表
+      // 清空搜索:回退到全列表(带 kindFilter)
       setSearchQuery(null)
       setLoading(true)
       try {
-        const raw = await call<unknown>('list_items', { limit: DEFAULT_LIMIT })
+        const kinds = kindFilterRef.current
+        const raw = await call<unknown>('list_items', { limit: DEFAULT_LIMIT, kinds: kinds.length > 0 ? kinds : undefined })
         setItems(ClipboardItemListSchema.parse(raw))
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
@@ -163,5 +208,5 @@ export function useClipboardItems(): UseClipboardItemsResult {
     setItems((prev) => moveToFront(prev, id))
   }, [])
 
-  return { items, loading, error, searchQuery, deleteItem, search, moveToFront: moveToFrontAction }
+  return { items, loading, error, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront: moveToFrontAction }
 }

@@ -45,9 +45,10 @@ pub fn list_items_with_conn(
     conn: &Connection,
     limit: i64,
     images_dir: &std::path::Path,
+    kinds: Option<&[String]>,
 ) -> Result<Vec<ClipboardItem>, AppError> {
     // items::list 已通过 fill_image_fields 把 thumb_path 填为绝对路径
-    items::list(conn, limit, images_dir)
+    items::list(conn, limit, images_dir, kinds)
 }
 
 /// 删除单条(含图片引用计数删除)。
@@ -237,19 +238,21 @@ fn read_image_content(
 pub fn list_items(
     state: State<'_, crate::AppState>,
     limit: Option<i64>,
+    kinds: Option<Vec<String>>,
 ) -> Result<Vec<ClipboardItem>, AppError> {
     let effective_limit = match limit {
         Some(l) => l,
         None => {
-            // 从设置读 max_items(用户可配),0(不限)时用 DEFAULT_LIST_LIMIT 兜底
             let guard = state.settings();
             let s = guard.lock().expect("Settings Mutex 中毒");
             let max = s.max_items;
             if max > 0 { max } else { DEFAULT_LIST_LIMIT }
         }
     };
+    // kinds: 空 Vec 或 None = 不过滤
+    let kinds_ref = kinds.filter(|ks| !ks.is_empty());
     let conn = state.db();
-    list_items_with_conn(&conn, effective_limit, state.images_dir())
+    list_items_with_conn(&conn, effective_limit, state.images_dir(), kinds_ref.as_deref())
 }
 
 /// 删除单条(含图片引用计数)。
@@ -357,7 +360,7 @@ mod tests {
     #[test]
     fn list_items_returns_all_ordered() {
         let conn = db_with_sample_data();
-        let list = list_items_with_conn(&conn, 50, &test_images_dir()).unwrap();
+        let list = list_items_with_conn(&conn, 50, &test_images_dir(), None).unwrap();
         assert_eq!(list.len(), 3);
         // 按 last_copied_at DESC,第三条最后插入应排第一
         assert_eq!(list[0].title, "第三条");
@@ -366,19 +369,19 @@ mod tests {
     #[test]
     fn list_items_respects_limit() {
         let conn = db_with_sample_data();
-        let list = list_items_with_conn(&conn, 2, &test_images_dir()).unwrap();
+        let list = list_items_with_conn(&conn, 2, &test_images_dir(), None).unwrap();
         assert_eq!(list.len(), 2);
     }
 
     #[test]
     fn delete_item_removes_it() {
         let conn = db_with_sample_data();
-        let before = list_items_with_conn(&conn, 50, &test_images_dir()).unwrap();
+        let before = list_items_with_conn(&conn, 50, &test_images_dir(), None).unwrap();
         assert_eq!(before.len(), 3);
 
         delete_item_with_conn(&conn, before[1].id, &test_images_dir()).unwrap();
 
-        let after = list_items_with_conn(&conn, 50, &test_images_dir()).unwrap();
+        let after = list_items_with_conn(&conn, 50, &test_images_dir(), None).unwrap();
         assert_eq!(after.len(), 2);
     }
 
@@ -567,14 +570,14 @@ mod tests {
         let dir = test_images_dir();
 
         // 排序应该是:第三条(最新) / 第二条 / 第一条
-        let before = list_items_with_conn(&conn, 50, &dir).unwrap();
+        let before = list_items_with_conn(&conn, 50, &dir, None).unwrap();
         assert_eq!(before[0].title, "第三条");
 
         // 回填第一条(最旧的)→ 更新 last_copied_at → 应排到最前
         let first_id = before[2].id; // 第一条
         update_last_copied_at(&conn, first_id).unwrap();
 
-        let after = list_items_with_conn(&conn, 50, &dir).unwrap();
+        let after = list_items_with_conn(&conn, 50, &dir, None).unwrap();
         assert_eq!(after[0].title, "第一条", "回填后应排到最前");
     }
 
@@ -583,7 +586,7 @@ mod tests {
         // copy_count 不应因回填变化(回填不是新复制)
         let conn = db_with_sample_data();
         let dir = test_images_dir();
-        let before = list_items_with_conn(&conn, 50, &dir).unwrap();
+        let before = list_items_with_conn(&conn, 50, &dir, None).unwrap();
 
         let target = &before[2]; // 第一条,copy_count=1
         assert_eq!(target.copy_count, 1);
@@ -591,7 +594,7 @@ mod tests {
 
         update_last_copied_at(&conn, target_id).unwrap();
 
-        let after = list_items_with_conn(&conn, 50, &dir).unwrap();
+        let after = list_items_with_conn(&conn, 50, &dir, None).unwrap();
         let updated = after.iter().find(|i| i.id == target_id).unwrap();
         assert_eq!(updated.copy_count, 1, "copy_count 不应变(回填不加 count)");
     }

@@ -14,10 +14,11 @@
  * 边界计算在 nextIndex 纯函数(可单测)。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Settings, Search } from 'lucide-react'
+import { Settings, Search, Type, FileText, Image as ImageIcon, Layers, Link2, FileCode } from 'lucide-react'
 
 import { call } from '@core/api'
 import { hideWindow } from '@core/window'
+import { cn } from '@lib/utils'
 import { useClipboardItems } from '@hooks/useClipboardItems'
 import { ClipboardList } from '@components/ClipboardList'
 
@@ -25,6 +26,17 @@ type ProbeStatus = 'checking' | 'ready' | 'timeout'
 
 /** 探活超时(ms) */
 const PROBE_TIMEOUT_MS = 5000
+
+/** 类型筛选 tag 配置
+ *  filter 值:content_kind 直接用名称;子类型用 'subtype:link' / 'subtype:markdown' */
+const TYPE_TAGS = [
+  { filter: 'text', label: '文字', icon: Type },
+  { filter: 'image', label: '图片', icon: ImageIcon },
+  { filter: 'file', label: '文件', icon: FileText },
+  { filter: 'mixed', label: '混合', icon: Layers },
+  { filter: 'subtype:link', label: '链接', icon: Link2 },
+  { filter: 'subtype:markdown', label: 'Markdown', icon: FileCode },
+] as const
 
 /**
  * 计算键盘导航后的新索引(纯函数,可单测)。
@@ -44,7 +56,7 @@ interface SpotlightPanelProps {
 }
 
 export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
-  const { items, loading, error, searchQuery, deleteItem, search, moveToFront } = useClipboardItems()
+  const { items, loading, error, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront } = useClipboardItems()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [probe, setProbe] = useState<ProbeStatus>('checking')
   const [actionError, setActionError] = useState<string | null>(null)
@@ -255,6 +267,35 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
               {items.length} 条结果
             </span>
           )}
+        </div>
+
+        {/* 类型筛选 tag 行(全部未选中 = 不过滤;选中 = 只显示对应类型) */}
+        <div className="mt-1.5 flex items-center gap-1 overflow-x-auto scrollbar-thin">
+          {TYPE_TAGS.map((tag) => {
+            const active = kindFilter.includes(tag.filter)
+            return (
+              <button
+                key={tag.filter}
+                onClick={() => {
+                  const next = active
+                    ? kindFilter.filter((k) => k !== tag.filter)
+                    : [...kindFilter, tag.filter]
+                  setKindFilter(next)
+                  setSelectedIndex(0)
+                }}
+                className={cn(
+                  'flex shrink-0 items-center gap-1 rounded-card-small px-2 py-0.5 text-[10px] font-medium',
+                  'transition-colors duration-fast ease-out-strong',
+                  active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-text-tertiary hover:bg-hover hover:text-foreground',
+                )}
+              >
+                <tag.icon className="h-2.5 w-2.5" aria-hidden />
+                {tag.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 

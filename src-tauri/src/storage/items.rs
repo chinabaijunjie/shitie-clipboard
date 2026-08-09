@@ -302,29 +302,87 @@ pub fn get_item(conn: &Connection, id: i64, images_dir: &Path) -> Result<Clipboa
 
 /// 查列表(按 last_copied_at DESC)。
 ///
+/// `kinds`:可选的类型过滤(只返回这些 content_kind 的记录)。None 或空 = 不过滤。
 /// `images_dir`:图片存储根目录,用于把缩略图相对路径转绝对路径。
-pub fn list(conn: &Connection, limit: i64, images_dir: &Path) -> Result<Vec<ClipboardItem>, AppError> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
-             FROM clipboard_items ORDER BY last_copied_at DESC LIMIT ?1",
-        )
-        .map_err(|e| AppError::internal(format!("prepare list 失败: {e}")))?;
+pub fn list(
+    conn: &Connection,
+    limit: i64,
+    images_dir: &Path,
+    kinds: Option<&[String]>,
+) -> Result<Vec<ClipboardItem>, AppError> {
+    match kinds {
+        Some(ks) if !ks.is_empty() => {
+            // 拆分筛选值:普通值走 content_kind,'subtype:xxx' 走 content_subtype
+            let kind_filters: Vec<&String> = ks.iter().filter(|k| !k.starts_with("subtype:")).collect();
+            let subtype_filters: Vec<String> = ks.iter()
+                .filter_map(|k| k.strip_prefix("subtype:").map(|s| s.to_string()))
+                .collect();
 
-    let rows = stmt
-        .query_map(params![limit], row_to_item)
-        .map_err(|e| AppError::internal(format!("query list 失败: {e}")))?;
+            // 动态构建 WHERE 子句(kind IN (...) OR subtype IN (...))
+            let mut clauses = Vec::new();
+            let mut param_values: Vec<rusqlite::types::Value> = Vec::new();
 
-    let mut result = Vec::new();
-    for row in rows {
-        result.push(row.map_err(|e| AppError::internal(format!("读 list 行失败: {e}")))?);
+            if !kind_filters.is_empty() {
+                let placeholders = (0..kind_filters.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+                clauses.push(format!("content_kind IN ({placeholders})"));
+                for k in &kind_filters {
+                    param_values.push(rusqlite::types::Value::Text((**k).clone()));
+                }
+            }
+            if !subtype_filters.is_empty() {
+                let placeholders = (0..subtype_filters.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+                clauses.push(format!("content_subtype IN ({placeholders})"));
+                for s in &subtype_filters {
+                    param_values.push(rusqlite::types::Value::Text(s.clone()));
+                }
+            }
+
+            let where_clause = clauses.join(" OR ");
+            let sql = format!(
+                "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
+                 FROM clipboard_items WHERE {where_clause} ORDER BY last_copied_at DESC LIMIT ?"
+            );
+            param_values.push(rusqlite::types::Value::from(limit));
+
+            let mut stmt = conn
+                .prepare(&sql)
+                .map_err(|e| AppError::internal(format!("prepare list(filtered) 失败: {e}")))?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(param_values.iter()), row_to_item)
+                .map_err(|e| AppError::internal(format!("query list(filtered) 失败: {e}")))?;
+
+            let mut result = Vec::new();
+            for row in rows {
+                result.push(row.map_err(|e| AppError::internal(format!("读 list 行失败: {e}")))?);
+            }
+            for item in &mut result {
+                fill_image_fields(conn, item, images_dir)?;
+                fill_file_url(conn, item)?;
+            }
+            Ok(result)
+        }
+        _ => {
+            // 无过滤:原始查询
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
+                     FROM clipboard_items ORDER BY last_copied_at DESC LIMIT ?1",
+                )
+                .map_err(|e| AppError::internal(format!("prepare list 失败: {e}")))?;
+            let rows = stmt
+                .query_map(params![limit], row_to_item)
+                .map_err(|e| AppError::internal(format!("query list 失败: {e}")))?;
+            let mut result = Vec::new();
+            for row in rows {
+                result.push(row.map_err(|e| AppError::internal(format!("读 list 行失败: {e}")))?);
+            }
+            for item in &mut result {
+                fill_image_fields(conn, item, images_dir)?;
+                fill_file_url(conn, item)?;
+            }
+            Ok(result)
+        }
     }
-    // 补充图片类条目的缩略图路径 + 文件类条目的 file_url
-    for item in &mut result {
-        fill_image_fields(conn, item, images_dir)?;
-        fill_file_url(conn, item)?;
-    }
-    Ok(result)
 }
 
 /// 读某条的纯文本内容。
@@ -765,7 +823,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         insert_or_update(&conn, "新", &test_images_dir()).unwrap();
 
-        let list = list(&conn, 10, &test_images_dir()).unwrap();
+        let list = list(&conn, 10, &test_images_dir(), None).unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].title, "新", "最新复制应排第一");
     }
