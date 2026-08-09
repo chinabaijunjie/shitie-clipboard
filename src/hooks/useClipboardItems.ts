@@ -166,8 +166,11 @@ export function useClipboardItems(): UseClipboardItemsResult {
     setItems((prev) => removeItem(prev, id))
   }, [])
 
-  // 设置类型筛选(同时触发重新加载)
+  // 设置类型筛选(同时同步 ref + 触发重新加载)
+  // ⚠️ 必须先更新 ref 再 reload:reload 读的是 ref 的值,
+  //    如果只更新 state,useEffect(ref 同步)在 render 后才跑,reload 会读到旧值。
   const setKindFilter = useCallback((kinds: string[]) => {
+    kindFilterRef.current = kinds
     setKindFilterState(kinds)
     void reload()
   }, [reload])

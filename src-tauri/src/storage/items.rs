@@ -318,13 +318,16 @@ pub fn list(
                 .filter_map(|k| k.strip_prefix("subtype:").map(|s| s.to_string()))
                 .collect();
 
-            // 动态构建 WHERE 子句(kind IN (...) OR subtype IN (...))
+            // 动态构建 WHERE 子句(各条件 OR 组合):
+            // - content_kind 筛选:匹配 kind 且无子类型(纯文字不含链接/Markdown)
+            // - content_subtype 筛选:直接匹配子类型
             let mut clauses = Vec::new();
             let mut param_values: Vec<rusqlite::types::Value> = Vec::new();
 
             if !kind_filters.is_empty() {
                 let placeholders = (0..kind_filters.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
-                clauses.push(format!("content_kind IN ({placeholders})"));
+                // 排除有子类型的记录(link/markdown 有独立筛选条件)
+                clauses.push(format!("(content_kind IN ({placeholders}) AND content_subtype IS NULL)"));
                 for k in &kind_filters {
                     param_values.push(rusqlite::types::Value::Text((**k).clone()));
                 }
