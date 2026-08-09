@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Clipboard Manager — UI 设计稿对比</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+    background: #f0f0f3;
+    color: #1d1d1f;
+    min-height: 100vh;
+    padding: 60px 40px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px; }
+  .subtitle { font-size: 15px; color: #6e6e73; margin-bottom: 40px; line-height: 1.6; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 28px; }
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 32px 28px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 200ms cubic-bezier(0.23,1,0.32,1), box-shadow 200ms ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
+    display: block;
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06); }
+  .swatch-row { display: flex; gap: 6px; margin: 20px 0 16px; }
+  .swatch { width: 36px; height: 36px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); }
+  .card h2 { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+  .card .desc { font-size: 13.5px; color: #6e6e73; line-height: 1.55; margin-top: 6px; }
+  .tag {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px; margin-top: 14px;
+    background: #e8e8ed; color: #6e6e73;
+  }
+  .note {
+    margin-top: 48px; padding: 24px 28px;
+    background: #fff; border-radius: 16px;
+    font-size: 13.5px; color: #424245; line-height: 1.7;
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  .note strong { color: #1d1d1f; }
+  .note ul { margin: 8px 0 0 0; padding-left: 20px; }
+  .note li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Clipboard Manager UI 设计稿</h1>
+  <p class="subtitle">三份风格方向,每份含主面板 / 空状态 / 设置面板三个视图。窗口尺寸 600×480,内容贴近真实使用场景。<br>点击卡片打开完整设计稿,直接在浏览器里看实际效果。</p>
+
+  <div class="grid">
+    <a class="card" href="./01-dark-glass.html">
+      <h2>① 深色毛玻璃</h2>
+      <p class="desc">Raycast / Spotlight 风格。深灰蓝半透明背景 + 强模糊 + 半透明选中胶囊。剪贴板工具的经典质感,沉浸感强。</p>
+      <div class="swatch-row">
+        <div class="swatch" style="background:#1C1C1E"></div>
+        <div class="swatch" style="background:#2C2C2E"></div>
+        <div class="swatch" style="background:#0A84FF"></div>
+        <div class="swatch" style="background:#48484A"></div>
+        <div class="swatch" style="background:#8E8E93"></div>
+      </div>
+      <span class="tag">规划默认方向</span>
+    </a>
+
+    <a class="card" href="./02-light-system.html">
+      <h2>② 浅色系统</h2>
+      <p class="desc">macOS 系统设置 / iOS 风格。浅灰白底 + 分组卡片 + 蓝色强调。清爽明亮,长时间使用不压抑,辨识度高。</p>
+      <div class="swatch-row">
+        <div class="swatch" style="background:#F2F2F7"></div>
+        <div class="swatch" style="background:#FFFFFF"></div>
+        <div class="swatch" style="background:#007AFF"></div>
+        <div class="swatch" style="background:#E5E5EA"></div>
+        <div class="swatch" style="background:#8E8E93"></div>
+      </div>
+      <span class="tag">清爽明亮</span>
+    </a>
+
+    <a class="card" href="./03-mid-balance.html">
+      <h2>③ 深灰折中</h3>
+      <p class="desc">介于深浅之间。中性深灰 + 微弱毛玻璃 + 暖色强调。比纯深色温和,比浅色有质感,兼顾白天黑夜使用。</p>
+      <div class="swatch-row">
+        <div class="swatch" style="background:#2A2A2D"></div>
+        <div class="swatch" style="background:#3A3A3D"></div>
+        <div class="swatch" style="background:#FF9F0A"></div>
+        <div class="swatch" style="background:#5A5A5E"></div>
+        <div class="swatch" style="background:#98989D"></div>
+      </div>
+      <span class="tag">温和折中</span>
+    </a>
+  </div>
+
+  <div class="note">
+    <strong>💡 怎么看设计稿</strong>
+    <ul>
+      <li>每份设计稿顶部有 <strong>「主面板 / 空状态 / 设置面板」</strong> 三个标签,点击切换视图</li>
+      <li>列表项左侧的图标是<strong>类型标识</strong>(为未来「按格式智能渲染」预留):纯文字无图标 / 图片显示缩略图 / 文件显示图标 / 预留 code & md 图标位</li>
+      <li>窗口固定 600×480,和真实应用一致</li>
+      <li>挑出喜欢的元素告诉我,我可以混搭(比如「① 的列表 + ② 的配色」)</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

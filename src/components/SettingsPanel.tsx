@@ -1,19 +1,23 @@
 /**
- * SettingsPanel — 设置面板(M3)
+ * SettingsPanel — 设置面板(M3 + 苹果审美改造)
  *
- * 7 项配置:
- * - 开机自启(Toggle,直接调 autostart 插件)
- * - 唤起快捷键(快捷键录入器)
- * - 启动时打开窗口(Toggle)
- * - 历史记录上限(下拉)
- * - 保留天数(下拉)
- * - 容量上限(下拉)
- * - 失焦自动隐藏(Toggle)
+ * 8 项配置(分 3 组):
+ * - 通用:开机自启 / 唤起快捷键 / 启动时打开窗口
+ * - 存储:历史记录上限 / 保留天数 / 容量上限
+ * - 行为:失焦自动隐藏 / 敏感内容过滤
+ *
+ * 苹果审美改造(深色 ①):
+ * - 毛玻璃外壳(glass-window)+ 渐变蒙版顶/底栏
+ * - 设置项分组(通用/存储/行为),组标题大写小字距
+ * - Toggle/Select/SettingRow 控件苹果化
+ * - 返回按钮用 lucide ArrowLeft 图标
+ * - 隐形细滚动条(scrollbar-thin)
  *
  * 改完即时保存(调 update_settings)+ 错误提示。
  * 顶栏返回按钮切回主面板。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowLeft, Check } from 'lucide-react'
 
 import { cn } from '@lib/utils'
 import { isValidShortcut, parseKeyEvent, formatShortcut } from '@core/settings/shortcut'
@@ -88,7 +92,7 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
     return () => window.removeEventListener('keydown', onKey, true)
   }, [shortcutEditing])
 
-  /** 保存设置(即时) + 3 秒「已保存」提示 */
+  /** 保存设置(即时) + 2 秒「已保存」提示 */
   const save = useCallback(
     async (patch: Partial<Settings>) => {
       setError(null)
@@ -131,38 +135,59 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
   return (
     <div
       data-tauri-drag-region
-      className={cn(
-        'flex h-full w-full flex-col rounded-lg border border-border bg-background text-foreground shadow-2xl',
-      )}
+      className="glass-window flex h-full w-full flex-col text-foreground"
     >
-      {/* 顶栏:返回 + 标题 */}
-      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2" data-tauri-drag-region>
+      {/* 顶栏:返回(左) + 标题居中 + 保存提示(右) —— 三栏布局标题居中 */}
+      <div
+        className="mask-fade-bottom flex items-center justify-between px-3.5 py-2.5 select-none"
+        data-tauri-drag-region
+      >
         <button
           onClick={onBack}
-          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="flex items-center gap-0.5 rounded-card-small px-1.5 py-0.5 text-xs text-primary transition-colors duration-fast ease-out-strong hover:bg-hover z-10"
         >
-          ← 返回
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          返回
         </button>
-        <span className="text-xs font-semibold tracking-wide">设置</span>
-        {saved && <span className="ml-auto text-[10px] text-primary">{saved}</span>}
+        <span
+          data-tauri-drag-region
+          className="absolute left-1/2 -translate-x-1/2 text-xs font-semibold tracking-tightish select-none"
+        >
+          设置
+        </span>
+        <div className="w-16 text-right">
+          {saved && (
+            <span className="flex items-center justify-end gap-1 text-[10px] text-primary">
+              <Check className="h-3 w-3" aria-hidden />
+              {saved}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* 设置列表 */}
-      <div className="flex-1 overflow-y-auto px-3 py-2">
-        {/* 开机自启 */}
+      {/* 设置列表(分组 + 隐形细滚动条) */}
+      <div className="scrollbar-thin flex-1 overflow-y-auto px-3.5 py-1">
+        {/* --- 通用 --- */}
+        <SettingGroupTitle>通用</SettingGroupTitle>
         <SettingRow label="开机自启" desc="登录时自动启动(后台运行)">
-          <Toggle checked={autostartEnabled} disabled={autostartLoading} onChange={() => void toggleAutostart()} />
+          {autostartLoading ? (
+            /* 查询系统 LaunchAgent 状态期间显示占位,避免初始 false → true 跳变 */
+            <span className="text-[10px] text-text-tertiary">读取中…</span>
+          ) : (
+            <Toggle
+              checked={autostartEnabled}
+              onChange={() => void toggleAutostart()}
+            />
+          )}
         </SettingRow>
-
-        {/* 唤起快捷键 */}
         <SettingRow label="唤起快捷键" desc="全局快捷键,随时唤起/隐藏窗口">
           {shortcutEditing ? (
             <div className="flex items-center gap-1">
               <div
                 ref={shortcutRef}
                 className={cn(
-                  'rounded border border-primary px-2 py-0.5 text-[11px]',
-                  pendingShortcut ? 'text-foreground' : 'text-muted-foreground',
+                  'rounded-card-small border border-primary px-2 py-0.5 text-[11px]',
+                  pendingShortcut ? 'text-foreground' : 'text-text-tertiary',
                 )}
               >
                 {pendingShortcut || '按下快捷键…'}
@@ -170,7 +195,7 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
               <button
                 onClick={confirmShortcut}
                 disabled={!pendingShortcut}
-                className="rounded bg-primary px-2 py-0.5 text-[10px] text-primary-foreground disabled:opacity-50"
+                className="rounded-card-small bg-primary px-2 py-0.5 text-[10px] text-primary-foreground transition-opacity duration-fast disabled:opacity-50"
               >
                 确定
               </button>
@@ -179,7 +204,7 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
                   setShortcutEditing(false)
                   setPendingShortcut('')
                 }}
-                className="rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                className="rounded-card-small px-2 py-0.5 text-[10px] text-text-secondary transition-colors duration-fast hover:text-foreground"
               >
                 取消
               </button>
@@ -190,14 +215,12 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
                 setPendingShortcut('')
                 setShortcutEditing(true)
               }}
-              className="rounded border border-border px-2 py-0.5 text-[11px] text-foreground hover:border-primary"
+              className="rounded-card-small border border-border px-2 py-0.5 text-[11px] text-foreground transition-colors duration-fast hover:border-primary"
             >
               {settings.shortcut}
             </button>
           )}
         </SettingRow>
-
-        {/* 启动时打开窗口 */}
         <SettingRow label="启动时打开窗口" desc="关闭后开机自启只进托盘">
           <Toggle
             checked={settings.launchVisible}
@@ -205,7 +228,8 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
           />
         </SettingRow>
 
-        {/* 历史记录上限 */}
+        {/* --- 存储 --- */}
+        <SettingGroupTitle>存储</SettingGroupTitle>
         <SettingRow label="历史记录上限" desc="最多保留多少条历史">
           <Select
             value={settings.maxItems}
@@ -213,8 +237,6 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
             onChange={(v) => void save({ maxItems: v })}
           />
         </SettingRow>
-
-        {/* 保留天数 */}
         <SettingRow label="保留天数" desc="超过天数的记录自动清理">
           <Select
             value={settings.retentionDays}
@@ -222,8 +244,6 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
             onChange={(v) => void save({ retentionDays: v })}
           />
         </SettingRow>
-
-        {/* 容量上限 */}
         <SettingRow label="容量上限" desc="超过容量从最旧开始清理">
           <Select
             value={settings.maxStorageMb}
@@ -232,15 +252,14 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
           />
         </SettingRow>
 
-        {/* 失焦自动隐藏 */}
+        {/* --- 行为 --- */}
+        <SettingGroupTitle>行为</SettingGroupTitle>
         <SettingRow label="失焦自动隐藏" desc="点击窗口外自动隐藏(Spotlight 行为)">
           <Toggle
             checked={settings.hideOnBlur}
             onChange={(v) => void save({ hideOnBlur: v })}
           />
         </SettingRow>
-
-        {/* 敏感内容过滤 */}
         <SettingRow label="敏感内容过滤" desc="自动拦截 API key / Token / 私钥等敏感信息">
           <Toggle
             checked={settings.enableSensitiveFilter}
@@ -249,12 +268,12 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
         </SettingRow>
       </div>
 
-      {/* 底栏:错误提示 */}
-      <div className="border-t border-border/50 px-3 py-1.5 text-[10px]">
+      {/* 底栏:错误提示 / 保存提示 —— 顶部半透明分隔线 */}
+      <div className="border-t border-white/5 px-3.5 py-1.5 text-[10px]">
         {error ? (
           <span className="text-destructive">{error}</span>
         ) : (
-          <span className="text-muted-foreground/70">设置即时保存</span>
+          <span className="text-text-tertiary">设置即时保存</span>
         )}
       </div>
     </div>
@@ -264,6 +283,15 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
 // ============================================================
 // 子组件(内联,不单独抽文件)
 // ============================================================
+
+/** 组标题:大写 + 小字距,苹果设置面板风格 */
+function SettingGroupTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pt-3 pb-1.5 pl-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-text-tertiary">
+      {children}
+    </div>
+  )
+}
 
 function SettingRow({
   label,
@@ -275,10 +303,10 @@ function SettingRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-border/30 py-2.5">
+    <div className="flex items-center justify-between border-b border-white/5 py-2.5 last:border-b-0">
       <div className="mr-3">
         <div className="text-xs font-medium text-foreground">{label}</div>
-        <div className="text-[10px] text-muted-foreground/70">{desc}</div>
+        <div className="mt-0.5 text-[10px] text-text-tertiary">{desc}</div>
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -301,16 +329,17 @@ function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative h-5 w-9 rounded-full transition-colors',
+        'relative h-5 w-9 rounded-full transition-colors duration-base ease-out-strong',
         checked ? 'bg-primary' : 'bg-muted',
         disabled && 'opacity-50',
       )}
     >
       <span
-        className={cn(
-          'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform',
-          checked ? 'translate-x-4' : 'translate-x-0.5',
-        )}
+        className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-base ease-out-strong"
+        style={{
+          transform: checked ? 'translateX(16px)' : 'translateX(0)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}
       />
     </button>
   )
@@ -329,10 +358,10 @@ function Select<T extends number>({
     <select
       value={value}
       onChange={(e) => onChange(Number(e.target.value) as T)}
-      className="rounded border border-border bg-transparent px-2 py-0.5 text-[11px] text-foreground focus:border-primary focus:outline-none"
+      className="rounded-card-small border border-border bg-transparent px-2 py-0.5 text-[11px] text-text-secondary transition-colors duration-fast focus:border-primary focus:outline-none"
     >
       {options.map((opt) => (
-        <option key={opt.value} value={opt.value} className="bg-background">
+        <option key={opt.value} value={opt.value} className="bg-background text-foreground">
           {opt.label}
         </option>
       ))}

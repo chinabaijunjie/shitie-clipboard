@@ -14,11 +14,11 @@
  * 边界计算在 nextIndex 纯函数(可单测)。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Settings, Search } from 'lucide-react'
 
 import { call } from '@core/api'
 import { hideWindow } from '@core/window'
 import { useClipboardItems } from '@hooks/useClipboardItems'
-import { cn } from '@lib/utils'
 import { ClipboardList } from '@components/ClipboardList'
 
 type ProbeStatus = 'checking' | 'ready' | 'timeout'
@@ -194,59 +194,76 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
   return (
     <div
       data-tauri-drag-region
-      className={cn(
-        'flex h-full w-full flex-col rounded-lg border border-border bg-background text-foreground shadow-2xl',
-      )}
+      className="glass-window flex h-full w-full flex-col text-foreground"
     >
-      {/* 顶栏:标题 + 设置 + 状态 */}
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
-        <span className="text-xs font-semibold tracking-wide">Clipboard Manager</span>
-        <div className="flex items-center gap-2">
+      {/* 顶栏:标题 + 设置 + 状态
+          - data-tauri-drag-region 支持拖动窗口
+          - select-none 防止文字被选中 */}
+      <div
+        data-tauri-drag-region
+        className="flex items-center justify-between px-3.5 py-2.5 select-none"
+      >
+        <span
+          data-tauri-drag-region
+          className="text-xs font-semibold tracking-tightish select-none text-foreground"
+        >
+          Clipboard Manager
+        </span>
+        <div className="flex items-center gap-1.5">
           <button
             onClick={onOpenSettings}
-            className="text-[11px] text-muted-foreground hover:text-foreground"
+            className="flex h-5 w-5 items-center justify-center rounded-card-small text-text-secondary transition-colors duration-fast ease-out-strong hover:bg-hover hover:text-foreground"
             title="设置"
+            aria-label="设置"
           >
-            ⚙
+            <Settings className="h-3.5 w-3.5" aria-hidden />
           </button>
-          <span className="text-[10px] text-muted-foreground">
-            {probe === 'ready' ? (
-              <span className="text-primary">●</span>
-            ) : probe === 'checking' ? (
-              '连接中…'
-            ) : (
-              <span className="text-destructive">● 超时</span>
-            )}
-          </span>
+          {probe === 'ready' ? (
+            <span
+              className="h-[7px] w-[7px] rounded-full"
+              style={{
+                backgroundColor: 'hsl(var(--status-ready))',
+                boxShadow: '0 0 6px hsl(var(--status-ready) / 0.6)',
+              }}
+              title="后端就绪"
+            />
+          ) : probe === 'checking' ? (
+            <span className="text-[10px] text-text-tertiary">连接中…</span>
+          ) : (
+            <span
+              className="h-[7px] w-[7px] rounded-full bg-destructive"
+              title="连接超时"
+            />
+          )}
         </div>
       </div>
 
-      {/* 搜索框 */}
-      <div className="border-b border-border/50 px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground/70">🔍</span>
+      {/* 搜索框 —— 圆角卡片样式(左右留白 + 半透明背景 + 圆角边框) */}
+      <div className="px-3 py-2">
+        <div className="flex items-center gap-2 rounded-card border border-white/10 bg-white/5 px-3 py-1.5">
+          <Search className="h-[13px] w-[13px] shrink-0 text-text-tertiary" aria-hidden />
           <input
             ref={searchInputRef}
             type="text"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            placeholder="搜索剪贴板历史…(按 / 快速聚焦)"
-            className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+            placeholder="搜索剪贴板历史…  (按 / 快速聚焦)"
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-text-tertiary focus:outline-none"
           />
           {searchQuery && (
-            <span className="shrink-0 text-[10px] text-muted-foreground/70">
+            <span className="shrink-0 text-[10px] text-text-tertiary">
               {items.length} 条结果
             </span>
           )}
         </div>
       </div>
 
-      {/* 列表区(可滚动:超出窗口高度的内容滚动显示) */}
-      <div className="flex-1 overflow-y-auto">
+      {/* 列表区(可滚动 + 隐形细滚动条 + 禁止横向溢出) */}
+      <div className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden py-1">
         {error ? (
           <p className="py-8 text-center text-xs text-destructive">加载失败:{error}</p>
         ) : loading ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">加载中…</p>
+          <p className="py-8 text-center text-xs text-text-secondary">加载中…</p>
         ) : (
           <ClipboardList
             items={items}
@@ -256,12 +273,21 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
         )}
       </div>
 
-      {/* 底栏:快捷键提示 / 操作错误(有错误时覆盖显示) */}
-      <div className="border-t border-border/50 px-3 py-1.5 text-[10px]">
+      {/* 底栏:快捷键提示 / 操作错误 —— 顶部半透明分隔线 */}
+      <div className="border-t border-white/10 px-3.5 py-1.5 text-[10px]">
         {actionError ? (
           <span className="text-destructive">{actionError}</span>
         ) : (
-          <span className="text-muted-foreground/70">↑↓ 导航 · ⏎ 回填 · ⌫ 删除 · / 搜索</span>
+          <span className="text-text-tertiary">
+            <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">↑↓</kbd>
+            {' '}导航{' · '}
+            <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">⏎</kbd>
+            {' '}回填{' · '}
+            <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">⌫</kbd>
+            {' '}删除{' · '}
+            <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">/</kbd>
+            {' '}搜索
+          </span>
         )}
       </div>
     </div>

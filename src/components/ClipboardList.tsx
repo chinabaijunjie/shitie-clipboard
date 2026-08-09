@@ -4,10 +4,17 @@
  * 职责(单一):给定 items + selectedIndex,渲染列表。
  * 不关心数据怎么来(那是 useClipboardItems),不关心键盘交互(那是 SpotlightPanel)。
  *
+ * 苹果审美改造(深色 ①):
+ * - 胶囊选中态(rounded-card + bg-selected)替代方块 bg-accent
+ * - hover 过渡(duration-fast ease-out-strong)+ 按压反馈(active:scale-[0.985])
+ * - 类型图标预留位(16px 固定宽,纯文字占位保持对齐)—— 为未来智能渲染铺路
+ * - 字距分级(时间戳 letter-caption 正字距)
+ *
  * 纯展示组件,便于用 testing-library 测试渲染输出。
  */
 import { useEffect } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
+import { FileText, Clipboard as ClipboardIcon } from 'lucide-react'
 
 import { cn } from '@lib/utils'
 import type { ClipboardItem } from '@core/types'
@@ -42,51 +49,97 @@ export function ClipboardList({ items, selectedIndex, onSelect }: ClipboardListP
 
   if (items.length === 0) {
     return (
-      <p className="py-8 text-center text-xs text-muted-foreground/60">
-        还没有复制记录,复制点东西试试…
-      </p>
+      <div className="flex flex-col items-center justify-center gap-2.5 py-12 text-center">
+        <ClipboardIcon
+          className="h-9 w-9 text-text-tertiary"
+          strokeWidth={1.5}
+          aria-hidden
+        />
+        <p className="text-xs text-text-secondary">还没有复制记录</p>
+        <p className="text-[11px] text-text-tertiary">
+          复制点东西试试,它会自动出现在这里
+        </p>
+      </div>
     )
   }
 
   return (
-    <ul className="flex flex-col">
-      {items.map((item, index) => (
-        <li
-          key={item.id}
-          data-index={index}
-          onClick={() => onSelect?.(index)}
-          className={cn(
-            'flex cursor-default items-center gap-2 px-3 py-2 text-xs',
-            index === selectedIndex
-              ? 'bg-accent text-accent-foreground'
-              : 'text-foreground hover:bg-accent/50',
-          )}
-        >
-          {/* 图片类:显示缩略图 */}
-          {item.thumbPath ? (
-            <img
-              src={convertFileSrc(item.thumbPath)}
-              alt=""
-              className="h-8 w-8 shrink-0 rounded object-cover"
-              draggable={false}
-            />
-          ) : (
-            <span className="shrink-0 w-2" />
-          )}
-          <span className="flex-1 truncate">
-            {item.title.slice(0, PREVIEW_MAX_CHARS) || '<空>'}
-            {item.title.length > PREVIEW_MAX_CHARS && '…'}
-          </span>
-          {item.copyCount > 1 && (
-            <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">
-              ×{item.copyCount}
+    <ul className="flex flex-col overflow-hidden">
+      {items.map((item, index) => {
+        const isSelected = index === selectedIndex
+        const isImage = !!item.thumbPath
+        const isFile = item.contentKind === 'file'
+
+        return (
+          <li
+            key={item.id}
+            data-index={index}
+            onClick={() => onSelect?.(index)}
+            style={{
+              ...(isSelected
+                ? {
+                    backgroundColor: 'var(--bg-selected)',
+                    boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
+                  }
+                : {}),
+              display: 'grid',
+              // 列1 auto(图标/缩略图) 列2 1fr(内容) 列3 auto(时间)
+              gridTemplateColumns: 'auto 1fr auto',
+              // 选中时顶部对齐(图片放大后内容跟缩略图顶部对齐)
+              alignItems: isSelected && isImage ? 'start' : 'center',
+              columnGap: '8px',
+            }}
+            className={cn(
+              'mx-2 my-1 cursor-default overflow-hidden rounded-card px-3.5 py-2.5',
+              'list-item transition-[background,transform] duration-fast ease-out-strong',
+              'active:scale-[0.985]',
+              isSelected ? 'text-foreground' : 'text-foreground/90',
+            )}
+          >
+            {/* 列1:图标/缩略图 —— 选中图片时放大到 40×40 */}
+            {isImage ? (
+              <img
+                src={convertFileSrc(item.thumbPath!)}
+                alt=""
+                className={cn(
+                  'rounded-thumb object-cover',
+                  isSelected ? 'h-10 w-10' : 'h-5 w-5',
+                )}
+                draggable={false}
+              />
+            ) : isFile ? (
+              <FileText
+                className="h-4 w-4"
+                style={{ color: 'var(--type-file)' }}
+                aria-hidden
+              />
+            ) : null}
+
+            {/* 列2:主内容
+                非选中:JS 截断 60 字符 + 单行 ellipsis(紧凑)
+                选中文字:显示完整 title,line-clamp-3 限制最多三行(让 CSS 决定截断点)
+                选中图片:仍单行(图片本身已放大) */}
+            <span
+              className={cn(
+                'min-w-0 overflow-hidden text-xs',
+                isSelected && !isImage
+                  ? 'line-clamp-3 whitespace-normal break-all'
+                  : 'text-ellipsis whitespace-nowrap',
+              )}
+              title={item.title}
+            >
+              {isSelected && !isImage
+                ? (item.title || '<空>')
+                : (item.title.slice(0, PREVIEW_MAX_CHARS) || '<空>') + (item.title.length > PREVIEW_MAX_CHARS ? '…' : '')}
             </span>
-          )}
-          <span className="shrink-0 text-[10px] text-muted-foreground/70">
-            {formatTime(item.lastCopiedAt)}
-          </span>
-        </li>
-      ))}
+
+            {/* 列3:时间戳 */}
+            <span className="whitespace-nowrap text-[10px] text-text-tertiary tracking-caption">
+              {formatTime(item.lastCopiedAt)}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   )
 }

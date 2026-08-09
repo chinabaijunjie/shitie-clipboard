@@ -1,75 +1,119 @@
-/* 全局样式 — Tailwind 指令 + shadcn 主题变量 + Spotlight 窗口适配 */
+/**
+ * 全局样式 — 苹果审美改造(深色毛玻璃 ①)
+ *
+ * 设计依据:wiki/dev/ui-design-spec.md §2 + §3.1
+ * 设计稿:design-mockups/01-dark-glass.html
+ *
+ * Token 分两类:
+ * 1. shadcn 兼容变量(--background/--foreground/--primary 等,组件用 hsl(var(--x)))
+ *    —— 直接用苹果配色值,替换 shadcn 默认蓝/灰
+ * 2. UI 专用变量(--window-bg/--ease-out/--radius-card 等,本文件 + tailwind 扩展用)
+ *    —— 毛玻璃/缓动/圆角/阴影 token,设计规格 §2
+ */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn 主题变量(亮色):hsl 三元组,中性灰 + 蓝色主色调 */
+/* ============================================================
+ * 主题变量(深色 ① —— Raycast / Spotlight 风格)
+ * 设计依据:ui-design-spec.md §3.1
+ *
+ * shadcn 变量沿用 hsl 三元组格式(组件靠 hsl(var(--x)) 引用),
+ * 但配色值换苹果系统色:深灰蓝背景 #1C1C1E + iOS systemBlue。
+ * ============================================================ */
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+  :root,
+  .theme-dark {
+    /* 背景:深灰蓝而非纯黑(苹果材质感来自非纯黑) */
+    --background: 240 6% 12%;             /* #1C1C1E */
+    --foreground: 0 0% 100%;              /* 白 */
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 240 6% 14%;                   /* #212122 略浅一层 */
+    --card-foreground: 0 0% 100%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 240 6% 14%;
+    --popover-foreground: 0 0% 100%;
 
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+    /* 强调色:iOS systemBlue(暗色版 #0A84FF) */
+    --primary: 211 100% 52%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 240 5% 18%;              /* #2C2C2E */
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 240 5% 18%;
+    --muted-foreground: 240 5% 65%;       /* 次级文字 */
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 211 100% 52%;               /* 选中胶囊用 primary */
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 100% 62%;            /* iOS systemRed #FF453A */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 240 5% 22%;                 /* 分隔线 */
+    --input: 240 5% 22%;
+    --ring: 211 100% 52%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;                   /* 10px 基准圆角 */
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+  /* ============================================================
+   * UI 专用 Token(设计规格 §2 —— 缓动/时长/圆角/阴影/毛玻璃)
+   * 不走 hsl 格式,直接用完整值(因为 backdrop-filter/box-shadow/cubic-bezier
+   * 不适合拆成 hsl 三元组)
+   * ============================================================ */
+  :root,
+  .theme-dark {
+    /* 缓动曲线(emilkowalski 纪律:绝不近似) */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    /* 时长 */
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    /* 圆角分档(苹果材质编码层级) */
+    --radius-window: 12px;
+    --radius-card: 8px;
+    --radius-small: 6px;
+    --radius-thumb: 5px;
 
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* 毛玻璃外壳(深色 ① 专属) */
+    --window-bg: rgba(28, 28, 30, 0.85);
+    --window-blur: blur(30px) saturate(180%);
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    /* 窗口阴影:多层半透明(苹果质感核心)+ 顶边高光 */
+    --shadow-window: 0 22px 70px 4px rgba(0, 0, 0, 0.45),
+      0 8px 24px rgba(0, 0, 0, 0.18),
+      inset 0 0.5px 0 rgba(255, 255, 255, 0.12);
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    /* 列表交互态(实机调校:毛玻璃背景会吃掉低透明度) */
+    --bg-hover: rgba(255, 255, 255, 0.12);
+    --bg-selected: hsl(211 100% 52% / 0.25);
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    /* 苹果 systemLabel 三级文字(带透明度,适配毛玻璃) */
+    --text-secondary: rgba(235, 235, 245, 0.6);
+    --text-tertiary: rgba(235, 235, 245, 0.3);
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    /* 状态点发光 */
+    --status-ready: 211 100% 52%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    /* 徽标(×N) */
+    --badge-bg: rgba(255, 255, 255, 0.08);
+    --badge-text: rgba(235, 235, 245, 0.6);
+
+    /* 类型图标颜色(预留位,见 ui-design-spec.md §6) */
+    --type-code: #ffd60a;
+    --type-md: #64d2ff;
+    --type-file: #30d158;
   }
 }
 
-/* Spotlight 窗口适配:tauri transparent + decorations:false */
+/* ============================================================
+ * Spotlight 窗口适配
+ * tauri.conf.json: transparent + decorations:false + macOSPrivateApi
+ * ============================================================ */
 @layer base {
   html,
   body {
@@ -85,5 +129,101 @@
   #root {
     height: 100vh;
     width: 100vw;
+    /* 窗口本身裁成圆角 —— 隐藏毛玻璃面板圆角外的灰色直角 */
+    border-radius: var(--radius-window);
+    overflow: hidden;
+  }
+}
+
+/* ============================================================
+ * 组件工具类
+ * ============================================================ */
+@layer components {
+  /**
+   * 毛玻璃窗口外壳 —— SpotlightPanel / SettingsPanel 根容器共用。
+   * 半透明背景 + 强模糊 + 多层阴影 + 顶边高光。
+   * 非 macOS 降级:@supports 回退纯色。
+   */
+  /**
+   * 窗口外壳 —— SpotlightPanel / SettingsPanel 根容器共用。
+   * 半透明背景(透出桌面但不模糊)+ 多层阴影 + 顶边高光。
+   *
+   * ⚠️ 不用 backdrop-filter: macOS WKWebView 在滚动时会短暂冻结毛玻璃
+   * 合成导致闪烁(系统级限制)。保留 rgba 半透明 —— 仍能透出后面桌面颜色,
+   * 但渲染稳定不闪烁。
+   */
+  .glass-window {
+    background: var(--window-bg);
+    box-shadow: var(--shadow-window);
+    border-radius: var(--radius-window);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-window {
+      background: hsl(var(--background));
+    }
+  }
+
+  /**
+   * 渐变蒙版顶/底栏 —— 替代硬边框 border-b/border-t。
+   * 蒙版让边缘自然过渡,而非突兀的实线分隔。
+   * 用法:在顶栏底部、底栏顶部需要分隔时,给元素加 .mask-fade-bottom / .mask-fade-top
+   */
+  .mask-fade-bottom {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 calc(100% - 1px),
+      transparent
+    );
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1px), transparent);
+  }
+  .mask-fade-top {
+    -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 1px), transparent);
+    mask-image: linear-gradient(to top, #000 calc(100% - 1px), transparent);
+  }
+
+  /**
+   * 隐形细滚动条(苹果风)—— 列表/设置区共用。
+   */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(235, 235, 245, 0.15) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(235, 235, 245, 0.15);
+    border-radius: 3px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(235, 235, 245, 0.25);
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /**
+   * 列表项 hover —— 用原生 CSS 而非 Tailwind hover: 前缀。
+   * 原因:Tailwind 对自定义颜色键 + hover 变体的组合在 content 扫描时
+   * 可能不生成对应类。原生 CSS 最可靠。
+   * 选中态(有 style backgroundColor)优先级高于此 hover,不会冲突。
+   */
+  .list-item:hover {
+    background-color: var(--bg-hover);
+  }
+}
+
+/* ============================================================
+ * 动效无障碍降级
+ * ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

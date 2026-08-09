@@ -15,7 +15,7 @@
         "label": "main",
         "title": "Clipboard Manager",
         "width": 600,
-        "height": 480,
+        "height": 600,
         "resizable": false,
         "fullscreen": false,
         "center": true,

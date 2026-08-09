@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>③ 深灰折中 — Clipboard Manager</title>
+<style>
+  :root {
+    /* 中性深灰 —— 不纯黑也不深蓝,带一点暖灰 */
+    --bg-1: #2A2A2D;
+    --bg-2: #38383C;
+    --bg-selected: rgba(255,159,10,0.16);  /* 选中:暖橙半透明 */
+    --accent: #FF9F0A;        /* iOS systemOrange —— 区别于前两份的蓝 */
+    --accent-2: #FFD60A;
+    --text: #F5F5F7;
+    --text-2: rgba(245,245,247,0.55);
+    --text-3: rgba(245,245,247,0.3);
+    --sep: rgba(255,255,255,0.08);
+    --ease-out: cubic-bezier(0.23,1,0.32,1);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+    background:
+      radial-gradient(circle at 30% 20%, #4a3525 0%, transparent 50%),
+      radial-gradient(circle at 70% 80%, #1f2a35 0%, transparent 50%),
+      linear-gradient(160deg, #1a1a1c 0%, #28252a 60%, #1c1c1e 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 20px 60px;
+  }
+
+  .nav { display: flex; gap: 4px; margin-bottom: 32px; background: rgba(255,255,255,0.06); padding: 4px; border-radius: 12px; backdrop-filter: blur(20px); border: 0.5px solid rgba(255,255,255,0.06); }
+  .nav button {
+    background: transparent; border: none; color: rgba(245,245,247,0.5);
+    padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: all 200ms var(--ease-out); font-family: inherit;
+  }
+  .nav button.active { background: rgba(255,255,255,0.1); color: #fff; }
+  .nav button:hover:not(.active) { color: rgba(245,245,247,0.8); }
+
+  .window {
+    width: 600px; height: 480px;
+    border-radius: 12px;
+    background: rgba(42,42,45,0.78);
+    backdrop-filter: blur(28px) saturate(150%);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    box-shadow:
+      0 22px 70px 4px rgba(0,0,0,0.4),
+      0 8px 24px rgba(0,0,0,0.16),
+      inset 0 0.5px 0 rgba(255,255,255,0.08);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    color: var(--text);
+  }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; }
+  .topbar-title { font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .icon-btn {
+    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; cursor: pointer; color: var(--text-2);
+    transition: background 150ms var(--ease-out), color 150ms var(--ease-out);
+  }
+  .icon-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px rgba(255,159,10,0.5); }
+
+  .search { padding: 7px 14px 8px; display: flex; align-items: center; gap: 8px; }
+  .search-icon { color: var(--text-3); display: flex; }
+  .search-icon svg { width: 13px; height: 13px; }
+  .search input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-size: 13px; font-family: inherit; }
+  .search input::placeholder { color: var(--text-3); }
+  .search-count { font-size: 10px; color: var(--text-3); flex-shrink: 0; }
+
+  .list { flex: 1; overflow-y: auto; padding: 4px 8px 8px; }
+  .list::-webkit-scrollbar { width: 6px; }
+  .list::-webkit-scrollbar-thumb { background: rgba(245,245,247,0.12); border-radius: 3px; }
+  .list::-webkit-scrollbar-track { background: transparent; }
+
+  .item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    cursor: default;
+    transition: background 150ms var(--ease-out);
+  }
+  .item:hover { background: rgba(255,255,255,0.05); }
+  .item.selected { background: var(--bg-selected); box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.06); }
+  .item.selected .item-title { color: #fff; }
+  .item.selected .type-icon.text { opacity: 0; }
+
+  .type-icon { width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--text-3); }
+  .type-icon svg { width: 14px; height: 14px; }
+  .type-icon.text { opacity: 0; }
+  .type-icon.code { color: #FFD60A; }
+  .type-icon.md { color: #64D2FF; }
+  .type-icon.file { color: #30D158; }
+
+  .thumb { width: 26px; height: 26px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
+
+  .item-content { flex: 1; min-width: 0; }
+  .item-title { font-size: 12.5px; color: rgba(245,245,247,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
+  .item-sub { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .item-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .badge { font-size: 10px; padding: 1px 6px; border-radius: 10px; background: rgba(255,255,255,0.08); color: var(--text-2); }
+  .item-time { font-size: 10px; color: var(--text-3); }
+
+  .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-3); }
+  .empty svg { width: 40px; height: 40px; opacity: 0.35; }
+  .empty-title { font-size: 13px; color: var(--text-2); }
+  .empty-desc { font-size: 11px; }
+
+  .bottombar { padding: 8px 14px; display: flex; align-items: center; gap: 10px; }
+  .kbd-hint { font-size: 10px; color: var(--text-3); }
+  .kbd { display: inline-block; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.08); font-size: 9.5px; color: var(--text-2); margin: 0 1px; }
+
+  .settings-list { flex: 1; overflow-y: auto; padding: 4px 14px; }
+  .settings-list::-webkit-scrollbar { width: 6px; }
+  .settings-list::-webkit-scrollbar-thumb { background: rgba(245,245,247,0.12); border-radius: 3px; }
+  .setting-group-title { font-size: 10px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; padding: 14px 4px 6px; }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 4px; border-bottom: 0.5px solid var(--sep); }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 12.5px; color: var(--text); }
+  .setting-desc { font-size: 10.5px; color: var(--text-3); margin-top: 1px; }
+
+  .toggle { width: 36px; height: 20px; border-radius: 12px; background: rgba(120,120,128,0.32); position: relative; cursor: pointer; transition: background 200ms var(--ease-out); flex-shrink: 0; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content:''; position:absolute; top: 1.5px; left: 1.5px; width: 17px; height: 17px; border-radius: 50%; background: #fff; transition: transform 200ms var(--ease-out); box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .toggle.on::after { transform: translateX(16px); }
+
+  .select { font-size: 12px; color: var(--text-2); background: transparent; border: none; cursor: pointer; font-family: inherit; padding-right: 4px; }
+
+  .shortcut-display { font-size: 11px; color: var(--text-2); padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.08); cursor: pointer; }
+  .shortcut-display:hover { background: rgba(255,255,255,0.12); }
+
+  .view { display: none; }
+  .view.active { display: flex; flex-direction: column; height: 100%; }
+
+  .caption { margin-top: 20px; font-size: 12px; color: rgba(245,245,247,0.3); text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="active" onclick="show('main')">主面板</button>
+  <button onclick="show('empty')">空状态</button>
+  <button onclick="show('settings')">设置面板</button>
+</div>
+
+<!-- ========== 主面板 ========== -->
+<div class="window view active" id="view-main">
+  <div class="topbar">
+    <span class="topbar-title">Clipboard Manager</span>
+    <div class="topbar-right">
+      <div class="icon-btn" title="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <div class="status-dot"></div>
+    </div>
+  </div>
+
+  <div class="search">
+    <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
+    <input type="text" placeholder="搜索剪贴板历史…  (按 / 快速聚焦)" />
+    <span class="search-count">8 条结果</span>
+  </div>
+
+  <div class="list">
+    <div class="item selected">
+      <div class="type-icon text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
+      <div class="item-content"><div class="item-title">剪贴板管理工具的核心是「快速唤起 + 即时回填」</div></div>
+      <div class="item-meta"><span class="item-time">14:32</span></div>
+    </div>
+    <div class="item">
+      <div class="type-icon code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+      <div class="item-content">
+        <div class="item-title">const debounce = (fn, ms) => { let t; return (...args) =></div>
+        <div class="item-sub">TypeScript · debounce.ts</div>
+      </div>
+      <div class="item-meta"><span class="badge">×3</span><span class="item-time">14:28</span></div>
+    </div>
+    <div class="item">
+      <img class="thumb" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23347d39'/%3E%3Ccircle cx='30' cy='35' r='12' fill='%2390c290'/%3E%3Cpolygon points='20,80 45,50 70,80' fill='%235a9a5a'/%3E%3Cpolygon points='55,80 75,55 90,80' fill='%23408a40'/%3E%3C/svg%3E" alt="" />
+      <div class="item-content">
+        <div class="item-title">图片 1920×1080</div>
+        <div class="item-sub">截图 · 截屏 2026-08-09 14.25.32.png</div>
+      </div>
+      <div class="item-meta"><span class="item-time">14:25</span></div>
+    </div>
+    <div class="item">
+      <div class="type-icon md"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h4"/></svg></div>
+      <div class="item-content">
+        <div class="item-title"># 项目周报 — 第三周进度同步</div>
+        <div class="item-sub">Markdown · 含标题、列表、代码块</div>
+      </div>
+      <div class="item-meta"><span class="item-time">14:20</span></div>
+    </div>
+    <div class="item">
+      <div class="type-icon file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+      <div class="item-content">
+        <div class="item-title">file:///Users/baijunjie/Documents/report.pdf</div>
+        <div class="item-sub">文件 · PDF 文档</div>
+      </div>
+      <div class="item-meta"><span class="item-time">14:15</span></div>
+    </div>
+    <div class="item">
+      <div class="type-icon text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
+      <div class="item-content"><div class="item-title">设计不是让事物变得漂亮,而是让它变得清晰</div></div>
+      <div class="item-meta"><span class="item-time">14:10</span></div>
+    </div>
+    <div class="item">
+      <div class="type-icon text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
+      <div class="item-content"><div class="item-title">https://github.com/tauri-apps/tauri/releases/tag/tauri-v2.0.0</div></div>
+      <div class="item-meta"><span class="badge">×7</span><span class="item-time">13:45</span></div>
+    </div>
+    <div class="item">
+      <div class="type-icon text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
+      <div class="item-content"><div class="item-title">会议纪要:M4 阶段 D 需要先在 GitHub 建仓库</div></div>
+      <div class="item-meta"><span class="item-time">13:30</span></div>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <span class="kbd-hint"><span class="kbd">↑↓</span> 导航 · <span class="kbd">⏎</span> 回填 · <span class="kbd">⌫</span> 删除 · <span class="kbd">/</span> 搜索</span>
+  </div>
+</div>
+
+<!-- ========== 空状态 ========== -->
+<div class="window view" id="view-empty">
+  <div class="topbar">
+    <span class="topbar-title">Clipboard Manager</span>
+    <div class="topbar-right">
+      <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+      <div class="status-dot"></div>
+    </div>
+  </div>
+  <div class="search">
+    <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
+    <input type="text" placeholder="搜索剪贴板历史…  (按 / 快速聚焦)" />
+  </div>
+  <div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" fill="currentColor" opacity="0.2"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg>
+    <div class="empty-title">还没有复制记录</div>
+    <div class="empty-desc">复制点东西试试,它会自动出现在这里</div>
+  </div>
+  <div class="bottombar">
+    <span class="kbd-hint"><span class="kbd">↑↓</span> 导航 · <span class="kbd">⏎</span> 回填 · <span class="kbd">⌫</span> 删除 · <span class="kbd">/</span> 搜索</span>
+  </div>
+</div>
+
+<!-- ========== 设置面板 ========== -->
+<div class="window view" id="view-settings">
+  <div class="topbar">
+    <div class="topbar-right" style="gap:6px">
+      <button class="icon-btn" style="font-size:12px; width:auto; padding: 2px 8px; color: var(--accent);">← 返回</button>
+    </div>
+    <span class="topbar-title">设置</span>
+    <div style="width:50px"></div>
+  </div>
+
+  <div class="settings-list">
+    <div class="setting-group-title">通用</div>
+    <div class="setting-row">
+      <div><div class="setting-label">开机自启</div><div class="setting-desc">登录时自动启动(后台运行)</div></div>
+      <div class="toggle on"></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">唤起快捷键</div><div class="setting-desc">全局快捷键,随时唤起/隐藏窗口</div></div>
+      <div class="shortcut-display">⌥ Space</div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">启动时打开窗口</div><div class="setting-desc">关闭后开机自启只进托盘</div></div>
+      <div class="toggle"></div>
+    </div>
+
+    <div class="setting-group-title">存储</div>
+    <div class="setting-row">
+      <div><div class="setting-label">历史记录上限</div><div class="setting-desc">最多保留多少条历史</div></div>
+      <select class="select"><option>200 条</option></select>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">保留天数</div><div class="setting-desc">超过天数的记录自动清理</div></div>
+      <select class="select"><option>30 天</option></select>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">容量上限</div><div class="setting-desc">超过容量从最旧开始清理</div></div>
+      <select class="select"><option>100 MB</option></select>
+    </div>
+
+    <div class="setting-group-title">行为</div>
+    <div class="setting-row">
+      <div><div class="setting-label">失焦自动隐藏</div><div class="setting-desc">点击窗口外自动隐藏(Spotlight 行为)</div></div>
+      <div class="toggle on"></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">敏感内容过滤</div><div class="setting-desc">自动拦截 API key / Token / 私钥</div></div>
+      <div class="toggle on"></div>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <span class="kbd-hint" style="color: var(--accent);">设置即时保存</span>
+  </div>
+</div>
+
+<p class="caption">③ 深灰折中 · 暖橙强调,介于深浅之间</p>
+
+<script>
+function show(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.nav button').forEach((b,i) => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+document.querySelectorAll('.toggle').forEach(t => t.addEventListener('click', () => t.classList.toggle('on')));
+</script>
+</body>
+</html>

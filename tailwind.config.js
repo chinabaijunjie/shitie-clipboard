@@ -1,14 +1,19 @@
 /**
- * Tailwind 配置 — shadcn/ui 风格
+ * Tailwind 配置 — 苹果审美改造(深色毛玻璃 ①)
  *
- * 设计要点:
- * - darkMode: 'class'(通过 data-theme / class 切换,M0 沿用原 light/dark 主题)
- * - 颜色走 CSS 变量(--background / --foreground 等),支持主题切换
- * - content 覆盖 src 全部 .ts/.tsx(含 components/ui shadcn 组件)
- * - 不启用 Tailwind 的 preflight(shadcn 的 globals.css 已含 reset)
+ * 设计依据:wiki/dev/ui-design-spec.md §2 + §3.1
  *
- * shadcn 组件默认用以下颜色键:background/foreground/card/popover/primary/
- * secondary/muted/accent/destructive/border/input/ring。
+ * 变更要点(相对 M0 默认):
+ * - darkMode 改 'class' 用 .theme-dark(主题切换架构预留,见 design-spec §4)
+ * - shadcn 颜色键沿用 hsl(var(--x)),配色值在 index.css 改成苹果系统色
+ * - 新增 UI 专用 token 接线:
+ *   boxShadow.window / transitionTimingFunction / borderRadius 分档 / colors 扩展
+ * - 注释修正:M0 注释称「不启用 preflight」但代码未实际禁用 —— 本项目实际启用
+ *   preflight(Tailwind reset),组件依赖它,此处维持启用,注释纠正
+ *
+ * shadcn 颜色键:background/foreground/card/popover/primary/secondary/muted/
+ * accent/destructive/border/input/ring。
+ * 扩展键:window/card-small/thumb/caption(本组件专用)
  */
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -17,6 +22,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        // --- shadcn 兼容键(hsl 三元组,组件层引用)---
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -50,15 +56,50 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+
+        // --- UI 专用键(直接引 CSS 变量,非 hsl 格式)---
+        // 文字层级:苹果 systemLabel 三级(带透明度)
+        'text-secondary': 'var(--text-secondary)',
+        'text-tertiary': 'var(--text-tertiary)',
+        // 列表交互态
+        'bg-hover': 'var(--bg-hover)',
+        'bg-selected': 'var(--bg-selected)',
+        // 徽标 / 类型图标
+        'badge-bg': 'var(--badge-bg)',
+        'badge-text': 'var(--badge-text)',
       },
       borderRadius: {
+        // shadcn 标准(基准 --radius)
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        // 苹果材质分档(设计规格 §2.1)
+        window: 'var(--radius-window)',
+        card: 'var(--radius-card)',
+        'card-small': 'var(--radius-small)',
+        thumb: 'var(--radius-thumb)',
       },
-      // Spotlight 窗口:较小字号 + 紧凑间距
+      boxShadow: {
+        // 窗口阴影:多层半透明 + 顶边高光(苹果质感核心)
+        window: 'var(--shadow-window)',
+      },
+      transitionTimingFunction: {
+        // emilkowalski 纪律:绝不近似
+        'ease-out-strong': 'var(--ease-out)',
+        'ease-in-out-strong': 'var(--ease-in-out)',
+      },
+      transitionDuration: {
+        fast: 'var(--duration-fast)',
+        base: 'var(--duration-base)',
+      },
       fontSize: {
+        // Spotlight 窗口:较小字号
         xs: ['0.75rem', { lineHeight: '1rem' }],
+      },
+      letterSpacing: {
+        // 苹果字体层级:大字负字距,小字正字距(设计规格 §2.6)
+        tightish: '-0.01em',
+        caption: '0.01em',
       },
     },
   },
