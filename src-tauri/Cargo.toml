@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-manager"
-version = "1.0.3"
+version = "1.0.4"
 description = "拾贴 — 轻量常驻的剪贴板历史管理工具"
 authors = ["Template"]
 license = "MIT"
@@ -42,6 +42,8 @@ regex = "1"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-store = "2"
+# 单实例保护:防止多个进程同时运行(Windows 开机自启 + 手动启动叠加)
+single-instance = "0.3"
 
 [features]
 # 默认特性

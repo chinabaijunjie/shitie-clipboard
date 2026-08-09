@@ -101,13 +101,37 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 ///
 /// 在 lib.rs 的 `.on_window_event` 里调用。
 /// 读取 AppState 的 hide_on_blur 设置决定是否失焦隐藏。
+///
+/// ⚠️ Windows 拖动陷阱:用户拖动窗口标题栏时,Windows 会瞬间触发 Focused(false) 再
+/// Focused(true)。如果直接在 Focused(false) 里 hide,窗口会消失无法拖动。
+/// 修复:失焦后延迟 150ms 再检查——如果窗口仍然可见且仍无焦点,才真正隐藏。
+/// macOS 不受此问题影响,但延迟无害(用户感知不到 150ms)。
 pub fn handle_window_event<R: Runtime>(event: &WindowEvent, app: &AppHandle<R>) {
     match event {
         WindowEvent::Focused(false) => {
             // 失焦隐藏(检查设置 + guard)
             if should_hide_on_blur(read_hide_on_blur(app)) {
-                hide_main_window(app);
+                // 延迟隐藏:给 Windows 拖动操作时间完成(拖动会快速失焦→聚焦)
+                let app_handle = app.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                    // 再次检查:guard 可能已被 show 置位,窗口可能已不可见
+                    if !should_hide_on_blur(read_hide_on_blur(&app_handle)) {
+                        return;
+                    }
+                    // 检查窗口是否仍可见(可能已被其他路径隐藏)
+                    if let Some(win) = app_handle.get_webview_window(MAIN_WINDOW) {
+                        if !win.is_visible().unwrap_or(false) {
+                            return;
+                        }
+                    }
+                    hide_main_window(&app_handle);
+                });
             }
+        }
+        WindowEvent::Focused(true) => {
+            // 窗口重新获得焦点(可能是拖动结束)——确保 guard 清除
+            SUPPRESS_BLUR_HIDE.store(false, Ordering::SeqCst);
         }
         WindowEvent::CloseRequested { api, .. } => {
             // 拦截关闭 → 转 hide(进程常驻,除非从托盘退出)

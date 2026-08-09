@@ -99,6 +99,22 @@ fn hide_window(window: Window) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 单实例保护:防止多个进程同时运行(Windows 开机自启 + 手动启动叠加场景)。
+    // 第二个实例启动时,激活已有实例的窗口并退出自己。
+    let _single_instance = match single_instance::SingleInstance::new("shitie-clipboard-lock") {
+        Ok(si) => {
+            if !si.is_single() {
+                eprintln!("拾贴已在运行,退出重复实例");
+                return;
+            }
+            Some(si)
+        }
+        Err(e) => {
+            eprintln!("[startup] 单实例锁初始化失败(继续启动): {e}");
+            None
+        }
+    };
+
     tauri::Builder::default()
         .setup(|app| {
             // 日志插件:常驻工具排障必备。
