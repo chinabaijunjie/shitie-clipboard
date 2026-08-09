@@ -95,13 +95,18 @@ fn hide_window(window: Window) {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            // 日志插件:常驻工具排障必备(写 ~/Library/Logs/{bundleId}/)。
+            // 日志插件:常驻工具排障必备。
+            // macOS:~/Library/Logs/{bundleId}/
+            // Windows:{FOLDERID_LocalAppData}/{bundleId}/logs/  (即 AppData\Local\...\logs\)
             // Info 级:M1 起剪贴板捕获需要 info 日志观测(每次复制打一条);仍过滤 verbose。
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log::LevelFilter::Info)
                     .build(),
             )?;
+
+            // 启动日志:确认日志系统正常工作(排障第一线索)
+            log::info!("[startup] 拾贴启动中, identifier={}", app.handle().config().identifier);
 
             // M3:Store 插件(设置持久化,settings.json in app_data_dir)
             app.handle().plugin(tauri_plugin_store::Builder::default().build())?;
@@ -131,8 +136,9 @@ pub fn run() {
 
                 // 注册快捷键(用设置中的值)
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                if let Err(e) = app.global_shortcut().register(shortcut_str.as_str()) {
-                    log::warn!("[shortcut] 注册快捷键 {} 失败: {e}", shortcut_str);
+                match app.global_shortcut().register(shortcut_str.as_str()) {
+                    Ok(()) => log::info!("[shortcut] 全局快捷键注册成功: {}", shortcut_str),
+                    Err(e) => log::error!("[shortcut] 注册快捷键 {} 失败: {e}", shortcut_str),
                 }
             }
 

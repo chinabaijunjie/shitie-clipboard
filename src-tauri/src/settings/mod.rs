@@ -4,7 +4,7 @@
 //! 与 rusqlite(历史数据)职责分离。
 //!
 //! 配置项(9 项):
-//! - shortcut:全局唤起快捷键(默认 "Cmd+Shift+V")
+//! - shortcut:全局唤起快捷键(默认 "CommandOrControl+Shift+V",跨平台)
 //! - launch_visible:启动时打开窗口(默认 true)
 //! - max_items:历史记录上限(默认 50)
 //! - retention_days:保留天数,0=不限(默认 0)
@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{codes, AppError};
 
-/// 默认快捷键(macOS ⌘⇧V)。
-pub const DEFAULT_SHORTCUT: &str = "Cmd+Shift+V";
+/// 默认快捷键(CommandOrControl 自动跨平台:macOS ⌘⇧V / Windows·Linux Ctrl+Shift+V)。
+pub const DEFAULT_SHORTCUT: &str = "CommandOrControl+Shift+V";
 
 /// 默认历史记录上限。
 pub const DEFAULT_MAX_ITEMS: i64 = 50;
@@ -38,7 +38,7 @@ pub const SETTINGS_FILE: &str = "settings.json";
 /// 字段增删必须两端同步。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
-    /// 全局唤起快捷键(如 "Cmd+Shift+V")。
+    /// 全局唤起快捷键(如 "CommandOrControl+Shift+V")。
     #[serde(rename = "shortcut", default = "default_shortcut")]
     pub shortcut: String,
     /// 启动时是否打开窗口(开机自启场景建议 false)。
@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn default_values() {
         let s = Settings::default();
-        assert_eq!(s.shortcut, "Cmd+Shift+V");
+        assert_eq!(s.shortcut, "CommandOrControl+Shift+V");
         assert!(s.launch_visible);
         assert_eq!(s.max_items, 50);
         assert_eq!(s.retention_days, 0);
@@ -232,7 +232,7 @@ mod tests {
         // 空对象 → 全部默认值
         let empty = serde_json::json!({});
         let s = settings_from_value(&empty);
-        assert_eq!(s.shortcut, "Cmd+Shift+V");
+        assert_eq!(s.shortcut, "CommandOrControl+Shift+V");
         assert!(s.launch_visible);
         assert_eq!(s.max_items, 50);
         assert!(s.hide_on_blur);

@@ -111,6 +111,9 @@ impl ClipboardChangeHandler {
 
 impl ClipboardHandler for ClipboardChangeHandler {
     fn on_clipboard_change(&mut self) {
+        // 诊断日志:确认剪贴板变化事件已到达 handler(Windows 排障关键)
+        log::info!("[clipboard] 收到变化事件");
+
         // 0. 消费自身写入标志:copy_back 刚写过剪贴板,这次变化是自身写入,跳过。
         //    (防反馈循环:copy_back set → changeCount 变 → watcher 捕获 → copy_count 虚高)
         if self.consume_self_write() {

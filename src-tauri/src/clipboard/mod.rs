@@ -131,9 +131,26 @@ fn run_watcher(
 
     watcher.add_handler(handler);
     log::info!(
-        "[clipboard] 开始监听(500ms 轮询 changeCount),event={CLIPBOARD_ADDED_EVENT}"
+        "[clipboard] 开始监听(macOS:500ms 轮询 / Windows:WM_CLIPBOARDUPDATE 事件),event={CLIPBOARD_ADDED_EVENT}"
     );
-    // start_watch 阻塞,直到 shutdown channel 触发(drop handle → WatcherShutdown drop → 停止)
-    watcher.start_watch();
-    log::info!("[clipboard] 监听线程退出");
+    // start_watch 阻塞,直到 shutdown channel 触发(drop handle → WatcherShutdown drop → 停止)。
+    //
+    // ⚠️ Windows 排障:clipboard-rs 内部 start_watch 有两个静默失败路径:
+    //   1. Monitor::new().expect(...) — AddClipboardFormatListener 注册失败时 panic
+    //   2. recv() 出错时 eprintln!(不是 log::error!),打包应用里 stderr 不可见
+    // 用 catch_unwind 捕获 panic,确保至少能看到日志而非线程悄无声息死掉。
+    let watch_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        watcher.start_watch();
+    }));
+    match watch_result {
+        Ok(()) => log::info!("[clipboard] 监听线程正常退出"),
+        Err(panic_info) => {
+            let msg = panic_info
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| panic_info.downcast_ref::<&str>().copied())
+                .unwrap_or("(非字符串 panic)");
+            log::error!("[clipboard] 监听线程 panic(可能是 AddClipboardFormatListener 注册失败): {msg}");
+        }
+    }
 }
