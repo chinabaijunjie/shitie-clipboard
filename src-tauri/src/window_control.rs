@@ -97,6 +97,81 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     SUPPRESS_BLUR_HIDE.store(false, Ordering::SeqCst);
 }
 
+/// macOS 原生:配置窗口使其能在全屏应用的 Space 上显示。
+///
+/// macOS 全屏应用在独立的 Space 上,要让窗口出现在它上面需要三管齐下:
+///
+/// 1. **collection behavior**:CanJoinAllSpaces + FullScreenAuxiliary
+///    - CanJoinAllSpaces:在所有桌面 Space 显示
+///    - FullScreenAuxiliary:能进入全屏应用的 Space
+///
+/// 2. **window level**:提高到 CGFloatingWindowLevel(3) 以上
+///    - 全屏窗口的 level 很高,必须超过它
+///    - Spotlight 用 NSStatusWindowLevel(25),我们跟齐
+///
+/// 3. **nonactivatingPanel style mask**(关键!)
+///    - 普通 NSWindow 被 show 时会激活 app → macOS 自动切到 app 的 Space
+///      → 全屏应用退出 → 用户看到的是切回桌面而非浮层
+///    - 加 nonactivatingPanel(1<<7) 让窗口不激活 app,像 Spotlight 一样浮在上面
+///    - 参考:Spotlight/Alfred/Raycast 都用 NSPanel(nonactivatingPanel)
+///
+/// 调用时机:setup 阶段(窗口创建后立即)调用一次。
+///
+/// 参考资料:
+/// - [StackOverflow: How to force NSWindow in front of fullscreen apps](https://stackoverflow.com/questions/10905045)
+/// - [Spotlight/Alfred 风格窗口教程](https://www.markusbodner.com/til/2021/02/08/create-a-spotlight/alfred-like-window-on-macos-with-swiftui/)
+#[cfg(target_os = "macos")]
+pub fn setup_macos_fullscreen_window<R: Runtime>(app: &AppHandle<R>) {
+    use objc::msg_send;
+    use objc::sel;
+    use objc::sel_impl;
+
+    let Some(win) = app.get_webview_window(MAIN_WINDOW) else {
+        log::warn!("[window] setup_macos: 找不到主窗口");
+        return;
+    };
+
+    // 先用 Tauri API 设置 CanJoinAllSpaces
+    if let Err(e) = win.set_visible_on_all_workspaces(true) {
+        log::warn!("[window] set_visible_on_all_workspaces 失败: {e}");
+    }
+
+    // 再用原生 API 补全三个关键配置
+    match win.ns_window() {
+        Ok(ns_window_ptr) => {
+            let ns_window = ns_window_ptr as *mut objc::runtime::Object;
+
+            // NSWindowCollectionBehavior flags
+            const CAN_JOIN_ALL_SPACES: u64 = 1 << 0;
+            const FULL_SCREEN_AUXILIARY: u64 = 1 << 8;
+
+            // NSWindowStyleMask: nonactivatingPanel = 1 << 7 (128)
+            // 这是让窗口不激活 app 的关键(Spotlight 的做法)
+            const NON_ACTIVATING_PANEL: u64 = 1 << 7;
+
+            // NSWindowLevel: 用 NSStatusWindowLevel(25) 确保盖住全屏窗口
+            const NS_STATUS_WINDOW_LEVEL: i64 = 25;
+
+            unsafe {
+                // 1. collection behavior: CanJoinAllSpaces + FullScreenAuxiliary
+                let current_behavior: u64 = msg_send![ns_window, collectionBehavior];
+                let new_behavior = current_behavior | CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY;
+                let _: () = msg_send![ns_window, setCollectionBehavior: new_behavior];
+
+                // 2. window level: 提高到 NSStatusWindowLevel
+                let _: () = msg_send![ns_window, setLevel: NS_STATUS_WINDOW_LEVEL];
+
+                // 3. style mask: 加 nonactivatingPanel(不激活 app,不切换 Space)
+                let current_style: u64 = msg_send![ns_window, styleMask];
+                let new_style = current_style | NON_ACTIVATING_PANEL;
+                let _: () = msg_send![ns_window, setStyleMask: new_style];
+            }
+            log::info!("[window] macOS 全屏 Space 窗口配置完成(collectionBehavior + level + nonactivatingPanel)");
+        }
+        Err(e) => log::warn!("[window] 获取 NSWindow 失败: {e}"),
+    }
+}
+
 /// 处理窗口事件(Focused / CloseRequested)。
 ///
 /// 在 lib.rs 的 `.on_window_event` 里调用。

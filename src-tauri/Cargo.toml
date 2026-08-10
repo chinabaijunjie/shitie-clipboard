@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-manager"
-version = "1.0.8"
+version = "2.0.0"
 description = "拾贴 — 轻量常驻的剪贴板历史管理工具"
 authors = ["Template"]
 license = "MIT"
@@ -44,6 +44,11 @@ tauri-plugin-autostart = "2"
 tauri-plugin-store = "2"
 # 单实例保护:防止多个进程同时运行(Windows 开机自启 + 手动启动叠加)
 single-instance = "0.3"
+
+# macOS 全屏 Space 支持:设置 NSWindow collection behavior 让窗口能出现在全屏应用上
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+objc = "0.2"
 
 [features]
 # 默认特性

@@ -247,6 +247,11 @@ pub fn run() {
                 settings: Mutex::new(user_settings),
             });
 
+            // macOS:配置窗口使其能在全屏应用的 Space 上显示
+            // 必须在窗口创建后、show 之前设置 collection behavior + window level
+            #[cfg(target_os = "macos")]
+            window_control::setup_macos_fullscreen_window(app.handle());
+
             // M3:根据 launch_visible 设置决定是否显示窗口
             // (tauri.conf.json visible:false,由代码控制显示时机)
             let launch_visible = app

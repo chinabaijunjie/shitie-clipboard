@@ -1,99 +1,128 @@
+<div align="center">
+
 # 拾贴
 
-> 拾起每一次复制,粘贴你想要的过去。
+**拾起每一次复制，粘贴你想要的过去。**
 
-轻量常驻的剪贴板历史管理桌面应用。复制过的文字、图片、文件、链接,随手找回,一键回填。
+轻量常驻的剪贴板历史管理桌面应用，支持 macOS & Windows。
 
-## ✨ 特性
+[下载安装](#-安装) · [功能特性](#-功能特性) · [使用指南](#-使用指南)
 
-- **📋 全格式捕获** — 文字 / 富文本 / 图片 / 文件 / 链接 / Markdown,复制即收录
-- **🔍 秒级搜索** — SQLite FTS5 全文检索 + 中文 bigram 分词,千条历史也不卡
-- **⚡ 唤起即用** — 全局快捷键呼出 Spotlight 风格窗口,上下键选中,回车/双击回填
-- **🗄️ 存储管理** — 按类型统计占用,一键清除历史,可设保留天数/容量/条数上限
-- **🔒 隐私守护** — 自动识别并过滤 API Key / Token / 私钥等敏感信息(可开关)
-- **🎨 三套主题** — 深色 / 浅色 / 折中,毛玻璃质感 + 窗口透明度可调
-- **🚀 常驻后台** — 系统托盘 + 开机自启,无感运行,不占注意力
+</div>
 
-## 📸 预览
+---
 
-<!-- TODO: 补充截图 -->
+## 🌟 这是什么
+
+你复制过的每一段文字、每一张图片、每一个文件链接——**拾贴**都帮你记着。
+
+它安静地常驻在你的系统托盘里，你随时可以通过快捷键呼出它，像 Spotlight 一样搜索、浏览、一键回填你复制过的任何内容。不需要再翻聊天记录找之前复制的链接，不需要担心覆盖了重要内容。
+
+## ✨ 功能特性
+
+### 📋 全格式捕获
+复制的文字、富文本、图片、文件、链接、Markdown——自动收录，一个都不漏。
+
+### 🔍 秒级搜索
+基于 SQLite FTS5 全文检索引擎，支持中英文混合搜索。上千条历史记录也能瞬间找到。
+
+### ⚡ 唤起即用
+全局快捷键（默认 `Ctrl/Cmd + Shift + V`）随时呼出 Spotlight 风格窗口。上下键选中，回车或双击即可回填到剪贴板。
+
+### 🏷️ 类型筛选
+文字、图片、文件、链接、Markdown——按类型一键过滤，快速定位你要的内容。
+
+### 🗄️ 存储管理
+按类型统计存储占用，一键清除历史。支持设置保留天数、容量上限、条数上限，自动清理过期内容。
+
+### 🔒 隐私守护
+自动识别并过滤 API Key、Token、私钥等敏感信息（可在设置中开关）。敏感内容不会被收录。
+
+### 🎨 精致外观
+三套主题（深色 / 浅色 / 折中），毛玻璃质感界面，窗口透明度可调。精心设计的图标和交互动效。
+
+### 🚀 无感常驻
+系统托盘常驻 + 开机自启，不占桌面空间，不抢注意力。需要时一秒呼出，用完自动隐藏。
 
 ## 📦 安装
 
 ### macOS
 
-1. 从 [Releases](../../releases) 下载 `拾贴_x.x.x_aarch64.dmg`(Apple Silicon)或 `x64.dmg`(Intel)
-2. 打开 DMG,拖动「拾贴」到 Applications
-3. 首次打开:右键 → 打开(未签名需手动放行)
+1. 从 [Releases](../../releases) 下载 `.dmg` 文件
+   - Apple Silicon（M1/M2/M3/M4）：下载 `aarch64.dmg`
+   - Intel Mac：下载 `x64.dmg`
+2. 打开 DMG，将「拾贴」拖入 Applications 文件夹
+3. 首次打开时右键选择「打开」（未签名应用需要手动放行）
 
 ### Windows
 
-1. 下载 `拾贴_x.x.x_x64-setup.exe`
-2. 运行安装,SmartScreen 警告点「仍要运行」
+1. 从 [Releases](../../releases) 下载 `x64-setup.exe`
+2. 运行安装程序（SmartScreen 警告点击「仍要运行」）
 
-## 🛠️ 技术栈
+## 📖 使用指南
 
-| 层 | 技术 |
-|----|------|
-| 桌面壳 + 后端 | Tauri 2(Rust 单进程,无 sidecar / 无 HTTP) |
-| 前端 | React 18 + TypeScript + Vite |
-| UI | Tailwind CSS + shadcn/ui + lucide-react |
-| 剪贴板 | clipboard-rs(多格式读写 + 监听) |
-| 存储 | rusqlite(bundled SQLite + FTS5 全文搜索) |
-| 状态 | zustand |
+### 基本操作
 
-**架构亮点**:纯 Tauri 单进程——Rust 既是壳也是后端,前端通过 invoke 直接通信。轻量、启动快、零网络开销。
+| 操作 | 快捷键 |
+|------|--------|
+| 呼出 / 隐藏窗口 | `Ctrl/Cmd + Shift + V`（可自定义） |
+| 上下浏览 | `↑` `↓` |
+| 回填到剪贴板 | `Enter` 或 `双击` |
+| 删除某条记录 | `Backspace` |
+| 搜索 | `/` 聚焦搜索框，或直接输入 |
 
-## 🔧 开发
+### 快速上手
 
-### 环境要求
+1. **安装后启动**——拾贴会常驻在系统托盘
+2. **正常使用复制**——复制任何内容都会自动收录
+3. **按快捷键呼出**——浏览历史，搜索需要的内容
+4. **回车回填**——选中后回车，内容回到剪贴板，直接 `Ctrl/Cmd + V` 粘贴
 
-- Node.js 18+
-- Rust(toolchain via [rustup](https://rustup.rs))
-- [Tauri 2 系统依赖](https://v2.tauri.app/start/prerequisites/)
+### 自定义设置
 
-### 本地运行
+点击窗口右上角的 ⚙️ 图标进入设置：
 
-```bash
-npm install          # 安装前端依赖
-npm run tauri dev    # 开发模式(热更新 + Tauri 窗口)
-```
+- **快捷键**——自定义全局唤起快捷键
+- **外观**——深色 / 浅色 / 折中三套主题
+- **窗口透明度**——15% ~ 100% 可调
+- **开机自启**——开关系统启动时自动运行
+- **存储管理**——设置保留天数、容量上限、条数上限
+- **敏感过滤**——开关 API Key / Token 自动过滤
 
-### 测试 + 构建
+## 📸 预览
 
-```bash
-npm test             # 前端测试(vitest)
-npm run build        # 前端构建
-cd src-tauri && cargo test  # Rust 测试
-npm run tauri build  # 打包桌面应用(.app / .dmg / .exe / .msi)
-```
+<!-- 在这里添加截图 -->
+<!-- ![主界面](screenshots/main.png) -->
+<!-- ![设置面板](screenshots/settings.png) -->
 
-## 📁 工程结构
+*截图待补充*
 
-```
-├── src/                     React 前端
-│   ├── components/          SpotlightPanel + SettingsPanel + ClipboardList
-│   ├── core/                api / constants / theme / settings
-│   └── hooks/               useClipboardItems / useStorageStats
-├── src-tauri/               Tauri 2 Rust 层
-│   └── src/
-│       ├── commands/        clipboard / settings / storage 后端命令
-│       ├── clipboard/       监听 + 捕获 + 去重 + 敏感过滤
-│       └── storage/         SQLite + FTS5 + 图片存储 + 自动清理
-├── .github/workflows/       CI 跨平台打包(macOS / Windows)
-└── wiki/                    项目知识库(架构 / 约束 / 决策)
-```
+## 💻 支持平台
 
-## 🗺️ 开发路线
+| 平台 | 状态 |
+|------|------|
+| macOS（Apple Silicon） | ✅ |
+| macOS（Intel） | ✅ |
+| Windows 10/11 | ✅ |
 
-| 里程碑 | 内容 | 状态 |
-|--------|------|------|
-| **M0** | 架构清理 + Spotlight UI 骨架 | ✅ |
-| **M1** | 剪贴板监听 + 存储 + 历史列表 + 回填 | ✅ |
-| **M2** | 搜索(FTS5)+ 富文本/图片/文件多格式 | ✅ |
-| **M3** | 常驻体验(快捷键 + 托盘 + 自启 + 设置 + 自动清理) | ✅ |
-| **M4** | 打包 CI + 去重 + 敏感过滤 + UI 改造 + 多主题 | ✅ |
+## 🔧 技术栈
 
-## License
+拾贴基于 [Tauri 2](https://v2.tauri.app/) 构建——Rust 后端 + React 前端，纯单进程架构，轻量、启动快、零网络开销。
+
+<details>
+<summary>技术细节</summary>
+
+- **桌面框架**：Tauri 2（Rust）
+- **前端**：React 18 + TypeScript + Vite
+- **UI**：Tailwind CSS + shadcn/ui + lucide-react
+- **剪贴板**：clipboard-rs（跨平台多格式读写 + 监听）
+- **存储**：rusqlite + SQLite FTS5（全文搜索）
+- **状态管理**：zustand
+
+</details>
+
+详细的开发文档、架构说明和工程规范请参考 [DEVELOPMENT.md](DEVELOPMENT.md)。
+
+## 📝 License
 
 MIT

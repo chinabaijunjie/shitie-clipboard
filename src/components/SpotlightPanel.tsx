@@ -18,6 +18,7 @@ import { Settings, Search, Type, FileText, Image as ImageIcon, Layers, Link2, Fi
 
 import { call } from '@core/api'
 import { hideWindow } from '@core/window'
+import { APP_VERSION } from '@core/constants'
 import { cn } from '@lib/utils'
 import { useClipboardItems } from '@hooks/useClipboardItems'
 import { ClipboardList } from '@components/ClipboardList'
@@ -315,8 +316,8 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
         )}
       </div>
 
-      {/* 底栏:快捷键提示 / 操作错误 —— 顶部半透明分隔线 */}
-      <div className="border-t border-divider px-3.5 py-1.5 text-[10px]">
+      {/* 底栏:快捷键提示(左) + 版本号(右) / 操作错误 —— 顶部半透明分隔线 */}
+      <div className="flex items-center justify-between border-t border-divider px-3.5 py-1.5 text-[10px]">
         {actionError ? (
           <span className="text-destructive">{actionError}</span>
         ) : (
@@ -332,6 +333,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
             {' '}搜索
           </span>
         )}
+        <kbd className="shrink-0 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px]" style={{ color: '#e8c87a' }}>v{APP_VERSION}</kbd>
       </div>
     </div>
   )
