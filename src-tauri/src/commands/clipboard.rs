@@ -100,6 +100,18 @@ pub fn copy_back_with_conn(
     // 组装 Vec<ClipboardContent>(纯函数,可单测)
     let assembled = assemble_contents(&formats, images_dir);
 
+    // 诊断日志:回填了哪些格式(排障关键)
+    let format_summary: Vec<&str> = assembled.contents.iter().map(|c| match c {
+        ClipboardContent::Text(_) => "Text",
+        ClipboardContent::Rtf(_) => "Rtf",
+        ClipboardContent::Html(_) => "Html",
+        ClipboardContent::Image(_) => "Image",
+        ClipboardContent::Files(_) => "Files",
+        ClipboardContent::Other(_, _) => "Other",
+    }).collect();
+    log::info!("[copy_back] 条目 {} 回填格式: {:?}, 标题: {:?}",
+        id, format_summary, &assembled.title[..assembled.title.len().min(40)]);
+
     if assembled.contents.is_empty() {
         // 若曾有图片读盘失败,用更明确的错误(告知磁盘图可能损坏),而非笼统「无可回填格式」
         let msg = assembled
@@ -115,6 +127,7 @@ pub fn copy_back_with_conn(
             format!("写回剪贴板失败: {e}"),
         )
     })?;
+    log::info!("[copy_back] 条目 {} 写回剪贴板成功", id);
 
     // M3:更新 last_copied_at(回填后将该条移到最前)
     // ⚠️ 不加 copy_count:copy_count 反映「被复制次数」,回填不是新复制

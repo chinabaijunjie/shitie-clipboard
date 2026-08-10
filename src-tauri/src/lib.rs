@@ -278,6 +278,7 @@ pub fn run() {
             get_storage_stats,
             clear_history,
             hide_window,
+            window_control::set_dragging,
         ])
         // M3:窗口事件 — 失焦隐藏 + close 拦截转 hide
         .on_window_event(|window, event| {
