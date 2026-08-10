@@ -13,7 +13,7 @@ status: active
 
 ---
 
-## 🚨 当前状态(UI 增强迭代完成,下一步 M4 阶段 D)
+## 🚨 当前状态(v2.0.0 准备完成,下一步 macOS 全屏修复)
 
 > **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架。
 > **M1 已完成**(2026-08-06):macOS 剪贴板监听 MVP,端到端实测 6 项全通过。
@@ -22,9 +22,11 @@ status: active
 > **M4 A+B+C 已完成**(2026-08-09):打包 CI + 去重修复 + 敏感过滤,3 阶段施工 + PR review(2 Critical + 5 Important 全修)。
 > **M4 UI 已完成**(2026-08-09):苹果审美改造 — 深色毛玻璃主题 + 三组件重做,实机多轮调校。
 > **多主题+UI增强已完成**(2026-08-09):三套主题切换 + 透明度可调 + 存储统计 + 内容识别(link/markdown) + 类型筛选 tag + 双击回填 + 类型图标 + 文件/图片路径展示。
+> **Windows 跨平台适配已完成**(2026-08-09,v1.0.0~v1.0.8):剪贴板格式兼容(CF_*)+ 单实例锁 + 窗口拖动(data-tauri-drag-region)。
+> **v2.0.0 准备已完成**(2026-08-09,commit `d18b057`,未打包):版本号 + 底栏显示 + README 重写 + macOS 全屏配置(代码已写,全屏未生效)。
 > 详见 [[dev/progress]] + [[dev/ui-design-spec]](设计规格+三主题存档)。
 >
-> **下一步:M4 阶段 D**(Windows 实测 + CI 打包发布)。详见 [[dev/TODO]]。
+> **下一步:macOS 全屏应用呼出窗口修复**(已尝试 3 种方案均失败)。详见 [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
 > sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。

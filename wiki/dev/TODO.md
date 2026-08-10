@@ -9,12 +9,15 @@ status: active
 # 全局 TODO
 
 > 本工程是拾贴(轻量常驻的剪贴板历史管理桌面应用),
-> 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3/M4(A+B+C+UI)+ 多主题切换 + UI 增强迭代 已完成。
+> 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3/M4(A+B+C+UI)+ 多主题切换
+> + UI 增强迭代 + Windows 跨平台适配(v1.0.0~v1.0.8) + v2.0.0 准备 已完成。
 
 ## 🎯 下次目标
 
-- **M4 阶段 D**:Windows 实测(PD 虚拟机)+ CI 打包发布(push tag v1.0.0)
-  - ⚠️ 前置:用户需先在 GitHub 建仓库 + git remote add + push tag
+- **macOS 全屏应用呼出窗口修复**:全屏应用(如 Safari/Chrome 全屏)上快捷键无法呼出拾贴窗口
+  - 已尝试 3 种方案均失败(visibleOnAllWorkspaces / NSWindow collectionBehavior / activationPolicy)
+  - 已写代码(tauri.conf.json 配置)但未生效,需新会话系统排查
+  - 排查方向:Tauri v2 macOS 窗口 Space 行为 / NSWindow API 原生调用 / activationPolicy 调整
 
 ## 路线图
 
@@ -26,7 +29,9 @@ status: active
 - [x] **M4 UI 苹果审美改造**:深色毛玻璃主题 + 三组件重做 — ✅ 完成(2026-08-09)
 - [x] **多主题切换**:深色/浅色/折中三套主题 + 分段按钮选择器 — ✅ 完成(2026-08-09)
 - [x] **UI 增强迭代**:透明度+存储统计+内容识别+类型筛选+双击回填+类型图标 — ✅ 完成(2026-08-09)
-- [ ] **M4 阶段 D**:Windows 实测 + CI 打包发布(下一步)
+- [x] **Windows 跨平台适配 + CI 打包**(v1.0.0~v1.0.8):格式兼容 + 单实例锁 + 窗口拖动 — ✅ 完成(2026-08-09)
+- [x] **v2.0.0 准备**:版本号 + 底栏显示 + README 重写 + macOS 全屏配置(代码已写,全屏未生效)— ✅ 代码完成(2026-08-09)
+- [ ] **macOS 全屏应用呼出窗口修复**(下一步)
 
 ## 待办
 

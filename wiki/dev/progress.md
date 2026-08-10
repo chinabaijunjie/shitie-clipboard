@@ -5,7 +5,6 @@ created: 2026-06-29
 updated: 2026-08-09
 status: active
 ---
----
 
 # 开发进度
 
@@ -15,7 +14,8 @@ status: active
 
 - **项目**：拾贴（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
-- **当前里程碑**：UI 增强迭代 — **✅ 完成**(2026-08-09,多主题+透明度+存储统计+内容识别+类型筛选+双击回填)
+- **当前版本**：v2.0.0（准备中,未打包;GitHub 仓库 `chinabaijunjie/shitie-clipboard`）
+- **当前里程碑**：v2.0.0 准备 — **⏳ 未打包**(macOS 全屏应用呼出窗口问题待解决)
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
   + M3 新增:全局快捷键 / 托盘 / 开机自启 / 设置持久化(Store 插件)/ 自动清理
   + M4 新增:敏感信息过滤(正则黑名单)+ 去重修复(格式覆盖/文件 URL)+ CI 跨平台打包
@@ -24,14 +24,18 @@ status: active
   + UI 增强新增:窗口透明度可调 + 存储统计卡片 + 清除历史 + 内容识别(link/markdown)
     + 类型筛选 tag + 类型图标 + 双击回填 + 图片/文件路径展示
   + Schema v3:content_subtype 列(写入时识别 link/markdown 子类型)
+  + 跨平台适配新增:Windows 剪贴板格式兼容(CF_* 格式名)+ 单实例锁
+  + v2.0.0 新增:底栏版本号显示 + README 重写为面向用户 + macOS 全屏配置(待修)
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
   + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
   + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
   + tauri-plugin-global-shortcut 2 / tauri-plugin-autostart 2 / tauri-plugin-store 2(M3 新增)
+  + tauri-plugin-single-instance(v1.0.4 新增,防多开)
   + regex 1(M4 新增,敏感信息正则匹配)
   + lucide-react 1.30(M4 UI 新增,矢量图标库)
-- **验证基线**：cargo test 209 passed + npm test 67 passed + npm build 全绿 + clippy 零 warning
-- **下一步**：M4 阶段 D(Windows 实测 + CI 打包发布)— 需先建 GitHub 仓库 + push tag v1.0.0
+- **验证基线**：cargo test 217 passed + npm test 67 passed + npm build ✅ + clippy 零 error
+  (有 objc crate 的 cfg lint warning,无害)
+- **下一步**：macOS 全屏应用呼出窗口修复(已尝试 3 种方案均失败,需新会话排查)
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -409,6 +413,71 @@ PR review 留的 3 项 code quality 改进,独立改进会话清完。每项一�
 
 **验证基线**:cargo test 209 passed(+20: classify 14 + migration 2 + delete_all/count 4)
 + npm test 67 passed + npm build ✅ + clippy 零 warning
+
+## Windows 跨平台适配 + CI 打包完成记录(2026-08-09)
+
+v1.0.0 → v1.0.8 共 8 个版本迭代,解决 Windows 平台兼容性 + 窗口拖动 + 单实例锁。
+GitHub 仓库:`chinabaijunjie/shitie-clipboard`
+
+### 品牌改名 + 图标(commit `3c6c353` + `e18ad4c`)
+- 应用名 "Clipboard Manager" → "拾贴"(6 处代码/配置 + 7 个文档)
+- 专属图标:青色毛玻璃剪贴板 + 金色描边 + 青色夹子(全套 PNG + icns + ico)
+
+### v1.0.0 → v1.0.1:CI 打包起步
+- v1.0.0(`bd00e45`):缺 @types/node 导致 CI build 失败
+- v1.0.1(`941f87c`):补 @types/node + 快捷键 CommandOrControl 跨平台 + identifier 修正 + 监听诊断
+- v1.0.0 另修(`4fdcaf4`):productName 改英文 Shitie(WiX 中文打包失败)
+
+### v1.0.2 → v1.0.3:Windows 剪贴板格式兼容(核心工作)
+- **🔴 决定性发现**:Windows 剪贴板格式名与 macOS UTI 完全不同
+  - macOS:`public.utf8-plain-text` / `public.rtf` / `public.png` / `public.file-url`
+  - Windows:`CF_UNICODETEXT` / `Rich Text Format` / `HTML Format` / `PNG` / `CF_DIB` / `CF_HDROP`
+  - 白名单猜错格式名 → Windows 上所有内容都无法捕获 → 加 CF_* 格式名白名单
+- v1.0.2(`e8c3922`):白名单加 Windows 格式名(初版格式名猜错了)
+- v1.0.3(`7d1b286`):格式名修正为 CF_* 常量名 + 加 CF_HDROP 文件支持
+- 分类辅助函数 is_text/is_rich/is_image/is_file_url 跨平台支持
+- classify_content_kind text 优先(Windows 上文字几乎都带 RTF,否则全判成 Mixed)
+- v1.0.5(`01074cd`):文件标题兼容 Windows 路径(反斜杠)+ 文字分类 text 优先
+
+### v1.0.4:单实例锁(`aea2447`)
+- tauri-plugin-single-instance 防多开
+
+### 窗口拖动修复(v1.0.4 → v1.0.8,3 次失败 1 次成功)
+- **为什么难**:Spotlight 窗口无标题栏(decorations:false),原生拖拽不可用,
+  需要自定义拖拽区域,但拖拽与点击/选中事件冲突
+- v1.0.4(`aea2447`):150ms 延迟方案 → 不可靠(延迟感明显)
+- v1.0.6(`7479d4b`):IS_DRAGGING 标志方案 → 竞态问题(鼠标按下/释放时序不确定)
+- v1.0.7(`e61e953`):CSS -webkit-app-region 方案 → Tauri 不支持(Electron 专属)彻底失败
+- v1.0.8(`940e956`):**✅ 终于成功** — `data-tauri-drag-region` 属性 + Rust 50ms is_focused() 去抖
+  - data-tauri-drag-region:Tauri 原生拖拽属性,放在需要可拖拽的元素上
+  - 50ms 焦点去抖:拖拽时窗口获得焦点,但快速点击不触发拖拽逻辑(防误判)
+
+### 其他 bugfix
+- `bd1bbab`:托盘「退出拾贴」无法退出 — ExitRequested 无条件 prevent_exit 拦截了 app.exit(0)
+- `7479d4b`:copy_back 诊断日志增强
+
+### 技术决策
+- Windows 格式名与 macOS UTI 完全不同,必须分别维护两套白名单(不能假设统一)
+- Windows 上文字几乎都带 RTF,分类必须 text 优先(否则全判 Mixed)
+- 窗口拖动:data-tauri-drag-region 是 Tauri 唯一可靠方案(CSS -webkit-app-region 是 Electron 专属)
+- 单实例锁:t小姐-plugin-single-instance 在窗口重复启动时唤起已有实例
+
+## v2.0.0 准备完成记录(2026-08-09,commit `d18b057`,未打包)
+
+版本号升级到 2.0.0,面向用户的产品化改进。
+
+- **版本号升级**:Cargo.toml + tauri.conf.json + package.json → 2.0.0
+- **底栏版本号显示**:右下角金色 kbd tag 显示当前版本号
+- **README 重写**:面向用户的产品介绍(安装/使用/快捷键/FAQ)
+  - 旧 README(开发文档)改名 `DEVELOPMENT.md`
+- **macOS 全屏配置**:已写代码(tauri.conf.json visibleOnAllWorkspaces + collectionBehavior)
+  - ⚠️ **未生效**:全屏应用(如 Safari/Chrome 全屏)上无法呼出窗口,需新会话排查
+  - 已尝试 3 种方案均失败:visibleOnAllWorkspaces / NSWindow collectionBehavior / activationPolicy
+
+**验证基线**:cargo test 217 passed(+8:Windows 格式兼容相关)+ npm test 67 passed + npm build ✅
++ clippy 零 error(有 objc crate 的 cfg lint warning,无害)
+
+**下一步**:macOS 全屏应用呼出窗口修复
 
 ## 本工程开发历史
 

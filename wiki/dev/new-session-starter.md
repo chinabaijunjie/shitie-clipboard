@@ -21,7 +21,7 @@ status: ready-to-use
 
 > 当前状态(版本/测试数/架构) → 见 wiki/dev/progress.md「当前状态」段
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
-> 当前任务规划 → M4(A+B+C+UI)+ 多主题 + UI 增强迭代全部完成,下一步 M4 阶段 D
+> 当前任务规划 → v2.0.0 代码准备完成(未打包),下一步 macOS 全屏应用呼出窗口修复
 
 ## 必读文档
 1. AGENTS.md(AI 启动 3 步 + 核心原则 7 模块化 / 8 随写随测 / §8 通用工程纪律)
@@ -30,11 +30,18 @@ status: ready-to-use
 4. wiki/dev/TODO.md(下次目标 + 待办)
 
 ## ⏰ 待触发任务提醒
-- **UI 增强迭代已完成**(2026-08-09):多主题切换 + 透明度可调 + 存储统计卡片 + 清除历史
-  + 内容识别(link/markdown) + 类型筛选 tag + 双击回填 + 类型图标 + 文件/图片路径展示。
-  Schema v3(content_subtype 列)。详见 wiki/dev/progress.md。
-- **下一步:M4 阶段 D**(Windows PD 虚拟机实测 + push tag 触发 CI 打包发布)。
-  - ⚠️ CI 前置:用户需在 GitHub 建仓库 + git remote add + push tag v1.0.0
+- **macOS 全屏应用呼出窗口问题**(核心待解决):
+  - 全屏应用(Safari/Chrome 全屏)上快捷键无法呼出拾贴窗口
+  - 已尝试 3 种方案均失败:visibleOnAllWorkspaces / NSWindow collectionBehavior / activationPolicy
+  - 代码已写(tauri.conf.json 配置)但未生效,需系统排查 Tauri v2 macOS 窗口 Space 行为
+  - 详见 wiki/dev/progress.md「v2.0.0 准备完成记录」段
+- **v2.0.0 准备已完成**(2026-08-09,commit `d18b057`,未打包):
+  - 版本号升级 2.0.0 + 底栏版本号显示(金色 kbd tag)
+  - README 重写为面向用户的产品介绍(旧 README 改名 DEVELOPMENT.md)
+  - 详见 wiki/dev/progress.md
+- **Windows 跨平台适配已完成**(v1.0.0~v1.0.8):
+  - Windows 剪贴板格式兼容(CF_* 格式名)+ 单实例锁 + 窗口拖动(data-tauri-drag-region)
+  - 详见 wiki/dev/progress.md「Windows 跨平台适配 + CI 打包完成记录」段
 - **可选后续**:按格式智能渲染(代码高亮/Markdown 预览,图标位已预留)
 
 ## 工作模式
