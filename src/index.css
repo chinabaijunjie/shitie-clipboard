@@ -322,6 +322,26 @@
   }
 
   /**
+   * 窗口拖动区域 —— 跨平台方案。
+   *
+   * 用 -webkit-app-region: drag 而非 data-tauri-drag-region。
+   * 原因:data-tauri-drag-region 在 Windows 上会触发 start_dragging →
+   * 瞬间 Focused(false) → 失焦隐藏把窗口关掉。
+   * -webkit-app-region 是 WebView 原生 CSS 属性,不经过 JS 事件循环,
+   * 不会触发 Focused(false),Windows/macOS 都正常工作。
+   *
+   * 用法:顶栏 div 加 .drag-region;内部交互元素(按钮/输入框)加 .no-drag 排除。
+   */
+  .drag-region {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  /**
    * 列表项 hover —— 用原生 CSS 而非 Tailwind hover: 前缀。
    * 原因:Tailwind 对自定义颜色键 + hover 变体的组合在 content 扫描时
    * 可能不生成对应类。原生 CSS 最可靠。

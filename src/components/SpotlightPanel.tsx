@@ -205,23 +205,20 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
 
   return (
     <div
-      data-tauri-drag-region
       className="glass-window flex h-full w-full flex-col text-foreground"
     >
       {/* 顶栏:标题 + 设置 + 状态
-          - data-tauri-drag-region 支持拖动窗口
-          - select-none 防止文字被选中 */}
+          - .drag-region 用 CSS -webkit-app-region 实现拖动(跨平台,不触发 Focused(false))
+          - .no-drag 排除交互元素(按钮) */}
       <div
-        data-tauri-drag-region
-        className="flex items-center justify-between px-3.5 py-2.5 select-none"
+        className="drag-region flex items-center justify-between px-3.5 py-2.5 select-none"
       >
         <span
-          data-tauri-drag-region
           className="text-xs font-semibold tracking-tightish select-none text-foreground"
         >
           拾贴
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="no-drag flex items-center gap-1.5">
           <button
             onClick={onOpenSettings}
             className="flex h-5 w-5 items-center justify-center rounded-card-small text-text-secondary transition-colors duration-fast ease-out-strong hover:bg-hover hover:text-foreground"

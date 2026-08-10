@@ -26,22 +26,13 @@ pub const MAIN_WINDOW: &str = "main";
 /// - on_window_event Focused(false) 检查:若 true 则跳过(这是程序触发的 hide,不是用户失焦)
 static SUPPRESS_BLUR_HIDE: AtomicBool = AtomicBool::new(false);
 
-/// 窗口正在被拖动时置位,阻止失焦隐藏。
-///
-/// Windows 上 `start_dragging` 会导致窗口短暂失焦,如果不抑制,
-/// 拖动刚开始窗口就被隐藏了。拖动结束后窗口重新获得焦点时清除。
-static IS_DRAGGING: AtomicBool = AtomicBool::new(false);
-
 /// 判断当前是否应该执行失焦隐藏(纯函数,可单测)。
 ///
 /// - hide_on_blur=false → 不隐藏(用户关了失焦隐藏)
 /// - SUPPRESS_BLUR_HIDE=true → 不隐藏(程序主动 hide 触发的失焦,防连锁)
-/// - IS_DRAGGING=true → 不隐藏(窗口正在被拖动,Windows 拖动会触发瞬间失焦)
 /// - 其余 → 隐藏
 pub fn should_hide_on_blur(hide_on_blur: bool) -> bool {
-    hide_on_blur
-        && !SUPPRESS_BLUR_HIDE.load(Ordering::SeqCst)
-        && !IS_DRAGGING.load(Ordering::SeqCst)
+    hide_on_blur && !SUPPRESS_BLUR_HIDE.load(Ordering::SeqCst)
 }
 
 /// 判断窗口应该 show 还是 hide(纯函数,可单测)。
@@ -92,15 +83,6 @@ pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// 设置拖动标志(前端 data-tauri-drag-region mousedown 时调用)。
-///
-/// Windows 上 start_dragging 会瞬间触发 Focused(false),设置此标志阻止失焦隐藏。
-/// 拖动结束后窗口重新获得焦点(Focused(true))会自动清除。
-#[tauri::command]
-pub fn set_dragging() {
-    IS_DRAGGING.store(true, Ordering::SeqCst);
-}
-
 /// 显示主窗口(show + focus + 清 guard)。
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
@@ -120,22 +102,19 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 /// 在 lib.rs 的 `.on_window_event` 里调用。
 /// 读取 AppState 的 hide_on_blur 设置决定是否失焦隐藏。
 ///
-/// ⚠️ Windows 拖动陷阱:用户拖动窗口标题栏时,Windows 会瞬间触发 Focused(false)。
-/// 解决方案:前端 drag-region 的 mousedown 调 set_dragging() 置位 IS_DRAGGING,
-/// should_hide_on_blur 检查该标志跳过隐藏。拖动结束后窗口重新获得焦点
-/// (Focused(true))自动清除 IS_DRAGGING。
+/// 窗口拖动用 CSS -webkit-app-region: drag(见 .drag-region 工具类),
+/// 不经过 JS 事件循环,不会触发 Focused(false),无需在此处理拖动。
 pub fn handle_window_event<R: Runtime>(event: &WindowEvent, app: &AppHandle<R>) {
     match event {
         WindowEvent::Focused(false) => {
-            // 失焦隐藏(检查设置 + guard + 拖动标志)
+            // 失焦隐藏(检查设置 + guard)
             if should_hide_on_blur(read_hide_on_blur(app)) {
                 hide_main_window(app);
             }
         }
         WindowEvent::Focused(true) => {
-            // 窗口重新获得焦点(可能是拖动结束)——清除所有抑制标志
+            // 窗口重新获得焦点——清除抑制 guard
             SUPPRESS_BLUR_HIDE.store(false, Ordering::SeqCst);
-            IS_DRAGGING.store(false, Ordering::SeqCst);
         }
         WindowEvent::CloseRequested { api, .. } => {
             // 拦截关闭 → 转 hide(进程常驻,除非从托盘退出)
@@ -175,9 +154,8 @@ mod tests {
 
     #[test]
     fn should_hide_when_blur_enabled_and_not_suppressed() {
-        // 测试前确保所有标志是 false
+        // 测试前确保 guard 是 false
         SUPPRESS_BLUR_HIDE.store(false, Ordering::SeqCst);
-        IS_DRAGGING.store(false, Ordering::SeqCst);
         assert!(should_hide_on_blur(true));
     }
 
@@ -188,19 +166,9 @@ mod tests {
 
     #[test]
     fn should_not_hide_when_suppressed() {
-        IS_DRAGGING.store(false, Ordering::SeqCst);
         SUPPRESS_BLUR_HIDE.store(true, Ordering::SeqCst);
         assert!(!should_hide_on_blur(true));
         // 恢复
         SUPPRESS_BLUR_HIDE.store(false, Ordering::SeqCst);
-    }
-
-    #[test]
-    fn should_not_hide_when_dragging() {
-        SUPPRESS_BLUR_HIDE.store(false, Ordering::SeqCst);
-        IS_DRAGGING.store(true, Ordering::SeqCst);
-        assert!(!should_hide_on_blur(true));
-        // 恢复
-        IS_DRAGGING.store(false, Ordering::SeqCst);
     }
 }

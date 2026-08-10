@@ -143,16 +143,16 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
 
   return (
     <div
-      data-tauri-drag-region
       className="glass-window flex h-full w-full flex-col text-foreground"
     >
-      {/* 顶栏:返回(左) + 标题居中 + 保存提示(右) —— 三等分 flex,标题天然居中 */}
+      {/* 顶栏:返回(左) + 标题居中 + 保存提示(右) —— 三等分 flex,标题天然居中
+          - .drag-region 用 CSS -webkit-app-region 实现拖动(跨平台)
+          - .no-drag 排除交互元素(返回按钮) */}
       <div
-        className="mask-fade-bottom flex items-center px-3.5 py-2.5 select-none"
-        data-tauri-drag-region
+        className="drag-region mask-fade-bottom flex items-center px-3.5 py-2.5 select-none"
       >
         {/* 左:返回 —— 固定宽度,和右侧对称 */}
-        <div className="flex-1">
+        <div className="no-drag flex-1">
           <button
             onClick={onBack}
             className="flex items-center gap-0.5 rounded-card-small px-1.5 py-0.5 text-xs text-primary transition-colors duration-fast ease-out-strong hover:bg-hover"
@@ -164,7 +164,6 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
         {/* 中:标题 —— flex-1 居中文字 */}
         <div className="flex-1 text-center">
           <span
-            data-tauri-drag-region
             className="text-xs font-semibold tracking-tightish select-none"
           >
             设置
