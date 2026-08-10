@@ -99,6 +99,7 @@
     /* 徽标 */
     --badge-bg: rgba(255, 255, 255, 0.08);
     --badge-text: rgba(235, 235, 245, 0.6);
+    --badge-gold: #e8c87a;
 
     /* 类型图标颜色(预留位) */
     --type-code: #ffd60a;
@@ -158,6 +159,7 @@
 
     --badge-bg: rgba(60, 60, 67, 0.12);
     --badge-text: #86868b;
+    --badge-gold: #b08828;
 
     --type-code: #ff9f0a;
     --type-md: #30b0c7;

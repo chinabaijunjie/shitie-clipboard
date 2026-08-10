@@ -99,27 +99,21 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 
 /// macOS 原生:配置窗口使其能在全屏应用的 Space 上显示。
 ///
-/// macOS 全屏应用在独立的 Space 上,要让窗口出现在它上面需要三管齐下:
+/// ⚠️ **当前实现未达预期**(实测全屏应用上无法呼出)。保留代码供后续排查。
+///
+/// 尝试了三管齐下:
 ///
 /// 1. **collection behavior**:CanJoinAllSpaces + FullScreenAuxiliary
-///    - CanJoinAllSpaces:在所有桌面 Space 显示
-///    - FullScreenAuxiliary:能进入全屏应用的 Space
+/// 2. **window level**:NSStatusWindowLevel(25),高于全屏窗口
+/// 3. **nonactivatingPanel style mask**(1<<7)
 ///
-/// 2. **window level**:提高到 CGFloatingWindowLevel(3) 以上
-///    - 全屏窗口的 level 很高,必须超过它
-///    - Spotlight 用 NSStatusWindowLevel(25),我们跟齐
+/// **PR review 发现的根因**:第 3 步 `NSWindowStyleMaskNonactivatingPanel` 只对 `NSPanel`
+/// **子类**生效。Tauri 创建的是普通 `NSWindow`,setStyleMask 加这个 bit 不会产生
+/// "不激活 app"行为。普通 NSWindow show 时仍会激活 app → macOS 切到 app 的 Space →
+/// 全屏应用退出。Spotlight/Alfred/Raycast 用的是真正的 `NSPanel` 子类。
 ///
-/// 3. **nonactivatingPanel style mask**(关键!)
-///    - 普通 NSWindow 被 show 时会激活 app → macOS 自动切到 app 的 Space
-///      → 全屏应用退出 → 用户看到的是切回桌面而非浮层
-///    - 加 nonactivatingPanel(1<<7) 让窗口不激活 app,像 Spotlight 一样浮在上面
-///    - 参考:Spotlight/Alfred/Raycast 都用 NSPanel(nonactivatingPanel)
-///
-/// 调用时机:setup 阶段(窗口创建后立即)调用一次。
-///
-/// 参考资料:
-/// - [StackOverflow: How to force NSWindow in front of fullscreen apps](https://stackoverflow.com/questions/10905045)
-/// - [Spotlight/Alfred 风格窗口教程](https://www.markusbodner.com/til/2021/02/08/create-a-spotlight/alfred-like-window-on-macos-with-swiftui/)
+/// 下次排查方向:研究如何让 Tauri 窗口变成 NSPanel,或用 objc swizzle 改变窗口行为。
+/// 另见:`show_main_window` 的 `set_focus()` 也会激活 app,需条件化处理。
 #[cfg(target_os = "macos")]
 pub fn setup_macos_fullscreen_window<R: Runtime>(app: &AppHandle<R>) {
     use objc::msg_send;
@@ -152,6 +146,9 @@ pub fn setup_macos_fullscreen_window<R: Runtime>(app: &AppHandle<R>) {
             // NSWindowLevel: 用 NSStatusWindowLevel(25) 确保盖住全屏窗口
             const NS_STATUS_WINDOW_LEVEL: i64 = 25;
 
+            // ⚠️ msg_send! 在 ObjC 异常时会 abort(不是 Rust panic),无法被 catch。
+            //    这些 setter 无返回值(返回类型为 void,故丢弃 `()`)。
+            //    selector 拼错或指针无效会导致进程闪退,需小心维护。
             unsafe {
                 // 1. collection behavior: CanJoinAllSpaces + FullScreenAuxiliary
                 let current_behavior: u64 = msg_send![ns_window, collectionBehavior];
@@ -161,12 +158,13 @@ pub fn setup_macos_fullscreen_window<R: Runtime>(app: &AppHandle<R>) {
                 // 2. window level: 提高到 NSStatusWindowLevel
                 let _: () = msg_send![ns_window, setLevel: NS_STATUS_WINDOW_LEVEL];
 
-                // 3. style mask: 加 nonactivatingPanel(不激活 app,不切换 Space)
+                // 3. style mask: 加 nonactivatingPanel
+                //    ⚠️ 注意:此 mask 仅对 NSPanel 子类生效,普通 NSWindow 上无效
                 let current_style: u64 = msg_send![ns_window, styleMask];
                 let new_style = current_style | NON_ACTIVATING_PANEL;
                 let _: () = msg_send![ns_window, setStyleMask: new_style];
             }
-            log::info!("[window] macOS 全屏 Space 窗口配置完成(collectionBehavior + level + nonactivatingPanel)");
+            log::info!("[window] macOS 原生窗口配置已下发(collectionBehavior + level + styleMask),效果待验证");
         }
         Err(e) => log::warn!("[window] 获取 NSWindow 失败: {e}"),
     }

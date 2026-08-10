@@ -15,9 +15,30 @@ status: active
 ## 🎯 下次目标
 
 - **macOS 全屏应用呼出窗口修复**:全屏应用(如 Safari/Chrome 全屏)上快捷键无法呼出拾贴窗口
-  - 已尝试 3 种方案均失败(visibleOnAllWorkspaces / NSWindow collectionBehavior / activationPolicy)
-  - 已写代码(tauri.conf.json 配置)但未生效,需新会话系统排查
-  - 排查方向:Tauri v2 macOS 窗口 Space 行为 / NSWindow API 原生调用 / activationPolicy 调整
+
+  ### 已尝试 3 种方案(均失败)
+  1. **tauri.conf.json `visibleOnAllWorkspaces: true`** — 仅对多桌面有效,全屏应用 Space 不行
+  2. **原生 API 设置 collectionBehavior + windowLevel**(`window_control.rs:setup_macos_fullscreen_window`)
+     - `CanJoinAllSpaces | FullScreenAuxiliary` + `NSStatusWindowLevel(25)`
+     - 代码执行无报错(日志确认"配置完成"),但全屏应用上仍无法呼出
+  3. **加 `nonactivatingPanel` style mask**(`setStyleMask:` 加 `1<<7`)
+     - **PR review 发现根因**:`NSWindowStyleMaskNonactivatingPanel` 只对 `NSPanel` **子类**生效
+     - Tauri 创建的是普通 `NSWindow`,设了也不会产生"不激活 app"行为
+     - 普通窗口 show 时仍会激活 app → macOS 切到 app 的 Space → 全屏应用退出
+
+  ### PR review 发现的额外矛盾
+  - `show_main_window` 里的 `set_focus()` 会显式激活 app(makeKey),即使 nonactivatingPanel 修好了也会被 set_focus 绕过
+
+  ### 下次排查方向(按优先级)
+  1. **研究如何让 Tauri 窗口变成 NSPanel 子类**(可能需要 hook 窗口创建过程 / 用 objc swizzle)
+  2. **参考其他 Tauri 项目的全屏实现**(搜索 tauri fullscreen window Space 相关 issue/讨论)
+  3. **set_focus 条件化**:非全屏场景用 set_focus,全屏场景用 orderFront 不激活 app
+  4. **研究 tao crate(Tauri 底层窗口库)是否有 NSPanel 支持**
+
+  ### 已有代码(保留供排查,当前不生效)
+  - `src-tauri/src/window_control.rs: setup_macos_fullscreen_window()` — 原生配置函数
+  - `src-tauri/src/lib.rs:253` — setup 阶段调用
+  - 依赖:`objc = "0.2"`(Cargo.toml macOS target)
 
 ## 路线图
 

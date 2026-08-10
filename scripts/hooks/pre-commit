@@ -91,7 +91,18 @@ def normalize(content: str, is_agents: bool) -> str:
 
 
 def main() -> int:
-    # 只在 CLAUDE.md 或 AGENTS.md 在暂存区时触发
+    # 版本号一致性检查(总是跑)
+    version_check = subprocess.run(
+        ["node", "scripts/check-version-sync.cjs"],
+        capture_output=True,
+        text=True,
+    )
+    if version_check.returncode != 0:
+        print(version_check.stdout)
+        print(version_check.stderr)
+        return 1
+
+    # 只在 CLAUDE.md 或 AGENTS.md 在暂存区时触发双工具同步检查
     result = subprocess.run(
         ["git", "diff", "--cached", "--name-only"],
         capture_output=True,

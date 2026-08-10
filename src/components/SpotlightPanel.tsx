@@ -333,7 +333,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
             {' '}搜索
           </span>
         )}
-        <kbd className="shrink-0 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px]" style={{ color: '#e8c87a' }}>v{APP_VERSION}</kbd>
+        <kbd className="shrink-0 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-gold">v{APP_VERSION}</kbd>
       </div>
     </div>
   )
