@@ -41,8 +41,9 @@ function App() {
     if (loading) {
       return (
         <div
+          data-tauri-drag-region
           className={cn(
-            'drag-region flex h-full w-full items-center justify-center rounded-lg border border-border bg-background text-foreground shadow-2xl',
+            'flex h-full w-full items-center justify-center rounded-lg border border-border bg-background text-foreground shadow-2xl',
           )}
         >
           <span className="text-xs text-muted-foreground">加载设置中…</span>
@@ -52,8 +53,9 @@ function App() {
     if (error || !settings) {
       return (
         <div
+          data-tauri-drag-region
           className={cn(
-            'drag-region flex h-full w-full flex-col items-center justify-center gap-3 rounded-lg border border-border bg-background text-foreground shadow-2xl',
+            'flex h-full w-full flex-col items-center justify-center gap-3 rounded-lg border border-border bg-background text-foreground shadow-2xl',
           )}
         >
           <span className="text-xs text-destructive">

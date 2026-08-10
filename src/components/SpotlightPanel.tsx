@@ -208,17 +208,20 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
       className="glass-window flex h-full w-full flex-col text-foreground"
     >
       {/* 顶栏:标题 + 设置 + 状态
-          - .drag-region 用 CSS -webkit-app-region 实现拖动(跨平台,不触发 Focused(false))
-          - .no-drag 排除交互元素(按钮) */}
+          - data-tauri-drag-region 支持拖动窗口(整条顶栏可拖)
+          - select-none 防止文字被选中
+          - Windows 失焦问题在 Rust 端 handle_window_event 用 50ms 去抖解决 */}
       <div
-        className="drag-region flex items-center justify-between px-3.5 py-2.5 select-none"
+        data-tauri-drag-region
+        className="flex items-center justify-between px-3.5 py-2.5 select-none"
       >
         <span
+          data-tauri-drag-region
           className="text-xs font-semibold tracking-tightish select-none text-foreground"
         >
           拾贴
         </span>
-        <div className="no-drag flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={onOpenSettings}
             className="flex h-5 w-5 items-center justify-center rounded-card-small text-text-secondary transition-colors duration-fast ease-out-strong hover:bg-hover hover:text-foreground"

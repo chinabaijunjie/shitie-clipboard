@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-manager"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "clipboard-rs",
  "image",

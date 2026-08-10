@@ -102,15 +102,40 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 /// 在 lib.rs 的 `.on_window_event` 里调用。
 /// 读取 AppState 的 hide_on_blur 设置决定是否失焦隐藏。
 ///
-/// 窗口拖动用 CSS -webkit-app-region: drag(见 .drag-region 工具类),
-/// 不经过 JS 事件循环,不会触发 Focused(false),无需在此处理拖动。
+/// ⚠️ Windows 拖动陷阱:data-tauri-drag-region 触发 start_dragging 时,
+/// Windows 会瞬间发 Focused(false) 再发 Focused(true)。
+/// 如果直接在 Focused(false) 里 hide,窗口拖一下就消失了。
+///
+/// 解决方案:Focused(false) 后延迟 50ms,再次检查窗口是否真的有焦点。
+/// 拖动的假失焦会在 50ms 内恢复(收到 Focused(true)),此时跳过隐藏。
+/// 真实失焦(点击其他窗口)50ms 后仍然无焦点,正常隐藏。
+/// macOS 不受此问题影响,但 50ms 延迟用户感知不到。
 pub fn handle_window_event<R: Runtime>(event: &WindowEvent, app: &AppHandle<R>) {
     match event {
         WindowEvent::Focused(false) => {
-            // 失焦隐藏(检查设置 + guard)
-            if should_hide_on_blur(read_hide_on_blur(app)) {
-                hide_main_window(app);
+            if !should_hide_on_blur(read_hide_on_blur(app)) {
+                return;
             }
+            // 延迟 50ms 再检查焦点——过滤 Windows 拖动产生的假失焦
+            let app_handle = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                // guard 可能已被 show/toggle 置位,窗口可能已被其他路径隐藏
+                if !should_hide_on_blur(read_hide_on_blur(&app_handle)) {
+                    return;
+                }
+                // 最终检查:窗口是否仍可见 + 仍无焦点
+                if let Some(win) = app_handle.get_webview_window(MAIN_WINDOW) {
+                    if !win.is_visible().unwrap_or(false) {
+                        return;
+                    }
+                    // is_focused 返回 true = 假失焦(拖动恢复),不隐藏
+                    if win.is_focused().unwrap_or(false) {
+                        return;
+                    }
+                }
+                hide_main_window(&app_handle);
+            });
         }
         WindowEvent::Focused(true) => {
             // 窗口重新获得焦点——清除抑制 guard
