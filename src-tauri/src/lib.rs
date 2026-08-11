@@ -18,6 +18,8 @@ mod clipboard;
 mod commands;
 mod error;
 mod models;
+#[cfg(target_os = "macos")]
+mod macos_panel;
 mod settings;
 mod storage;
 mod window_control;
@@ -133,6 +135,11 @@ pub fn run() {
             // M3:Store 插件(设置持久化,settings.json in app_data_dir)
             app.handle().plugin(tauri_plugin_store::Builder::default().build())?;
 
+            // macOS:tauri-nspanel plugin 注册(⚠️ 时序红线:必须在 setup_panel/to_panel 之前)。
+            // 注册全局面板表 WebviewPanelManager,晚于 to_panel 会 panic。调研见 fullscreen-research.md。
+            #[cfg(target_os = "macos")]
+            macos_panel::register_plugin(app.handle());
+
             // M3:读取用户设置(首次启动写默认值)
             let user_settings = settings::load_settings(app.handle())
                 .unwrap_or_else(|e| {
@@ -247,10 +254,11 @@ pub fn run() {
                 settings: Mutex::new(user_settings),
             });
 
-            // macOS:配置窗口使其能在全屏应用的 Space 上显示
-            // 必须在窗口创建后、show 之前设置 collection behavior + window level
+            // macOS:主窗口转 NSPanel 子类(全屏悬浮支持)
+            // 把 tao 默认的 NSWindow 通过 isa-swizzle 转成 NSPanel,获得 nonactivatingPanel 能力。
+            // 必须在窗口创建后、show 之前。调研见 fullscreen-research.md。
             #[cfg(target_os = "macos")]
-            window_control::setup_macos_fullscreen_window(app.handle());
+            macos_panel::setup_panel(app.handle());
 
             // M3:根据 launch_visible 设置决定是否显示窗口
             // (tauri.conf.json visible:false,由代码控制显示时机)

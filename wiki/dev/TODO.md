@@ -30,10 +30,16 @@ status: active
   - `show_main_window` 里的 `set_focus()` 会显式激活 app(makeKey),即使 nonactivatingPanel 修好了也会被 set_focus 绕过
 
   ### 下次排查方向(按优先级)
-  1. **研究如何让 Tauri 窗口变成 NSPanel 子类**(可能需要 hook 窗口创建过程 / 用 objc swizzle)
-  2. **参考其他 Tauri 项目的全屏实现**(搜索 tauri fullscreen window Space 相关 issue/讨论)
-  3. **set_focus 条件化**:非全屏场景用 set_focus,全屏场景用 orderFront 不激活 app
-  4. **研究 tao crate(Tauri 底层窗口库)是否有 NSPanel 支持**
+  1. ~~研究如何让 Tauri 窗口变成 NSPanel 子类~~ ✅ **已调研**(2026-08-10):用 isa-swizzle,见 fullscreen-research
+  2. ~~参考其他 Tauri 项目的全屏实现~~ ✅ **已调研**:EcoPaste(7283 star 同类剪贴板)已用 tauri-nspanel 解决
+  3. **set_focus 条件化**:改用 panel.show_and_make_key()(orderFront,不 activate)
+  4. ~~研究 tao crate 是否有 NSPanel 支持~~ ✅ **已调研**:tao 硬编码 NSWindow,官方标记 not planned
+
+  ### ✅ 调研结论(2026-08-10,详见 [[fullscreen-research]])
+  - **根因**:普通 NSWindow 全屏悬浮失败 = Space 隔离(需 collectionBehavior)+ app 激活(set_focus 调 activateIgnoringOtherApps:YES)双重机制
+  - **方案**:用 `tauri-nspanel` 插件(isa-swizzle 把 TaoWindow 运行时转成 NSPanel 子类)
+  - **参考**:EcoPaste(7283 star 同类剪贴板)的 `src-tauri/src/window/macos.rs` 已验证可行
+  - **下一步**:编写 fullscreen-plan.md 实施方案 → 集成 tauri-nspanel → 实测
 
   ### 已有代码(保留供排查,当前不生效)
   - `src-tauri/src/window_control.rs: setup_macos_fullscreen_window()` — 原生配置函数

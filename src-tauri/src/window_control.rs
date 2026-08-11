@@ -72,102 +72,49 @@ pub fn toggle_window<R: Runtime>(app: &AppHandle<R>) {
 /// 隐藏主窗口(统一入口,带 SUPPRESS_BLUR_HIDE guard)。
 ///
 /// 三条 hide 路径(快捷键 toggle / close 拦截 / 失焦隐藏)都走此函数,
-/// 确保 guard 一致管理。
+/// 确保 guard 一致管理。macOS 走 NSPanel 路径。
 pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) {
     // 置位 guard:阻止后续 Focused(false) 连锁触发二次 hide
     SUPPRESS_BLUR_HIDE.store(true, Ordering::SeqCst);
-    if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
-        if let Err(e) = win.hide() {
-            log::warn!("[window] hide 失败: {e}");
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos_panel::hide_panel(app);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
+            if let Err(e) = win.hide() {
+                log::warn!("[window] hide 失败: {e}");
+            }
         }
     }
 }
 
-/// 显示主窗口(show + focus + 清 guard)。
+/// 显示主窗口。
+///
+/// macOS 走 NSPanel 路径(`show_and_make_key`,内部 orderFrontRegardless,不激活 app),
+/// 其他平台走 Tauri 原生 show + set_focus。
+///
+/// ⚠️ macOS 绝不能用 `set_focus()`(底层 makeKeyAndOrderFront + activateIgnoringOtherApps:YES,
+/// 会激活 app → 切到 app 的 Space → 全屏应用被挤走)。调研见 fullscreen-research.md。
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
-        if let Err(e) = win.show() {
-            log::warn!("[window] show 失败: {e}");
-        }
-        if let Err(e) = win.set_focus() {
-            log::warn!("[window] set_focus 失败: {e}");
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos_panel::show_panel(app);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
+            if let Err(e) = win.show() {
+                log::warn!("[window] show 失败: {e}");
+            }
+            if let Err(e) = win.set_focus() {
+                log::warn!("[window] set_focus 失败: {e}");
+            }
         }
     }
     // 清 guard:窗口已显示,后续失焦是真实用户操作,应该正常响应
     SUPPRESS_BLUR_HIDE.store(false, Ordering::SeqCst);
-}
-
-/// macOS 原生:配置窗口使其能在全屏应用的 Space 上显示。
-///
-/// ⚠️ **当前实现未达预期**(实测全屏应用上无法呼出)。保留代码供后续排查。
-///
-/// 尝试了三管齐下:
-///
-/// 1. **collection behavior**:CanJoinAllSpaces + FullScreenAuxiliary
-/// 2. **window level**:NSStatusWindowLevel(25),高于全屏窗口
-/// 3. **nonactivatingPanel style mask**(1<<7)
-///
-/// **PR review 发现的根因**:第 3 步 `NSWindowStyleMaskNonactivatingPanel` 只对 `NSPanel`
-/// **子类**生效。Tauri 创建的是普通 `NSWindow`,setStyleMask 加这个 bit 不会产生
-/// "不激活 app"行为。普通 NSWindow show 时仍会激活 app → macOS 切到 app 的 Space →
-/// 全屏应用退出。Spotlight/Alfred/Raycast 用的是真正的 `NSPanel` 子类。
-///
-/// 下次排查方向:研究如何让 Tauri 窗口变成 NSPanel,或用 objc swizzle 改变窗口行为。
-/// 另见:`show_main_window` 的 `set_focus()` 也会激活 app,需条件化处理。
-#[cfg(target_os = "macos")]
-pub fn setup_macos_fullscreen_window<R: Runtime>(app: &AppHandle<R>) {
-    use objc::msg_send;
-    use objc::sel;
-    use objc::sel_impl;
-
-    let Some(win) = app.get_webview_window(MAIN_WINDOW) else {
-        log::warn!("[window] setup_macos: 找不到主窗口");
-        return;
-    };
-
-    // 先用 Tauri API 设置 CanJoinAllSpaces
-    if let Err(e) = win.set_visible_on_all_workspaces(true) {
-        log::warn!("[window] set_visible_on_all_workspaces 失败: {e}");
-    }
-
-    // 再用原生 API 补全三个关键配置
-    match win.ns_window() {
-        Ok(ns_window_ptr) => {
-            let ns_window = ns_window_ptr as *mut objc::runtime::Object;
-
-            // NSWindowCollectionBehavior flags
-            const CAN_JOIN_ALL_SPACES: u64 = 1 << 0;
-            const FULL_SCREEN_AUXILIARY: u64 = 1 << 8;
-
-            // NSWindowStyleMask: nonactivatingPanel = 1 << 7 (128)
-            // 这是让窗口不激活 app 的关键(Spotlight 的做法)
-            const NON_ACTIVATING_PANEL: u64 = 1 << 7;
-
-            // NSWindowLevel: 用 NSStatusWindowLevel(25) 确保盖住全屏窗口
-            const NS_STATUS_WINDOW_LEVEL: i64 = 25;
-
-            // ⚠️ msg_send! 在 ObjC 异常时会 abort(不是 Rust panic),无法被 catch。
-            //    这些 setter 无返回值(返回类型为 void,故丢弃 `()`)。
-            //    selector 拼错或指针无效会导致进程闪退,需小心维护。
-            unsafe {
-                // 1. collection behavior: CanJoinAllSpaces + FullScreenAuxiliary
-                let current_behavior: u64 = msg_send![ns_window, collectionBehavior];
-                let new_behavior = current_behavior | CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY;
-                let _: () = msg_send![ns_window, setCollectionBehavior: new_behavior];
-
-                // 2. window level: 提高到 NSStatusWindowLevel
-                let _: () = msg_send![ns_window, setLevel: NS_STATUS_WINDOW_LEVEL];
-
-                // 3. style mask: 加 nonactivatingPanel
-                //    ⚠️ 注意:此 mask 仅对 NSPanel 子类生效,普通 NSWindow 上无效
-                let current_style: u64 = msg_send![ns_window, styleMask];
-                let new_style = current_style | NON_ACTIVATING_PANEL;
-                let _: () = msg_send![ns_window, setStyleMask: new_style];
-            }
-            log::info!("[window] macOS 原生窗口配置已下发(collectionBehavior + level + styleMask),效果待验证");
-        }
-        Err(e) => log::warn!("[window] 获取 NSWindow 失败: {e}"),
-    }
 }
 
 /// 处理窗口事件(Focused / CloseRequested)。
@@ -175,40 +122,51 @@ pub fn setup_macos_fullscreen_window<R: Runtime>(app: &AppHandle<R>) {
 /// 在 lib.rs 的 `.on_window_event` 里调用。
 /// 读取 AppState 的 hide_on_blur 设置决定是否失焦隐藏。
 ///
-/// ⚠️ Windows 拖动陷阱:data-tauri-drag-region 触发 start_dragging 时,
+/// macOS:NSPanel 的失焦走 delegate `window_did_resign_key`(macos_panel.rs),
+/// 这里 Focused(false) 不处理(NSPanel 下不可靠)。
+///
+/// Windows 拖动陷阱:data-tauri-drag-region 触发 start_dragging 时,
 /// Windows 会瞬间发 Focused(false) 再发 Focused(true)。
 /// 如果直接在 Focused(false) 里 hide,窗口拖一下就消失了。
 ///
 /// 解决方案:Focused(false) 后延迟 50ms,再次检查窗口是否真的有焦点。
 /// 拖动的假失焦会在 50ms 内恢复(收到 Focused(true)),此时跳过隐藏。
 /// 真实失焦(点击其他窗口)50ms 后仍然无焦点,正常隐藏。
-/// macOS 不受此问题影响,但 50ms 延迟用户感知不到。
 pub fn handle_window_event<R: Runtime>(event: &WindowEvent, app: &AppHandle<R>) {
     match event {
         WindowEvent::Focused(false) => {
-            if !should_hide_on_blur(read_hide_on_blur(app)) {
-                return;
-            }
-            // 延迟 50ms 再检查焦点——过滤 Windows 拖动产生的假失焦
-            let app_handle = app.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                // guard 可能已被 show/toggle 置位,窗口可能已被其他路径隐藏
-                if !should_hide_on_blur(read_hide_on_blur(&app_handle)) {
+            // macOS: NSPanel 失焦走 delegate window_did_resign_key,这里不处理
+            #[cfg(not(target_os = "macos"))]
+            {
+                if !should_hide_on_blur(read_hide_on_blur(app)) {
                     return;
                 }
-                // 最终检查:窗口是否仍可见 + 仍无焦点
-                if let Some(win) = app_handle.get_webview_window(MAIN_WINDOW) {
-                    if !win.is_visible().unwrap_or(false) {
+                // 延迟 50ms 再检查焦点——过滤 Windows 拖动产生的假失焦
+                let app_handle = app.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    // guard 可能已被 show/toggle 置位,窗口可能已被其他路径隐藏
+                    if !should_hide_on_blur(read_hide_on_blur(&app_handle)) {
                         return;
                     }
-                    // is_focused 返回 true = 假失焦(拖动恢复),不隐藏
-                    if win.is_focused().unwrap_or(false) {
-                        return;
+                    // 最终检查:窗口是否仍可见 + 仍无焦点
+                    if let Some(win) = app_handle.get_webview_window(MAIN_WINDOW) {
+                        if !win.is_visible().unwrap_or(false) {
+                            return;
+                        }
+                        // is_focused 返回 true = 假失焦(拖动恢复),不隐藏
+                        if win.is_focused().unwrap_or(false) {
+                            return;
+                        }
                     }
-                }
-                hide_main_window(&app_handle);
-            });
+                    hide_main_window(&app_handle);
+                });
+            }
+            // macOS 分支无操作,但引用 app 避免 unused 警告
+            #[cfg(target_os = "macos")]
+            {
+                let _ = app;
+            }
         }
         WindowEvent::Focused(true) => {
             // 窗口重新获得焦点——清除抑制 guard
@@ -221,6 +179,11 @@ pub fn handle_window_event<R: Runtime>(event: &WindowEvent, app: &AppHandle<R>) 
         }
         _ => {}
     }
+}
+
+/// 从 AppState 读取 hide_on_blur 设置(pub 版本,供 macos_panel delegate 回调用)。
+pub fn read_hide_on_blur_pub<R: Runtime>(app: &AppHandle<R>) -> bool {
+    read_hide_on_blur(app)
 }
 
 /// 从 AppState 读取 hide_on_blur 设置。

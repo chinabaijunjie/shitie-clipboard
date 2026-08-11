@@ -26,7 +26,10 @@ status: active
 > **v2.0.0 准备已完成**(2026-08-09,commit `d18b057`,未打包):版本号 + 底栏显示 + README 重写 + macOS 全屏配置(代码已写,全屏未生效)。
 > 详见 [[dev/progress]] + [[dev/ui-design-spec]](设计规格+三主题存档)。
 >
-> **下一步:macOS 全屏应用呼出窗口修复**(已尝试 3 种方案均失败)。详见 [[dev/TODO]]。
+> **下一步:macOS 全屏应用呼出窗口修复**(已尝试 3 种方案均失败)。
+> ✅ **根因已调研清楚**(2026-08-10):普通 NSWindow 无法全屏悬浮是 Space 隔离 + app 激活双重机制;
+> 已选定方案 `tauri-nspanel` 插件(isa-swizzle,EcoPaste 7283 star 验证)。
+> 详见 [[dev/fullscreen-research]] + [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
 > sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。
@@ -48,6 +51,8 @@ status: active
 | 查当前任务规划（M2/M3/M4）| [[dev/m2-plan]](done) / [[dev/m3-plan]](done) / [[dev/m4-plan]](A+B+C done) |
 | 查 UI 审美改造规划（M2 后执行）| [[dev/ui-redesign-plan]] |
 | 查 UI 设计规格（配色/组件/三主题存档）| [[dev/ui-design-spec]] |
+| 查 macOS 全屏悬浮调研（NSPanel / tauri-nspanel）| [[dev/fullscreen-research]] |
+| 查 macOS 全屏悬浮实施方案（精确到 API + 文件改动）| [[dev/fullscreen-plan]] |
 | 查 M1 技术调研/spike | [[dev/m1-research]] |
 | 查进度 / 下次目标 | [[dev/progress]] + [[dev/TODO]] |
 | 跨会话恢复 | [[dev/new-session-starter]] |
@@ -80,6 +85,8 @@ status: active
 - [[dev/m2-research]] — M2 技术调研 + spike(FTS5 bigram / 图片存储 / 多格式,已完成)
 - [[dev/m3-research]] — M3 技术调研(global-shortcut / tray / autostart / store,已完成)
 - [[dev/m4-research]] — M4 技术调研(打包/CI/去重/敏感过滤,已完成)
+- [[dev/fullscreen-research]] — macOS 全屏悬浮窗口调研(NSPanel / tauri-nspanel / EcoPaste 参考,2026-08-10)
+- [[dev/fullscreen-plan]] — macOS 全屏悬浮实施方案(精确到 API + 文件改动,待实施)
 - [[dev/m1-plan]] — M1 规划(已完成)
 - [[dev/m1-research]] — M1 技术调研 + spike(clipboard-rs 选型依据)
 - [[dev/m0-plan]] — M0 规划(已完成,架构清理 + Spotlight UI 骨架)
