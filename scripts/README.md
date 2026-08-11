@@ -34,4 +34,4 @@ M0 架构清理时删除了以下模板母体专用脚本(本工程作为子工�
 - `init-project.sh` — 模板母体创建新子工程用,子工程本身不需要
 - `build-sidecar.sh` — PyInstaller 打包 sidecar binary,sidecar 架构已删除
 
-> 这些脚本在模板母体(`/Users/baijunjie/Documents/infra/tauri-sidecar-template`)仍保留。
+> 这些脚本在模板母体仍保留。
