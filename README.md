@@ -126,3 +126,20 @@
 ## 📝 License
 
 MIT
+
+## 应用图片
+
+<img width="2596" height="2090" alt="图片1" src="https://github.com/user-attachments/assets/4e9544e4-2daa-4625-aa2b-a0dd2190d97d" />
+
+<img width="1416" height="1382" alt="图片2" src="https://github.com/user-attachments/assets/5f60ba20-ff7d-4032-9957-741e50dfbca2" />
+
+<img width="1568" height="1532" alt="图片3" src="https://github.com/user-attachments/assets/80d7d89b-7a65-4c28-935a-7c96a6e9c51b" />
+
+<img width="1542" height="1442" alt="图片4" src="https://github.com/user-attachments/assets/30c152c7-9749-4457-98cb-31cf16210115" />
+
+<img width="1620" height="1474" alt="图片5" src="https://github.com/user-attachments/assets/c2a69e58-a215-419c-91be-9e23d5d205db" />
+
+<img width="1490" height="1432" alt="图片6" src="https://github.com/user-attachments/assets/95e2cca0-706b-440f-abd3-6323e34f92d2" />
+
+<img width="1456" height="1492" alt="图片7" src="https://github.com/user-attachments/assets/a8a9a4b8-8270-4afe-924c-4ecd76f5bf2c" />
+
