@@ -27,7 +27,7 @@ mod window_control;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use commands::clipboard::{clear_history, copy_back, delete_item, get_storage_stats, list_items, search_items};
+use commands::clipboard::{clear_history, copy_back, delete_item, get_storage_stats, list_items, search_items, toggle_pin};
 use commands::ping::ping;
 use commands::settings::{get_settings, update_settings};
 use tauri::{Manager, Window};
@@ -286,6 +286,7 @@ pub fn run() {
             copy_back,
             delete_item,
             search_items,
+            toggle_pin,
             get_settings,
             update_settings,
             get_storage_stats,

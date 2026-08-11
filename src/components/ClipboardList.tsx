@@ -14,7 +14,7 @@
  */
 import { useEffect } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { FileText, Type, Layers, Link2, FileCode, Clipboard as ClipboardIcon } from 'lucide-react'
+import { FileText, Type, Layers, Link2, FileCode, Clipboard as ClipboardIcon, Pin } from 'lucide-react'
 
 import { cn } from '@lib/utils'
 import type { ClipboardItem } from '@core/types'
@@ -205,13 +205,22 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
               </span>
             )}
 
-            {/* 列3:时间戳 */}
-            <span className={cn(
-              'whitespace-nowrap text-[10px] tracking-caption',
-              isSelected ? 'text-text-secondary' : 'text-text-tertiary',
-            )}>
-              {formatTime(item.lastCopiedAt)}
-            </span>
+            {/* 列3:置顶图钉 + 时间戳 */}
+            <div className="flex items-center gap-1">
+              {item.pinned && (
+                <Pin
+                  className="h-2.5 w-2.5 shrink-0"
+                  style={{ color: '#e8c87a', fill: '#e8c87a' }}
+                  aria-label="已置顶"
+                />
+              )}
+              <span className={cn(
+                'whitespace-nowrap text-[10px] tracking-caption',
+                isSelected ? 'text-text-secondary' : 'text-text-tertiary',
+              )}>
+                {formatTime(item.lastCopiedAt)}
+              </span>
+            </div>
           </li>
         )
       })}

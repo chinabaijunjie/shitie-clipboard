@@ -284,7 +284,7 @@ pub fn insert_or_update_multi(
 pub fn get_item(conn: &Connection, id: i64, images_dir: &Path) -> Result<ClipboardItem, AppError> {
     let mut item = conn
         .query_row(
-            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
+            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
              FROM clipboard_items WHERE id = ?1",
             params![id],
             row_to_item,
@@ -342,8 +342,8 @@ pub fn list(
 
             let where_clause = clauses.join(" OR ");
             let sql = format!(
-                "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
-                 FROM clipboard_items WHERE {where_clause} ORDER BY last_copied_at DESC LIMIT ?"
+                "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
+                 FROM clipboard_items WHERE {where_clause} ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC LIMIT ?"
             );
             param_values.push(rusqlite::types::Value::from(limit));
 
@@ -368,8 +368,8 @@ pub fn list(
             // 无过滤:原始查询
             let mut stmt = conn
                 .prepare(
-                    "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
-                     FROM clipboard_items ORDER BY last_copied_at DESC LIMIT ?1",
+                    "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
+                     FROM clipboard_items ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC LIMIT ?1",
                 )
                 .map_err(|e| AppError::internal(format!("prepare list 失败: {e}")))?;
             let rows = stmt
@@ -514,6 +514,50 @@ pub fn storage_by_kind_from_map(map: &HashMap<(String, Option<String>), i64>) ->
         link: get("text", Some("link")) + get("rich", Some("link")),
         markdown: get("text", Some("markdown")) + get("rich", Some("markdown")),
     }
+}
+
+/// 切换置顶状态:未置顶 → 置顶,已置顶 → 取消。
+///
+/// 返回切换后的新状态(true=已置顶)。
+/// 不存在 id 返回 NotFound。
+pub fn toggle_pin(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    use rusqlite::params;
+
+    // 查当前状态(同时验证 id 存在)
+    let current: i64 = conn
+        .query_row(
+            "SELECT pinned FROM clipboard_items WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::new(
+                crate::error::codes::NOT_FOUND,
+                format!("toggle_pin: id={} 不存在", id),
+            ),
+            other => AppError::internal(format!("查 pinned 状态失败: {other}")),
+        })?;
+
+    let new_pinned = current == 0; // 0 → true(置顶), 1 → false(取消)
+
+    if new_pinned {
+        // 置顶:设 pinned=1 + 记录时间
+        let now = now_epoch_ms();
+        conn.execute(
+            "UPDATE clipboard_items SET pinned = 1, pinned_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )
+        .map_err(|e| AppError::internal(format!("置顶更新失败: {e}")))?;
+    } else {
+        // 取消置顶:设 pinned=0 + 清时间
+        conn.execute(
+            "UPDATE clipboard_items SET pinned = 0, pinned_at = NULL WHERE id = ?1",
+            params![id],
+        )
+        .map_err(|e| AppError::internal(format!("取消置顶更新失败: {e}")))?;
+    }
+
+    Ok(new_pinned)
 }
 
 /// 清空所有历史(DB 行 + 图片文件)。
@@ -685,6 +729,8 @@ pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clipboard
         title: row.get(4)?,
         content_kind: ContentKind::from_db_str(row.get::<_, String>(5)?.as_str()),
         content_subtype: row.get::<_, Option<String>>(6)?,
+        pinned: row.get::<_, i64>(7)? != 0,
+        pinned_at: row.get(8)?,
         image_path: None,
         file_url: None,
         thumb_path: None,
@@ -876,6 +922,106 @@ mod tests {
         let conn = db();
         let err = get_item(&conn, 9999, &test_images_dir()).unwrap_err();
         assert_eq!(err.code, crate::error::codes::NOT_FOUND);
+    }
+
+    // ===== 置顶功能测试 =====
+
+    #[test]
+    fn toggle_pin_sets_pinned_and_pinned_at() {
+        let conn = db();
+        let item = insert_or_update(&conn, "要置顶", &test_images_dir()).unwrap();
+
+        let new_pinned = toggle_pin(&conn, item.id).unwrap();
+        assert!(new_pinned, "首次 toggle 应返回 true(已置顶)");
+
+        let db_pinned: i64 = conn
+            .query_row(
+                "SELECT pinned FROM clipboard_items WHERE id = ?1",
+                params![item.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(db_pinned, 1);
+
+        let pinned_at: i64 = conn
+            .query_row(
+                "SELECT pinned_at FROM clipboard_items WHERE id = ?1",
+                params![item.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(pinned_at > 0, "pinned_at 应有值");
+    }
+
+    #[test]
+    fn toggle_pin_again_clears() {
+        let conn = db();
+        let item = insert_or_update(&conn, "置顶再取消", &test_images_dir()).unwrap();
+
+        toggle_pin(&conn, item.id).unwrap();
+        let new_pinned = toggle_pin(&conn, item.id).unwrap();
+        assert!(!new_pinned, "二次 toggle 应返回 false(已取消)");
+
+        let db_pinned: i64 = conn
+            .query_row(
+                "SELECT pinned FROM clipboard_items WHERE id = ?1",
+                params![item.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(db_pinned, 0);
+
+        let pinned_at: Option<i64> = conn
+            .query_row(
+                "SELECT pinned_at FROM clipboard_items WHERE id = ?1",
+                params![item.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(pinned_at.is_none(), "取消置顶后 pinned_at 应为 NULL");
+    }
+
+    #[test]
+    fn toggle_pin_nonexistent_returns_not_found() {
+        let conn = db();
+        let err = toggle_pin(&conn, 9999).unwrap_err();
+        assert_eq!(err.code, crate::error::codes::NOT_FOUND);
+    }
+
+    #[test]
+    fn list_pinned_items_first() {
+        let conn = db();
+        let item_a = insert_or_update(&conn, "普通A", &test_images_dir()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _item_b = insert_or_update(&conn, "普通B", &test_images_dir()).unwrap();
+
+        // 置顶 item_a(最旧的)
+        toggle_pin(&conn, item_a.id).unwrap();
+
+        let list = list(&conn, 10, &test_images_dir(), None).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(
+            list[0].title, "普通A",
+            "置顶项应排第一(即使它最旧)"
+        );
+        assert!(list[0].pinned, "置顶项 pinned 应为 true");
+    }
+
+    #[test]
+    fn list_multiple_pinned_ordered_by_pinned_at_desc() {
+        let conn = db();
+        let item_a = insert_or_update(&conn, "A", &test_images_dir()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let item_b = insert_or_update(&conn, "B", &test_images_dir()).unwrap();
+
+        // 先置顶 A,再置顶 B(B 的 pinned_at 更大)
+        toggle_pin(&conn, item_a.id).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        toggle_pin(&conn, item_b.id).unwrap();
+
+        let list = list(&conn, 10, &test_images_dir(), None).unwrap();
+        assert_eq!(list[0].title, "B", "最近置顶的 B 应排第一");
+        assert_eq!(list[1].title, "A", "先置顶的 A 应排第二");
     }
 
     // ===== M2 多格式写入测试 =====

@@ -22,16 +22,38 @@ import type { ClipboardItem } from '@core/types'
 const DEFAULT_LIMIT = 50
 
 /**
- * 把新增/更新的条目前置到列表(不可变更新)。
+ * 置顶优先排序(不可变)。
  *
- * - 若已存在同 id → 移到最前,更新字段(copy_count/lastCopiedAt 等)
- * - 若不存在 → 放到最前
+ * 排序规则:
+ * 1. 置顶项(pinned=true)在前,普通项在后
+ * 2. 置顶组内按 pinnedAt 倒序(最近置顶的在前)
+ * 3. 普通组内按 lastCopiedAt 倒序(最近复制的在前)
+ *
+ * 纯函数,可单测。前端所有列表更新(togglePin/applyAddedItem/moveToFront)
+ * 最终都经此函数保证「置顶在前」不变量。
+ */
+export function sortByPinned(items: ClipboardItem[]): ClipboardItem[] {
+  return [...items].sort((a, b) => {
+    // 置顶优先
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    // 置顶组:pinnedAt 倒序
+    if (a.pinned && b.pinned) return (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0)
+    // 普通组:lastCopiedAt 倒序
+    return b.lastCopiedAt - a.lastCopiedAt
+  })
+}
+
+/**
+ * 把新增/更新的条目插入列表(不可变更新),保持置顶优先排序。
+ *
+ * - 若已存在同 id → 移除旧的,插入更新后的
+ * - 新条目经 sortByPinned 找到正确位置(普通项不越过置顶区)
  *
  * 纯函数,可单测。
  */
 export function applyAddedItem(items: ClipboardItem[], added: ClipboardItem): ClipboardItem[] {
   const filtered = items.filter((it) => it.id !== added.id)
-  return [added, ...filtered]
+  return sortByPinned([added, ...filtered])
 }
 
 /** 从列表移除指定 id(不可变更新)。纯函数,可单测。 */
@@ -40,7 +62,10 @@ export function removeItem(items: ClipboardItem[], id: number): ClipboardItem[] 
 }
 
 /**
- * 把指定 id 的条目移到列表最前(不可变更新)。纯函数,可单测。
+ * 把指定 id 的条目移到其分区的最前(不可变更新)。纯函数,可单测。
+ *
+ * - 置顶条目:移到置顶区最前
+ * - 普通条目:移到普通区最前(不越过置顶区)
  *
  * M3:回填后将该条移到最前(与后端 UPDATE last_copied_at 对齐)。
  * 若 id 不存在,返回原列表(不变)。
@@ -48,9 +73,21 @@ export function removeItem(items: ClipboardItem[], id: number): ClipboardItem[] 
 export function moveToFront(items: ClipboardItem[], id: number): ClipboardItem[] {
   const idx = items.findIndex((it) => it.id === id)
   if (idx === -1) return items
-  if (idx === 0) return items // 已在最前
   const item = items[idx]
-  return [item, ...items.slice(0, idx), ...items.slice(idx + 1)]
+  const rest = items.slice(0, idx).concat(items.slice(idx + 1))
+
+  // 普通项:插到第一个置顶项之后(即置顶区末尾 + 普通区开头)
+  if (!item.pinned) {
+    const lastPinnedIdx = rest.reduce(
+      (last, it, i) => (it.pinned ? i : last),
+      -1,
+    )
+    const insertAt = lastPinnedIdx + 1
+    return [...rest.slice(0, insertAt), item, ...rest.slice(insertAt)]
+  }
+
+  // 置顶项:插到最前(置顶区开头)
+  return [item, ...rest]
 }
 
 export interface UseClipboardItemsResult {
@@ -69,6 +106,8 @@ export interface UseClipboardItemsResult {
   search: (query: string) => Promise<void>
   /** 把指定 id 的条目移到列表最前(M3:回填后前置)。同步更新本地列表。 */
   moveToFront: (id: number) => void
+  /** 切换置顶状态(置顶/取消置顶)。同步更新本地列表排序。失败抛错给调用方处理。 */
+  togglePin: (id: number) => Promise<void>
 }
 
 export function useClipboardItems(): UseClipboardItemsResult {
@@ -211,5 +250,19 @@ export function useClipboardItems(): UseClipboardItemsResult {
     setItems((prev) => moveToFront(prev, id))
   }, [])
 
-  return { items, loading, error, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront: moveToFrontAction }
+  // 切换置顶:后端 toggle_pin 返回新状态 → 本地更新 + 重新排序
+  const togglePin = useCallback(async (id: number) => {
+    const newPinned = await call<boolean>('toggle_pin', { id })
+    setItems((prev) =>
+      sortByPinned(
+        prev.map((it) =>
+          it.id === id
+            ? { ...it, pinned: newPinned, pinnedAt: newPinned ? Date.now() : null }
+            : it,
+        ),
+      ),
+    )
+  }, [])
+
+  return { items, loading, error, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront: moveToFrontAction, togglePin }
 }

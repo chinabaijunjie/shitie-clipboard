@@ -147,11 +147,11 @@ fn search_by_fts(conn: &Connection, query: &str, limit: i64) -> Result<Vec<Clipb
 
     let mut stmt = conn
         .prepare(
-            "SELECT i.id, i.first_copied_at, i.last_copied_at, i.copy_count, i.title, i.content_kind, i.content_subtype \
+            "SELECT i.id, i.first_copied_at, i.last_copied_at, i.copy_count, i.title, i.content_kind, i.content_subtype, i.pinned, i.pinned_at \
              FROM clipboard_fts \
              JOIN clipboard_items i ON i.id = clipboard_fts.rowid \
              WHERE clipboard_fts MATCH ?1 \
-             ORDER BY bm25(clipboard_fts), i.last_copied_at DESC \
+             ORDER BY i.pinned DESC, i.pinned_at DESC, bm25(clipboard_fts), i.last_copied_at DESC \
              LIMIT ?2",
         )
         .map_err(|e| AppError::internal(format!("prepare fts search 失败: {e}")))?;
@@ -168,10 +168,10 @@ fn search_by_like(conn: &Connection, ch: &str, limit: i64) -> Result<Vec<Clipboa
     let pattern = format!("%{ch}%");
     let mut stmt = conn
         .prepare(
-            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype \
+            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
              FROM clipboard_items \
              WHERE search_text LIKE ?1 \
-             ORDER BY last_copied_at DESC \
+             ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC \
              LIMIT ?2",
         )
         .map_err(|e| AppError::internal(format!("prepare like search 失败: {e}")))?;

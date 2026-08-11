@@ -80,6 +80,12 @@ pub struct ClipboardItem {
     /// 内容子类型("link" / "markdown" / None)。仅 text/rich 类型可能有值。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_subtype: Option<String>,
+    /// 是否置顶(置顶条目排最前 + 豁免自动清理)。
+    #[serde(default)]
+    pub pinned: bool,
+    /// 置顶时间(unix epoch ms)。None = 未置顶。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_at: Option<i64>,
     /// 图片原图绝对路径(仅 image/mixed 类型有,供 UI 显示存储位置)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_path: Option<AbsPath>,

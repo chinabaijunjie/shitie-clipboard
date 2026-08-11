@@ -57,7 +57,7 @@ interface SpotlightPanelProps {
 }
 
 export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
-  const { items, loading, error, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront } = useClipboardItems()
+  const { items, loading, error, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront, togglePin } = useClipboardItems()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [probe, setProbe] = useState<ProbeStatus>('checking')
   const [actionError, setActionError] = useState<string | null>(null)
@@ -150,6 +150,21 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
     [items, deleteItem, showActionError],
   )
 
+  // 切换置顶选中条目
+  const handleTogglePin = useCallback(
+    async (index: number) => {
+      const item = items[index]
+      if (!item) return
+      try {
+        await togglePin(item.id)
+      } catch (e) {
+        console.error('[toggle_pin] 失败:', e)
+        showActionError(`置顶失败:${e instanceof Error ? e.message : String(e)}`)
+      }
+    },
+    [items, togglePin, showActionError],
+  )
+
   // 键盘交互
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -198,11 +213,17 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
           e.preventDefault()
           void handleDelete(selectedIndex)
           break
+        case 'p':
+        case 'P':
+          if (items.length === 0) return
+          e.preventDefault()
+          void handleTogglePin(selectedIndex)
+          break
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [items.length, selectedIndex, handleCopyBack, handleDelete])
+  }, [items.length, selectedIndex, handleCopyBack, handleDelete, handleTogglePin])
 
   return (
     <div
@@ -329,6 +350,8 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
             {' '}回填{' · '}
             <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">⌫</kbd>
             {' '}删除{' · '}
+            <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">P</kbd>
+            {' '}置顶{' · '}
             <kbd className="mx-0.5 rounded-[4px] bg-badge-bg px-1 py-px text-[9.5px] text-badge-text">/</kbd>
             {' '}搜索
           </span>

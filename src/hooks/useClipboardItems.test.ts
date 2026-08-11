@@ -15,7 +15,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { applyAddedItem, moveToFront, removeItem, useClipboardItems } from './useClipboardItems'
+import { applyAddedItem, moveToFront, removeItem, sortByPinned, useClipboardItems } from './useClipboardItems'
 import type { ClipboardItem } from '@core/types'
 
 // ============================================================
@@ -58,6 +58,7 @@ function makeItem(id: number, title: string, extra?: Partial<ClipboardItem>): Cl
     copyCount: 1,
     title,
     contentKind: 'text',
+    pinned: false,
     ...extra,
   }
 }
@@ -415,5 +416,95 @@ describe('useClipboardItems moveToFront action', () => {
 
     // 最终顺序:3 在最前(后移的),2 其次,1 最后
     expect(result.current.items.map((i) => i.id)).toEqual([3, 2, 1])
+  })
+})
+
+// ============================================================
+// 置顶功能测试
+// ============================================================
+describe('置顶排序', () => {
+  it('sortByPinned:置顶项在前,普通项在后', () => {
+    const items = [
+      makeItem(1, '普通A', { pinned: false, lastCopiedAt: 3000 }),
+      makeItem(2, '置顶B', { pinned: true, pinnedAt: 1000, lastCopiedAt: 2000 }),
+      makeItem(3, '普通C', { pinned: false, lastCopiedAt: 1000 }),
+    ]
+    const sorted = sortByPinned(items)
+    expect(sorted.map((i) => i.id)).toEqual([2, 1, 3])
+  })
+
+  it('sortByPinned:置顶组内按 pinnedAt 倒序', () => {
+    const items = [
+      makeItem(1, '先置顶', { pinned: true, pinnedAt: 1000 }),
+      makeItem(2, '后置顶', { pinned: true, pinnedAt: 2000 }),
+    ]
+    const sorted = sortByPinned(items)
+    // pinnedAt 大的(后置顶)在前
+    expect(sorted.map((i) => i.id)).toEqual([2, 1])
+  })
+
+  it('sortByPinned:普通组内按 lastCopiedAt 倒序', () => {
+    const items = [
+      makeItem(1, '旧', { pinned: false, lastCopiedAt: 1000 }),
+      makeItem(2, '新', { pinned: false, lastCopiedAt: 2000 }),
+    ]
+    const sorted = sortByPinned(items)
+    expect(sorted.map((i) => i.id)).toEqual([2, 1])
+  })
+
+  it('sortByPinned:不可变(不修改原数组)', () => {
+    const items = [makeItem(1, 'A'), makeItem(2, 'B', { pinned: true, pinnedAt: 1 })]
+    const original = [...items]
+    sortByPinned(items)
+    expect(items.map((i) => i.id)).toEqual(original.map((i) => i.id))
+  })
+})
+
+describe('applyAddedItem 置顶分区', () => {
+  it('新普通项不越过置顶项', () => {
+    const items = [
+      makeItem(1, '置顶', { pinned: true, pinnedAt: 1000 }),
+      makeItem(2, '普通旧', { pinned: false, lastCopiedAt: 1000 }),
+    ]
+    const added = makeItem(3, '普通新', { pinned: false, lastCopiedAt: 9000 })
+    const result = applyAddedItem(items, added)
+    // 新条目应在置顶之后:1(置顶) → 3(新普通) → 2(旧普通)
+    expect(result.map((i) => i.id)).toEqual([1, 3, 2])
+  })
+
+  it('新置顶项排最前', () => {
+    const items = [
+      makeItem(1, '置顶旧', { pinned: true, pinnedAt: 1000 }),
+      makeItem(2, '普通', { pinned: false }),
+    ]
+    const added = makeItem(3, '置顶新', { pinned: true, pinnedAt: 9000 })
+    const result = applyAddedItem(items, added)
+    expect(result.map((i) => i.id)).toEqual([3, 1, 2])
+  })
+})
+
+describe('moveToFront 置顶分区', () => {
+  it('回填普通项:移到普通区最前,不越过置顶区', () => {
+    const items = [
+      makeItem(1, '置顶', { pinned: true, pinnedAt: 1000 }),
+      makeItem(2, '普通A', { pinned: false, lastCopiedAt: 2000 }),
+      makeItem(3, '普通B', { pinned: false, lastCopiedAt: 1000 }),
+    ]
+    // 移 id=3(普通B)到前面
+    const result = moveToFront(items, 3)
+    // 应该是:1(置顶) → 3(普通B 前移) → 2(普通A)
+    expect(result.map((i) => i.id)).toEqual([1, 3, 2])
+  })
+
+  it('回填置顶项:移到置顶区最前(整个列表最前)', () => {
+    const items = [
+      makeItem(1, '置顶A', { pinned: true, pinnedAt: 2000 }),
+      makeItem(2, '置顶B', { pinned: true, pinnedAt: 1000 }),
+      makeItem(3, '普通', { pinned: false }),
+    ]
+    // 移 id=2(置顶B)到前面
+    const result = moveToFront(items, 2)
+    // 应该是:2(置顶B 前移) → 1(置顶A) → 3(普通)
+    expect(result.map((i) => i.id)).toEqual([2, 1, 3])
   })
 })

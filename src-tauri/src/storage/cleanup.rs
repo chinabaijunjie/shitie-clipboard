@@ -37,7 +37,7 @@ pub fn cleanup_by_retention(
 
     // 查超期条目 id
     let expired_ids: Vec<i64> = conn
-        .prepare("SELECT id FROM clipboard_items WHERE last_copied_at < ?1")
+        .prepare("SELECT id FROM clipboard_items WHERE last_copied_at < ?1 AND pinned = 0")
         .map_err(|e| AppError::internal(format!("prepare 查超期条目失败: {e}")))?
         .query_map(params![threshold], |r| r.get::<_, i64>(0))
         .map_err(|e| AppError::internal(format!("查超期条目失败: {e}")))?
@@ -84,6 +84,7 @@ pub fn cleanup_by_capacity(
             "SELECT i.id, COALESCE(SUM(f.size), 0) AS item_size \
              FROM clipboard_items i \
              LEFT JOIN clipboard_formats f ON f.item_id = i.id \
+             WHERE i.pinned = 0 \
              GROUP BY i.id \
              ORDER BY i.last_copied_at ASC",
         )
@@ -133,7 +134,11 @@ pub fn cleanup_by_count(
     }
 
     let total_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM clipboard_items WHERE pinned = 0",
+            [],
+            |r| r.get(0),
+        )
         .map_err(|e| AppError::internal(format!("查条目总数失败: {e}")))?;
 
     if total_count <= max_items {
@@ -142,9 +147,9 @@ pub fn cleanup_by_count(
 
     let excess = (total_count - max_items) as usize;
 
-    // 查最旧的 excess 条
+    // 查最旧的 excess 条(置顶项豁免)
     let oldest_ids: Vec<i64> = conn
-        .prepare("SELECT id FROM clipboard_items ORDER BY last_copied_at ASC LIMIT ?1")
+        .prepare("SELECT id FROM clipboard_items WHERE pinned = 0 ORDER BY last_copied_at ASC LIMIT ?1")
         .map_err(|e| AppError::internal(format!("prepare 查超限条目失败: {e}")))?
         .query_map(params![excess as i64], |r| r.get::<_, i64>(0))
         .map_err(|e| AppError::internal(format!("查超限条目失败: {e}")))?
@@ -411,5 +416,89 @@ mod tests {
         // 上限 1 条 → 删 2 条最旧
         run_cleanup(&conn, 0, 0, 1, &dir).unwrap();
         assert_eq!(count_items(&conn), 1);
+    }
+
+    // ===== 置顶豁免清理测试 =====
+
+    /// 辅助:把指定 item 置项(按 title 查找)。
+    fn pin_by_title(conn: &Connection, title: &str) {
+        conn.execute(
+            "UPDATE clipboard_items SET pinned = 1, pinned_at = ?1 WHERE title = ?2",
+            params![items::now_epoch_ms(), title],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn cleanup_by_retention_skips_pinned() {
+        let conn = init_db_in_memory().unwrap();
+        let dir = test_images_dir();
+        make_item(&conn, "过期置顶", 10 * 86_400_000, 100);
+        make_item(&conn, "过期普通", 10 * 86_400_000, 100);
+
+        // 把「过期置顶」置顶
+        pin_by_title(&conn, "过期置顶");
+
+        // 保留 1 天 → 两条都过期(10 天),但置顶的豁免
+        let deleted = cleanup_by_retention(&conn, 1, &dir).unwrap();
+        assert_eq!(deleted, 1, "只删 1 条(置顶的豁免)");
+        assert_eq!(count_items(&conn), 1);
+
+        // 剩下的应该是置顶的
+        let remaining_title: String = conn
+            .query_row("SELECT title FROM clipboard_items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(remaining_title, "过期置顶");
+    }
+
+    #[test]
+    fn cleanup_by_count_skips_pinned() {
+        let conn = init_db_in_memory().unwrap();
+        let dir = test_images_dir();
+        make_item(&conn, "A", 5 * 86_400_000, 100);
+        make_item(&conn, "B", 3 * 86_400_000, 100);
+        make_item(&conn, "C", 1 * 86_400_000, 100);
+
+        // 把最旧的 A 置顶
+        pin_by_title(&conn, "A");
+
+        // 上限 1 条:普通项只有 B/C(2 条),删到剩 1 条 → 删 1 条(B 最旧)
+        // 置顶的 A 不计入配额,不会被删
+        cleanup_by_count(&conn, 1, &dir).unwrap();
+        assert_eq!(count_items(&conn), 2, "A(置顶)+ C(普通)存活");
+
+        // A 还在
+        let a_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM clipboard_items WHERE title = 'A'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(a_exists, 1, "置顶的 A 不应被删");
+    }
+
+    #[test]
+    fn cleanup_by_capacity_skips_pinned() {
+        let conn = init_db_in_memory().unwrap();
+        let dir = test_images_dir();
+        // 两条各 1MB,总 2MB
+        let one_mb: i64 = 1024 * 1024;
+        make_item(&conn, "大A", 5 * 86_400_000, one_mb);
+        make_item(&conn, "大B", 3 * 86_400_000, one_mb);
+
+        // 把最旧的「大A」置顶
+        pin_by_title(&conn, "大A");
+
+        // 容量上限 1MB → 总 2MB 超限
+        // 普通项只有「大B」,删它后总量 = 1MB(只剩置顶的 A)≤ 上限
+        let deleted = cleanup_by_capacity(&conn, 1, &dir).unwrap();
+        assert!(deleted >= 1, "应至少删 1 条普通项");
+        assert_eq!(count_items(&conn), 1, "只剩置顶的「大A」");
+
+        let remaining: String = conn
+            .query_row("SELECT title FROM clipboard_items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(remaining, "大A", "置顶项应存活");
     }
 }

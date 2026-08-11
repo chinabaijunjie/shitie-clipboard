@@ -278,6 +278,16 @@ pub fn delete_item(
     delete_item_with_conn(&conn, id, state.images_dir())
 }
 
+/// 切换置顶状态(置顶/取消置顶)。返回切换后的新状态(true=已置顶)。
+#[tauri::command]
+pub fn toggle_pin(
+    state: State<'_, crate::AppState>,
+    id: i64,
+) -> Result<bool, AppError> {
+    let conn = state.db();
+    items::toggle_pin(&conn, id)
+}
+
 /// 搜索剪贴板历史(FTS5 + bigram)。
 #[tauri::command]
 pub fn search_items(

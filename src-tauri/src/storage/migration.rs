@@ -8,6 +8,7 @@
 //! - 0:初始(M0/M1 schema:items + formats 两表,IF NOT EXISTS 建表)
 //! - 2:M2 — 加 search_text 列 + FTS5 外部内容表 + 三触发器 + idx_formats_file_path + 存量回填
 //! - 3:内容子类型 — 加 content_subtype 列 + 存量回填(link/markdown 识别)
+//! - 4:置顶 — 加 pinned + pinned_at 列(置顶项排最前 + 豁免自动清理)
 //!
 //! 注:版本号跳过 1(0 → 2),与 m2-research 的 CURRENT_SCHEMA_VERSION=2 对齐,
 //! 为未来小幅变更留余地。
@@ -20,7 +21,7 @@ use crate::storage::fts;
 use crate::storage::search::bigram_cjk;
 
 /// 当前 schema 版本。每次 schema 变更 bump 这个值 + 在 migrate 里加分支。
-pub const CURRENT_SCHEMA_VERSION: i64 = 3;
+pub const CURRENT_SCHEMA_VERSION: i64 = 4;
 
 /// 跑增量迁移,把 DB 升级到 CURRENT_SCHEMA_VERSION。
 ///
@@ -35,6 +36,10 @@ pub fn migrate(conn: &Connection) -> Result<(), AppError> {
 
     if current < 3 {
         migrate_to_v3(conn)?;
+    }
+
+    if current < 4 {
+        migrate_to_v4(conn)?;
     }
 
     // 兜底:若库的 user_version 已超过 CURRENT(不应发生),记 warn 但不阻断。
@@ -261,6 +266,65 @@ fn backfill_content_subtype(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+/// 迁移到 v4:加 pinned + pinned_at 列(置顶功能)。
+///
+/// - ALTER TABLE 加 `clipboard_items.pinned INTEGER NOT NULL DEFAULT 0`(0=普通 1=置顶)
+/// - ALTER TABLE 加 `clipboard_items.pinned_at INTEGER`(置顶时间戳,NULL=未置顶)
+/// - 存量回填不需要(DEFAULT 0 + NULL 已正确)
+/// - 写 user_version=4
+///
+/// 包事务(与 v2/v3 同模式):中途失败回滚。
+/// 不复用建表时预留的死列 `pin TEXT`(语义/类型不匹配,留着不动)。
+fn migrate_to_v4(conn: &Connection) -> Result<(), AppError> {
+    log::info!("[migration] 升级到 schema v4(pinned + pinned_at)");
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| AppError::internal(format!("开启 migration v4 事务失败: {e}")))?;
+
+    let result = migrate_to_v4_inner(&tx);
+    match result {
+        Ok(()) => {
+            tx.commit()
+                .map_err(|e| AppError::internal(format!("migration v4 commit 失败: {e}")))?;
+            log::info!("[migration] schema v4 升级完成");
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("[migration] schema v4 升级失败,已回滚: {}", e.message);
+            Err(e)
+        }
+    }
+}
+
+fn migrate_to_v4_inner(conn: &Connection) -> Result<(), AppError> {
+    // 1. 加 pinned 列(0=普通 1=置顶,不幂等,版本号 + 事务守护)
+    conn.execute(
+        "ALTER TABLE clipboard_items ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
+        [],
+    )
+    .map_err(|e| AppError::internal(format!("ALTER TABLE 加 pinned 失败: {e}")))?;
+
+    // 2. 加 pinned_at 列(置顶时间戳,NULL=未置顶)
+    conn.execute(
+        "ALTER TABLE clipboard_items ADD COLUMN pinned_at INTEGER",
+        [],
+    )
+    .map_err(|e| AppError::internal(format!("ALTER TABLE 加 pinned_at 失败: {e}")))?;
+
+    // 3. 置顶排序索引(IF NOT EXISTS 幂等)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_items_pinned ON clipboard_items(pinned DESC, pinned_at DESC)",
+        [],
+    )
+    .map_err(|e| AppError::internal(format!("建 idx_items_pinned 失败: {e}")))?;
+
+    // 4. 写版本号
+    write_version(conn, CURRENT_SCHEMA_VERSION)?;
+
+    Ok(())
+}
+
 /// 写版本号。
 fn write_version(conn: &Connection, version: i64) -> Result<(), AppError> {
     conn.execute_batch(&format!("PRAGMA user_version = {version};"))
@@ -426,5 +490,58 @@ mod tests {
             )
             .unwrap();
         assert_eq!(subtype, "link");
+    }
+
+    #[test]
+    fn migrate_v4_adds_pinned_columns() {
+        // v4 加了 pinned + pinned_at 列:能查询不报错
+        let conn = init_db_in_memory().expect("init 失败");
+        // pinned 列存在(查不报 no such column)
+        let pinned: i64 = conn
+            .query_row("SELECT pinned FROM clipboard_items LIMIT 1", [], |r| r.get(0))
+            .unwrap_or(0);
+        assert_eq!(pinned, 0, "新库 pinned 默认值应为 0");
+        // pinned_at 列存在
+        let _: Option<i64> = conn
+            .query_row("SELECT pinned_at FROM clipboard_items LIMIT 1", [], |r| r.get(0))
+            .ok();
+    }
+
+    #[test]
+    fn migrate_v3_to_v4_preserves_existing_data() {
+        // v3 库 → 插数据 → migrate v4 → 数据仍在,pinned 默认 0
+        let conn = init_db_in_memory_v1().expect("init v1 失败");
+        migrate_to_v2(&conn).expect("升到 v2");
+        migrate_to_v3(&conn).expect("升到 v3");
+
+        conn.execute(
+            "INSERT INTO clipboard_items (first_copied_at, last_copied_at, title, content_kind, search_text) \
+             VALUES (1000, 1000, '测试', 'text', '')",
+            [],
+        )
+        .unwrap();
+        let id = conn.last_insert_rowid();
+
+        migrate_to_v4(&conn).expect("升到 v4");
+
+        // 数据仍在
+        let title: String = conn
+            .query_row(
+                "SELECT title FROM clipboard_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(title, "测试");
+
+        // pinned 默认 0
+        let pinned: i64 = conn
+            .query_row(
+                "SELECT pinned FROM clipboard_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pinned, 0);
     }
 }
