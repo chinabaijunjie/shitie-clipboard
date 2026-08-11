@@ -256,6 +256,13 @@
     border-radius: var(--radius-window);
     overflow: hidden;
   }
+
+  /* 去掉按钮默认 focus outline(键盘呼出时的蓝/灰光圈,掉价)。
+     Spotlight 工具栏按钮不需要系统默认焦点环,hover 反馈已足够。 */
+  button:focus,
+  button:focus-visible {
+    outline: none;
+  }
 }
 
 /* ============================================================

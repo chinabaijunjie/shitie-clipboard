@@ -11,7 +11,11 @@
 // 应用元信息
 // ============================================================
 export const APP_NAME = '拾贴'
-export const APP_VERSION = '2.0.0'
+
+// 版本号唯一真相源是 package.json,Cargo.toml / tauri.conf.json 打包时同步。
+// 改版本号只需改 package.json,前端自动跟上。
+import pkg from '../../package.json'
+export const APP_VERSION = pkg.version
 
 // ============================================================
 // localStorage 键名前缀(避免与其他应用冲突)

@@ -309,7 +309,7 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
       </div>
 
       {/* 底栏:错误提示 / 保存提示 —— 顶部半透明分隔线 */}
-      <div className="border-t border-divider px-3.5 py-1.5 text-[10px]">
+      <div className="select-none border-t border-divider px-3.5 py-1.5 text-[10px]">
         {error ? (
           <span className="text-destructive">{error}</span>
         ) : (
