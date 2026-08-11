@@ -2,7 +2,7 @@
 title: 全局 TODO
 tags: [TODO, 任务]
 created: 2026-06-29
-updated: 2026-08-09
+updated: 2026-08-10
 status: active
 ---
 
@@ -10,41 +10,14 @@ status: active
 
 > 本工程是拾贴(轻量常驻的剪贴板历史管理桌面应用),
 > 2026-08-05 从模板 `tauri-sidecar-template` 复制起步,M0/M1/M2/M3/M4(A+B+C+UI)+ 多主题切换
-> + UI 增强迭代 + Windows 跨平台适配(v1.0.0~v1.0.8) + v2.0.0 准备 已完成。
+> + UI 增强迭代 + Windows 跨平台适配(v1.0.0~v1.0.8) + v2.0.0 准备 + macOS 全屏悬浮修复 已完成。
 
 ## 🎯 下次目标
 
-- **macOS 全屏应用呼出窗口修复**:全屏应用(如 Safari/Chrome 全屏)上快捷键无法呼出拾贴窗口
+> macOS 全屏悬浮修复已完成(2026-08-10,commit `12b1a72`),详见 [[fullscreen-research]] + [[fullscreen-plan]]。
+> 当前无阻断性待办。可选后续见下方「想法池」。
 
-  ### 已尝试 3 种方案(均失败)
-  1. **tauri.conf.json `visibleOnAllWorkspaces: true`** — 仅对多桌面有效,全屏应用 Space 不行
-  2. **原生 API 设置 collectionBehavior + windowLevel**(`window_control.rs:setup_macos_fullscreen_window`)
-     - `CanJoinAllSpaces | FullScreenAuxiliary` + `NSStatusWindowLevel(25)`
-     - 代码执行无报错(日志确认"配置完成"),但全屏应用上仍无法呼出
-  3. **加 `nonactivatingPanel` style mask**(`setStyleMask:` 加 `1<<7`)
-     - **PR review 发现根因**:`NSWindowStyleMaskNonactivatingPanel` 只对 `NSPanel` **子类**生效
-     - Tauri 创建的是普通 `NSWindow`,设了也不会产生"不激活 app"行为
-     - 普通窗口 show 时仍会激活 app → macOS 切到 app 的 Space → 全屏应用退出
 
-  ### PR review 发现的额外矛盾
-  - `show_main_window` 里的 `set_focus()` 会显式激活 app(makeKey),即使 nonactivatingPanel 修好了也会被 set_focus 绕过
-
-  ### 下次排查方向(按优先级)
-  1. ~~研究如何让 Tauri 窗口变成 NSPanel 子类~~ ✅ **已调研**(2026-08-10):用 isa-swizzle,见 fullscreen-research
-  2. ~~参考其他 Tauri 项目的全屏实现~~ ✅ **已调研**:EcoPaste(7283 star 同类剪贴板)已用 tauri-nspanel 解决
-  3. **set_focus 条件化**:改用 panel.show_and_make_key()(orderFront,不 activate)
-  4. ~~研究 tao crate 是否有 NSPanel 支持~~ ✅ **已调研**:tao 硬编码 NSWindow,官方标记 not planned
-
-  ### ✅ 调研结论(2026-08-10,详见 [[fullscreen-research]])
-  - **根因**:普通 NSWindow 全屏悬浮失败 = Space 隔离(需 collectionBehavior)+ app 激活(set_focus 调 activateIgnoringOtherApps:YES)双重机制
-  - **方案**:用 `tauri-nspanel` 插件(isa-swizzle 把 TaoWindow 运行时转成 NSPanel 子类)
-  - **参考**:EcoPaste(7283 star 同类剪贴板)的 `src-tauri/src/window/macos.rs` 已验证可行
-  - **下一步**:编写 fullscreen-plan.md 实施方案 → 集成 tauri-nspanel → 实测
-
-  ### 已有代码(保留供排查,当前不生效)
-  - `src-tauri/src/window_control.rs: setup_macos_fullscreen_window()` — 原生配置函数
-  - `src-tauri/src/lib.rs:253` — setup 阶段调用
-  - 依赖:`objc = "0.2"`(Cargo.toml macOS target)
 
 ## 路线图
 
@@ -58,7 +31,7 @@ status: active
 - [x] **UI 增强迭代**:透明度+存储统计+内容识别+类型筛选+双击回填+类型图标 — ✅ 完成(2026-08-09)
 - [x] **Windows 跨平台适配 + CI 打包**(v1.0.0~v1.0.8):格式兼容 + 单实例锁 + 窗口拖动 — ✅ 完成(2026-08-09)
 - [x] **v2.0.0 准备**:版本号 + 底栏显示 + README 重写 + macOS 全屏配置(代码已写,全屏未生效)— ✅ 代码完成(2026-08-09)
-- [ ] **macOS 全屏应用呼出窗口修复**(下一步)
+- [x] **macOS 全屏应用呼出窗口修复**:tauri-nspanel isa-swizzle(NSPanel)— ✅ 完成(2026-08-10)
 
 ## 待办
 

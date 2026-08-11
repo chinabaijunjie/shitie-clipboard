@@ -2,7 +2,7 @@
 title: 开发进度（状态唯一真相源）
 tags: [进度, 状态]
 created: 2026-06-29
-updated: 2026-08-09
+updated: 2026-08-10
 status: active
 ---
 
@@ -15,7 +15,7 @@ status: active
 - **项目**：拾贴（轻量常驻的剪贴板历史管理桌面应用）
 - **出身**：2026-08-05 从模板 `tauri-sidecar-template` 复制创建（commit `ac02fed`）
 - **当前版本**：v2.0.0（准备中,未打包;GitHub 仓库 `chinabaijunjie/shitie-clipboard`）
-- **当前里程碑**：v2.0.0 准备 — **⏳ 未打包**(macOS 全屏应用呼出窗口问题待解决)
+- **当前里程碑**：v2.0.0 准备 — macOS 全屏悬浮修复完成,可打包
 - **架构现状**：纯 Tauri 2 单进程(Rust 既是壳也是后端),无 sidecar / 无 HTTP
   + M3 新增:全局快捷键 / 托盘 / 开机自启 / 设置持久化(Store 插件)/ 自动清理
   + M4 新增:敏感信息过滤(正则黑名单)+ 去重修复(格式覆盖/文件 URL)+ CI 跨平台打包
@@ -25,7 +25,8 @@ status: active
     + 类型筛选 tag + 类型图标 + 双击回填 + 图片/文件路径展示
   + Schema v3:content_subtype 列(写入时识别 link/markdown 子类型)
   + 跨平台适配新增:Windows 剪贴板格式兼容(CF_* 格式名)+ 单实例锁
-  + v2.0.0 新增:底栏版本号显示 + README 重写为面向用户 + macOS 全屏配置(待修)
+  + v2.0.0 新增:底栏版本号显示 + README 重写为面向用户
+  + macOS 全屏悬浮新增:tauri-nspanel isa-swizzle(NSPanel 子类)+ nonactivatingPanel
 - **技术栈**：Tauri 2(Rust) + React 18 + Tailwind + shadcn/ui + zustand
   + clipboard-rs 0.3(剪贴板读写/监听/多格式)+ rusqlite 0.31(存储,bundled,**已含 FTS5**)
   + sha2 0.10(图片去重文件名)+ image dev-dep(测试生成 PNG)
@@ -33,9 +34,9 @@ status: active
   + tauri-plugin-single-instance(v1.0.4 新增,防多开)
   + regex 1(M4 新增,敏感信息正则匹配)
   + lucide-react 1.30(M4 UI 新增,矢量图标库)
-- **验证基线**：cargo test 217 passed + npm test 67 passed + npm build ✅ + clippy 零 error
-  (有 objc crate 的 cfg lint warning,无害)
-- **下一步**：macOS 全屏应用呼出窗口修复(已尝试 3 种方案均失败,需新会话排查)
+  + tauri-nspanel git v2.1(macOS 全屏悬浮,isa-swizzle NSPanel,2026-08-10 新增)
+- **验证基线**：cargo test 217 passed + npm test 67 passed + npm build ✅ + clippy 零 warning
+- **下一步**：无阻断性待办。可选:打包 v2.0.0 release / 按格式智能渲染(想法池)
 
 ## M1 调研 + Spike 记录(2026-08-05)
 
@@ -478,6 +479,47 @@ GitHub 仓库:`chinabaijunjie/shitie-clipboard`
 + clippy 零 error(有 objc crate 的 cfg lint warning,无害)
 
 **下一步**:macOS 全屏应用呼出窗口修复
+
+## macOS 全屏悬浮修复完成记录(2026-08-10,commit `12b1a72` + `9666394`)
+
+解决全屏应用(Safari/Chrome native fullscreen)上快捷键无法呼出窗口的核心问题。
+三路并行调研(macOS 官方机制 / Tauri·tao 框架层 / 同类工具参考),结论高度一致。
+
+- **根因确认**:普通 `NSWindow` 无法全屏悬浮 = 两个独立 macOS 机制叠加
+  - Space 隔离:全屏应用占独立 Space,普通窗口进不去(需 collectionBehavior 突破)
+  - app 激活:`set_focus()` 底层调 `activateIgnoringOtherApps:YES`(tao 源码确认)
+    → 切到 app 的 Space → 全屏应用被挤走
+  - 上次失败根因:`NSWindowStyleMaskNonactivatingPanel` 只对 `NSPanel` 子类生效
+    (philz.blog 权威分析:依赖 NSPanel 初始化时设的 WindowServer 内部标签)
+- **方案**:`tauri-nspanel` 插件(isa-swizzle,412 star,awesome-tauri 收录)
+  - EcoPaste(7283 star 同类剪贴板)已验证可行,源码直接参考
+  - 用 ObjC runtime `object_setClass` 把 TaoWindow(NSWindow)运行时转成 NSPanel 子类
+- **核心改动**(commit `12b1a72`):
+  - 新建 `macos_panel.rs`:`register_plugin` / `setup_panel` / `show_panel` / `hide_panel`
+    + `tauri_panel!{panel!(MainPanel) panel_event!(MainPanelEventHandler)}`
+  - setup 阶段 `to_panel::<MainPanel<R>>()` 转 NSPanel + 配置(level=Dock / nonactivatingPanel /
+    collectionBehavior=fullScreenAuxiliary)+ 绑 `window_did_resign_key` delegate(失焦隐藏)
+  - show 用 `panel.show_and_make_key()`(orderFrontRegardless,不激活 app)
+    + show/hide 动态切 collectionBehavior(canJoinAllSpaces ↔ moveToActiveSpace)
+  - `window_control.rs`:show/hide 跨平台 #cfg 分支 + 删旧 `setup_macos_fullscreen_window` +
+    Focused(false) macOS 置空(delegate 接管)+ `read_hide_on_blur_pub` 暴露给 delegate
+  - 删 `objc = "0.2"` 依赖(与 tauri-nspanel 的 objc2 不兼容)
+- **踩坑**:
+  - `to_panel::<MainPanel>()` 编译失败 → 需 `to_panel::<MainPanel<R>>()`(宏生成带泛型 struct)
+  - `run_on_main_thread` 消耗 handle 所有权 → 闭包内需用 clone 的 inner handle
+  - `panel_event!` 宏要求显式 `-> ()` 返回类型 → clippy::unused_unit 误报 → 模块级 `#![allow]`
+- **UI 细节改进**(commit `9666394`):
+  - 底栏文字 `select-none`(不可鼠标选中,更有质感)
+  - 版本号 tag 金色固定 `#e8c87a`(内联 style,不受 Tailwind JIT/主题影响)
+  - 全局 `button:focus/:focus-visible` 清除 outline(键盘呼出时的光晕)
+  - `APP_VERSION` 改从 `package.json` 读取(唯一真相源,改版本号只需改一处)
+- **调研文档**:`wiki/dev/fullscreen-research.md`(根因+机制+方案+全部来源 URL)+
+  `wiki/dev/fullscreen-plan.md`(精确到 API + 文件改动的实施方案)
+
+**验证基线**:cargo test 217 passed + npm test 67 passed + npm build ✅ + clippy 零 warning
++ **macOS 实测全屏悬浮成功**(Safari/Chrome 全屏可呼出)
+
+**下一步**:无阻断性待办。可选:打包 v2.0.0 release / 按格式智能渲染(想法池)
 
 ## 本工程开发历史
 

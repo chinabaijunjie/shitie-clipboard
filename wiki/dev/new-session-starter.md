@@ -2,7 +2,7 @@
 title: 新窗口启动包
 tags: [启动, 跨会话]
 created: 2026-06-29
-updated: 2026-08-09
+updated: 2026-08-10
 status: ready-to-use
 ---
 
@@ -21,7 +21,7 @@ status: ready-to-use
 
 > 当前状态(版本/测试数/架构) → 见 wiki/dev/progress.md「当前状态」段
 > 下次目标 → 见 wiki/dev/TODO.md 顶部「下次目标」
-> 当前任务规划 → v2.0.0 代码准备完成(未打包),下一步 macOS 全屏应用呼出窗口修复
+> 当前任务规划 → macOS 全屏悬浮修复已完成(v2.0.0 可打包),无阻断性待办
 
 ## 必读文档
 1. AGENTS.md(AI 启动 3 步 + 核心原则 7 模块化 / 8 随写随测 / §8 通用工程纪律)
@@ -30,11 +30,11 @@ status: ready-to-use
 4. wiki/dev/TODO.md(下次目标 + 待办)
 
 ## ⏰ 待触发任务提醒
-- **macOS 全屏应用呼出窗口问题**(核心待解决):
-  - 全屏应用(Safari/Chrome 全屏)上快捷键无法呼出拾贴窗口
-  - 已尝试 3 种方案均失败:visibleOnAllWorkspaces / NSWindow collectionBehavior / activationPolicy
-  - 代码已写(tauri.conf.json 配置)但未生效,需系统排查 Tauri v2 macOS 窗口 Space 行为
-  - 详见 wiki/dev/progress.md「v2.0.0 准备完成记录」段
+- **macOS 全屏悬浮修复已完成**(2026-08-10,commit `12b1a72`):
+  - tauri-nspanel isa-swizzle 把 NSWindow 转成 NSPanel 子类(nonactivatingPanel)
+  - 实测全屏应用(Safari/Chrome 全屏)上可呼出窗口 ✅
+  - 详见 wiki/dev/fullscreen-research.md(根因+机制)+ fullscreen-plan.md(实施方案)
+  - progress.md「macOS 全屏悬浮修复完成记录」段
 - **v2.0.0 准备已完成**(2026-08-09,commit `d18b057`,未打包):
   - 版本号升级 2.0.0 + 底栏版本号显示(金色 kbd tag)
   - README 重写为面向用户的产品介绍(旧 README 改名 DEVELOPMENT.md)

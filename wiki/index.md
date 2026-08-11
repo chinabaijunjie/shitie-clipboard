@@ -13,7 +13,7 @@ status: active
 
 ---
 
-## 🚨 当前状态(v2.0.0 准备完成,下一步 macOS 全屏修复)
+## 🚨 当前状态(v2.0.0 可打包,无阻断性待办)
 
 > **M0 已完成**(2026-08-05):架构清理 + Spotlight UI 骨架。
 > **M1 已完成**(2026-08-06):macOS 剪贴板监听 MVP,端到端实测 6 项全通过。
@@ -24,12 +24,10 @@ status: active
 > **多主题+UI增强已完成**(2026-08-09):三套主题切换 + 透明度可调 + 存储统计 + 内容识别(link/markdown) + 类型筛选 tag + 双击回填 + 类型图标 + 文件/图片路径展示。
 > **Windows 跨平台适配已完成**(2026-08-09,v1.0.0~v1.0.8):剪贴板格式兼容(CF_*)+ 单实例锁 + 窗口拖动(data-tauri-drag-region)。
 > **v2.0.0 准备已完成**(2026-08-09,commit `d18b057`,未打包):版本号 + 底栏显示 + README 重写 + macOS 全屏配置(代码已写,全屏未生效)。
+> **macOS 全屏悬浮修复已完成**(2026-08-10,commit `12b1a72`):tauri-nspanel isa-swizzle(NSPanel 子类)+ nonactivatingPanel,实测全屏应用上可呼出。详见 [[dev/fullscreen-research]] + [[dev/fullscreen-plan]]。
 > 详见 [[dev/progress]] + [[dev/ui-design-spec]](设计规格+三主题存档)。
 >
-> **下一步:macOS 全屏应用呼出窗口修复**(已尝试 3 种方案均失败)。
-> ✅ **根因已调研清楚**(2026-08-10):普通 NSWindow 无法全屏悬浮是 Space 隔离 + app 激活双重机制;
-> 已选定方案 `tauri-nspanel` 插件(isa-swizzle,EcoPaste 7283 star 验证)。
-> 详见 [[dev/fullscreen-research]] + [[dev/TODO]]。
+> **下一步**:无阻断性待办。可选:打包 v2.0.0 release / 按格式智能渲染(想法池)。详见 [[dev/TODO]]。
 >
 > **历史轨迹**:旧版温和迁移规划已归档至 [[dev/archive/001-old-m0-sidecar-removal]],
 > sidecar 方法论删前留档见 [[dev/archive/sidecar-methodology-extract]]。
