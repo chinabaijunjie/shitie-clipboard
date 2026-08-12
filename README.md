@@ -148,6 +148,8 @@ sudo spctl --master-disable
 - **存储**：rusqlite + SQLite FTS5（全文搜索）
 - **状态管理**：zustand
 
+**内存占用**：运行时约 150~200MB，主要来自系统 WebView 引擎（WebKit）和 JavaScript 运行时，应用本体仅 5MB 左右。这是基于 Web 技术栈的跨平台桌面应用的固有开销（同等功能的 Electron 应用通常 300MB+）。
+
 </details>
 
 详细的开发文档、架构说明和工程规范请参考 [DEVELOPMENT.md](DEVELOPMENT.md)。
