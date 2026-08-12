@@ -54,6 +54,31 @@
 2. 打开 DMG，将「拾贴」拖入 Applications 文件夹
 3. 首次打开时右键选择「打开」（未签名应用需要手动放行）
 
+<details>
+<summary><b>遇到「应用已损坏」提示？</b></summary>
+
+由于应用没有 Apple 开发者签名，macOS 可能会提示「应用已损坏，应该移到废纸篓」。这不是真的损坏，解决方法：
+
+**方法一：终端命令（推荐）**
+
+打开「终端」，输入以下命令，然后**把「拾贴」图标拖到终端窗口里**（会自动填入路径），按回车：
+
+```bash
+sudo xattr -rd com.apple.quarantine
+```
+
+输入你的 Mac 登录密码（输入时不会显示字符，正常输入即可），回车后重新打开应用即可。
+
+**方法二：关闭 Gatekeeper（更宽松）**
+
+```bash
+sudo spctl --master-disable
+```
+
+这会允许打开任何来源的应用。使用后建议重新开启：`sudo spctl --master-enable`。
+
+</details>
+
 ### Windows
 
 1. 从 [Releases](../../releases) 下载 `x64-setup.exe`
