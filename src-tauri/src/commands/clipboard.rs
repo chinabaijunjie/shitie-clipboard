@@ -73,6 +73,15 @@ pub fn search_items_with_conn(
     crate::storage::search::search(conn, query, limit, images_dir)
 }
 
+/// 日志预览用安全截断:按**字符数**取前 `n` 个字符。
+///
+/// ⚠️ 禁止改回 `&s[..n]` 字节切片:UTF-8 多字节字符(中文 3 字节/emoji 4 字节)的
+/// 第 n 字节可能落在字符中间,切片直接 panic。v2.0.0 曾因此在 copy_back 崩溃
+/// (纯中文标题 ≥14 字即触发,主线程 panic → 进程 abort,用户机四份崩溃报告同签名)。
+fn truncate_chars(s: &str, n: usize) -> String {
+    s.chars().take(n).collect()
+}
+
 /// 回填:读 DB 该条所有格式 → 组装 Vec<ClipboardContent> → set 原子写回剪贴板。
 ///
 /// M2 多格式回填:把该 item 所有存下来的格式都写回(保留 Word 富文本格式等)。
@@ -110,7 +119,7 @@ pub fn copy_back_with_conn(
         ClipboardContent::Other(_, _) => "Other",
     }).collect();
     log::info!("[copy_back] 条目 {} 回填格式: {:?}, 标题: {:?}",
-        id, format_summary, &assembled.title[..assembled.title.len().min(40)]);
+        id, format_summary, &truncate_chars(&assembled.title, 40));
 
     if assembled.contents.is_empty() {
         // 若曾有图片读盘失败,用更明确的错误(告知磁盘图可能损坏),而非笼统「无可回填格式」
@@ -582,6 +591,41 @@ mod tests {
         ];
         let result = assemble_contents(&formats, &test_images_dir());
         assert_eq!(result.title, "文本内容", "title 取首个有效格式的值");
+    }
+
+    // ===== truncate_chars 测试(v2.0.1 崩溃修复回归) =====
+
+    /// 回归用例:v2.0.0 的 `&s[..40]` 在此输入上 panic(32 个汉字 = 96 字节,
+    /// 字节 40 落在第 14 个汉字中间,非 UTF-8 字符边界)。
+    /// 字符数不足 n 时按实际长度返回(32 < 40,不截断也不补齐)。
+    #[test]
+    fn truncate_chars_multibyte_never_panics() {
+        let title = "生成的彩条图比真实视频帧好认真实标题测试数据一二三四五六七八九十";
+        let preview = truncate_chars(title, 40);
+        assert_eq!(preview.chars().count(), 32);
+        assert_eq!(preview, title, "不足 n 个字符时原样返回");
+    }
+
+    /// 字符数超过 n 时截到恰好 n 个字符(>14 字纯中文,触发 v2.0.0 崩溃的长度区间)。
+    #[test]
+    fn truncate_chars_truncates_to_n_chars() {
+        let title = "拾贴".repeat(25); // 50 个汉字 = 150 字节
+        let preview = truncate_chars(&title, 40);
+        assert_eq!(preview.chars().count(), 40);
+        assert!(title.starts_with(&preview), "截断结果应是原串前缀");
+    }
+
+    #[test]
+    fn truncate_chars_edge_cases() {
+        // 短串原样返回(不足 n 个字符,不补不报错)
+        assert_eq!(truncate_chars("短标题", 40), "短标题");
+        assert_eq!(truncate_chars("", 40), "");
+        // n=0
+        assert_eq!(truncate_chars("任意", 0), "");
+        // 4 字节 emoji 切边界同样安全
+        assert_eq!(truncate_chars("🎉🎉🎉🎉", 2), "🎉🎉");
+        // ASCII 与中文按同等字符数计数(真实标题常见形态)
+        assert_eq!(truncate_chars("abc拾贴拾贴", 4), "abc拾");
     }
 
     // ===== update_last_copied_at 测试 =====
