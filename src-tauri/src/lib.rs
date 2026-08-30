@@ -99,26 +99,55 @@ fn hide_window(window: Window) {
     window_control::hide_main_window(window.app_handle());
 }
 
+/// 单实例锁 key 的标识名。
+const SINGLE_INSTANCE_LOCK_NAME: &str = "shitie-clipboard-lock";
+
+/// 单实例锁的 key(平台差异,见 `run()` 内注释)。
+///
+/// - macOS:**必须是绝对路径**——single-instance crate 在 macOS 上把参数当文件路径
+///   直接 flock。相对路径会落到进程 CWD:launchd(开机自启 LaunchAgent)启动的进程
+///   CWD=/,普通用户无权在根目录创建文件 → 锁初始化失败 → 多开保护整个失效
+///   (v2.0.1 及之前 macOS 从未真正拦截过多开,开机自启 + 会话恢复双实例并存的根因)。
+///   temp_dir 是 per-user 稳定路径,launchd / 会话恢复 / 手动启动一致可见。
+/// - Windows:参数是命名互斥体名,**不能含反斜杠**(temp 路径含 `\` 会让 CreateMutex
+///   失败),用纯标识符(互斥体本身按名全局互斥,无需路径)。
+/// - Linux:参数是 abstract unix socket 名,任意字符串,沿用标识符。
+fn single_instance_key() -> String {
+    if cfg!(target_os = "macos") {
+        std::env::temp_dir()
+            .join(SINGLE_INSTANCE_LOCK_NAME)
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        SINGLE_INSTANCE_LOCK_NAME.to_string()
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 单实例保护:防止多个进程同时运行(Windows 开机自启 + 手动启动叠加场景)。
-    // 第二个实例启动时,激活已有实例的窗口并退出自己。
-    let _single_instance = match single_instance::SingleInstance::new("shitie-clipboard-lock") {
+    // 单实例保护:防止多个进程同时运行(开机自启 LaunchAgent + macOS 会话恢复 +
+    // 手动启动叠加场景)。第二个实例启动时直接退出自己。
+    // (注:不激活已有实例的窗口——窗口激活需跨进程通信,v2.0.2 暂不做)
+    let lock_init_error: Option<String>;
+    let _single_instance = match single_instance::SingleInstance::new(&single_instance_key()) {
         Ok(si) => {
             if !si.is_single() {
                 eprintln!("拾贴已在运行,退出重复实例");
                 return;
             }
+            lock_init_error = None;
             Some(si)
         }
         Err(e) => {
-            eprintln!("[startup] 单实例锁初始化失败(继续启动): {e}");
+            // 锁失败不拒绝启动(可用性优先),但必须留痕——此时本次启动无多开保护。
+            // eprintln 在 GUI 进程不可见,真正落盘的日志在 setup 里日志插件就绪后补记。
+            lock_init_error = Some(format!("{e}"));
             None
         }
     };
 
     tauri::Builder::default()
-        .setup(|app| {
+        .setup(move |app| {
             // 日志插件:常驻工具排障必备。
             // macOS:~/Library/Logs/{bundleId}/
             // Windows:{FOLDERID_LocalAppData}/{bundleId}/logs/  (即 AppData\Local\...\logs\)
@@ -131,6 +160,11 @@ pub fn run() {
 
             // 启动日志:确认日志系统正常工作(排障第一线索)
             log::info!("[startup] 拾贴启动中, identifier={}", app.handle().config().identifier);
+
+            // 单实例锁初始化失败补记(GUI 进程 stderr 不可见,此处才真正落盘可排查)
+            if let Some(e) = lock_init_error {
+                log::warn!("[startup] 单实例锁初始化失败,本次启动无多开保护: {e}");
+            }
 
             // M3:Store 插件(设置持久化,settings.json in app_data_dir)
             app.handle().plugin(tauri_plugin_store::Builder::default().build())?;
@@ -210,10 +244,18 @@ pub fn run() {
 
             // M3:开机自启插件(LaunchAgent,无权限弹窗)
             // 不在 setup 里强制 enable —— 自启状态由用户在设置面板驱动
-            app.handle().plugin(tauri_plugin_autostart::init(
-                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-                Some(vec!["--hidden"]),
-            ))?;
+            // ⚠️ 仅 release 构建注册:autostart 记录的是「当前可执行文件路径」,
+            //    dev 构建即 target/debug 调试产物——若在 tauri dev 下开启自启,
+            //    登录项会永久指向调试二进制,之后每次开机拉起旧调试版与正式版并存
+            //    (v2.0.2 前用户机器上的幽灵多实例事故)。前端设置面板在 dev 下
+            //    同步禁用开关,此处为后端兜底。
+            #[cfg(not(debug_assertions))]
+            {
+                app.handle().plugin(tauri_plugin_autostart::init(
+                    tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                    Some(vec!["--hidden"]),
+                ))?;
+            }
 
             // DB 路径:app_data_dir/clipboard.db
             let data_dir = app
@@ -312,4 +354,49 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 锁 key 的平台形态(v2.0.2 修复回归):
+    /// - macOS 必须精确落在 per-user temp_dir 下——相对路径在 launchd 的 CWD=/
+    ///   下无权创建,锁整个失效;非 temp_dir 的绝对路径(如根目录)同样不可靠,
+    ///   故直接断言完整路径
+    /// - 其他平台保持纯标识符(Windows 互斥体名不能含反斜杠)
+    #[test]
+    fn single_instance_key_platform_shape() {
+        let key = single_instance_key();
+        #[cfg(target_os = "macos")]
+        {
+            let expected = std::env::temp_dir()
+                .join(SINGLE_INSTANCE_LOCK_NAME)
+                .to_string_lossy()
+                .into_owned();
+            assert_eq!(key, expected, "macOS 锁 key 必须是 temp_dir 下的绝对路径");
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(key, SINGLE_INSTANCE_LOCK_NAME);
+            assert!(
+                !key.contains('\\') && !key.contains('/'),
+                "互斥体名不能含路径分隔符: {key}"
+            );
+        }
+    }
+
+    /// 同 key 连续创建两个 SingleInstance,第二个必须拿不到锁。
+    /// v2.0.1 及之前 macOS 上锁从未真正互斥(flock 文件落在 CWD 创建失败),
+    /// 本测试守护「锁在真实文件系统上生效」这一行为。
+    /// ⚠️ 用带 pid 后缀的测试专用 key,不碰生产锁——若跑测试时正式版应用正在
+    ///    运行(同用户 temp_dir),生产 flock 已被持有,第一行断言会假失败。
+    #[test]
+    fn single_instance_lock_actually_dedupes() {
+        let test_key = format!("{}.test-{}", single_instance_key(), std::process::id());
+        let a = single_instance::SingleInstance::new(&test_key).expect("创建第一个锁实例");
+        assert!(a.is_single(), "第一个实例应持有锁");
+        let b = single_instance::SingleInstance::new(&test_key).expect("创建第二个锁实例");
+        assert!(!b.is_single(), "同 key 第二个实例应被视为重复进程");
+    }
 }

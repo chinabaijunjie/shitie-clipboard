@@ -52,6 +52,10 @@ const STORAGE_OPTIONS = [
 export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps) {
   const [autostartEnabled, setAutostartEnabled] = useState(false)
   const [autostartLoading, setAutostartLoading] = useState(true)
+  // 开发构建(tauri dev)禁用自启:autostart 注册的是「当前可执行文件路径」,
+  // dev 下即 target/debug 调试产物——开启后登录项会永久指向调试二进制,
+  // 每次开机拉起旧调试版与正式版并存(v2.0.2 前的幽灵多实例事故)。
+  const isDevBuild = import.meta.env.DEV
   const [shortcutEditing, setShortcutEditing] = useState(false)
   const [pendingShortcut, setPendingShortcut] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +64,12 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
   const { stats, loading: statsLoading, clearAll } = useStorageStats()
 
   // 读取 autostart 状态(直接调插件,不走 settings.json)
+  // dev 构建下后端未注册 autostart 插件,跳过查询(否则报「插件不存在」错误)
   useEffect(() => {
+    if (isDevBuild) {
+      setAutostartLoading(false)
+      return
+    }
     let cancelled = false
     const load = async () => {
       try {
@@ -117,8 +126,9 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
     [settings, onUpdate],
   )
 
-  /** 切换开机自启 */
+  /** 切换开机自启(dev 构建下不可用) */
   const toggleAutostart = useCallback(async () => {
+    if (isDevBuild) return
     setError(null)
     try {
       const { enable, disable } = await import('@tauri-apps/plugin-autostart')
@@ -185,13 +195,17 @@ export function SettingsPanel({ settings, onUpdate, onBack }: SettingsPanelProps
       <div className="scrollbar-thin flex-1 overflow-y-auto px-3.5 py-1">
         {/* --- 通用 --- */}
         <SettingGroupTitle>通用</SettingGroupTitle>
-        <SettingRow label="开机自启" desc="登录时自动启动(后台运行)">
+        <SettingRow
+          label="开机自启"
+          desc={isDevBuild ? '开发模式不可用(防止登录项指向调试版)' : '登录时自动启动(后台运行)'}
+        >
           {autostartLoading ? (
             /* 查询系统 LaunchAgent 状态期间显示占位,避免初始 false → true 跳变 */
             <span className="text-[10px] text-text-tertiary">读取中…</span>
           ) : (
             <Toggle
               checked={autostartEnabled}
+              disabled={isDevBuild}
               onChange={() => void toggleAutostart()}
             />
           )}
