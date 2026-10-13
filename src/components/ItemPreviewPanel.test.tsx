@@ -95,13 +95,13 @@ describe('ItemPreviewPanel', () => {
     expect(screen.getByText('链接')).toBeInTheDocument()
   })
 
-  it('置顶条目:显示置顶时间', () => {
+  it('置顶条目:显示置顶时间(图钉 + 时间戳,不带文字前缀防折行)', () => {
     render(
       <ItemPreviewPanel
         item={makeItem({ pinned: true, pinnedAt: new Date('2026-10-12T10:00:00').getTime() })}
         fullText="x"
       />,
     )
-    expect(screen.getByText('置顶于 2026-10-12 10:00:00')).toBeInTheDocument()
+    expect(screen.getByText('2026-10-12 10:00:00')).toBeInTheDocument()
   })
 })

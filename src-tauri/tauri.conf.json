@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Shitie",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "identifier": "com.shitie.app",
   "build": {
     "frontendDist": "../dist",
@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "拾贴",
-        "width": 760,
-        "height": 600,
+        "width": 950,
+        "height": 584,
         "resizable": false,
         "fullscreen": false,
         "center": true,
