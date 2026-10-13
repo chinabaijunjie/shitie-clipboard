@@ -29,8 +29,13 @@ interface ClipboardListProps {
   onCopyBack?: (index: number) => void
 }
 
-/** 列表项预览的最大字符数(过长截断显示,完整内容在 title) */
+/** 列表项预览的最大字符数(单行截断;完整内容在右侧预览面板展示) */
 const PREVIEW_MAX_CHARS = 60
+
+/** 单行截断预览文本(纯函数,可单测)。选中态与非选中态共用,保证行高一致。 */
+export function previewText(title: string): string {
+  return (title.slice(0, PREVIEW_MAX_CHARS) || '<空>') + (title.length > PREVIEW_MAX_CHARS ? '…' : '')
+}
 
 /** 类型图标配置(图片类型不在此列 —— 用缩略图替代图标位) */
 interface TypeIconConfig {
@@ -116,8 +121,8 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
               display: 'grid',
               // 列1 auto(图标/缩略图) 列2 1fr(内容) 列3 auto(时间)
               gridTemplateColumns: 'auto 1fr auto',
-              // 选中时顶部对齐(图片放大后内容跟缩略图顶部对齐)
-              alignItems: isSelected && isImage ? 'start' : 'center',
+              // 所有行恒居中对齐 —— 行高统一(选中不展开,预览在右侧面板)
+              alignItems: 'center',
               columnGap: '8px',
             }}
             className={cn(
@@ -127,16 +132,12 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
               isSelected ? 'text-primary' : 'text-foreground/90',
             )}
           >
-            {/* 列1:图标/缩略图 —— 选中图片时放大到 40×40
-                图片:缩略图;其余:类型图标(Type/FileText/Link2 等) */}
+            {/* 列1:图标/缩略图 —— 缩略图恒 20px(行高统一,选中不放大) */}
             {isImage && item.thumbPath ? (
               <img
                 src={convertFileSrc(item.thumbPath)}
                 alt=""
-                className={cn(
-                  'rounded-thumb object-cover',
-                  isSelected ? 'h-10 w-10' : 'h-5 w-5',
-                )}
+                className="h-5 w-5 rounded-thumb object-cover"
                 draggable={false}
               />
             ) : (() => {
@@ -151,10 +152,8 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
               ) : null
             })()}
 
-            {/* 列2:主内容
-                图片:两行 — 第一行尺寸(title),第二行原图路径
-                非选中文字:JS 截断 60 字符 + 单行 ellipsis(紧凑)
-                选中文字:显示完整 title,line-clamp-3 限制最多三行 */}
+            {/* 列2:主内容 —— 统一单行截断(选中不展开,完整内容在右侧预览面板)
+                图片:两行 — 第一行尺寸(title),第二行原图路径 */}
             {isImage ? (
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="truncate text-xs" title={item.title}>
@@ -191,17 +190,10 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
               </div>
             ) : (
               <span
-                className={cn(
-                  'min-w-0 overflow-hidden text-xs',
-                  isSelected
-                    ? 'line-clamp-3 whitespace-normal break-all'
-                    : 'text-ellipsis whitespace-nowrap',
-                )}
+                className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs"
                 title={item.title}
               >
-                {isSelected
-                  ? (item.title || '<空>')
-                  : (item.title.slice(0, PREVIEW_MAX_CHARS) || '<空>') + (item.title.length > PREVIEW_MAX_CHARS ? '…' : '')}
+                {previewText(item.title)}
               </span>
             )}
 
