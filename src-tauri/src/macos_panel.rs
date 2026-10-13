@@ -136,11 +136,32 @@ pub fn show_panel<R: Runtime>(app: &AppHandle<R>) {
                     .full_screen_auxiliary()
                     .into();
                 panel.set_collection_behavior(behavior);
+                // ⭐ 激活 app 进程(仅进程级激活,不对普通窗口 orderFront)。
+                // 原因:输入法候选词浮窗是输入法进程的窗口,不带 fullScreenAuxiliary,
+                // 只跟随「激活 app 的 key window 所在 Space」渲染。app 不激活时,
+                // 全屏 Space 下打字候选窗完全不显示(2026-10-13 实测:
+                // 组合下划线在,CGWindowList 里无候选窗)。激活后候选窗跟随面板
+                // 所在 Space 正常显示;面板本身是 auxiliary,不会挤走全屏应用
+                // (Raycast 同款行为:全屏唤出时菜单栏切到面板 app)。
+                activate_app();
             } else {
                 log::warn!("[panel] show: 找不到 panel(未 setup?)");
             }
         });
     });
+}
+
+/// 激活 app 进程(macOS;进程级,不动窗口)。
+fn activate_app() {
+    use tauri_nspanel::objc2::MainThreadMarker;
+    use tauri_nspanel::objc2_app_kit::NSApplication;
+    unsafe {
+        let mtm = MainThreadMarker::new().expect("activate_app 必须在主线程");
+        let app = NSApplication::sharedApplication(mtm);
+        // 旧 API(deprecated 但语义最明确):忽略其他应用强制激活。
+        // 新 activate() 是协作式的,从非前台进程调用可能被系统拒绝。
+        let _: () = msg_send![&*app, activateIgnoringOtherApps: true];
+    }
 }
 
 /// hide panel(主线程 + 切回 move_to_active_space)。
