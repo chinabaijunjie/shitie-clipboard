@@ -9,6 +9,7 @@
 //! - 2:M2 — 加 search_text 列 + FTS5 外部内容表 + 三触发器 + idx_formats_file_path + 存量回填
 //! - 3:内容子类型 — 加 content_subtype 列 + 存量回填(link/markdown 识别)
 //! - 4:置顶 — 加 pinned + pinned_at 列(置顶项排最前 + 豁免自动清理)
+//! - 5:拼音直搜 — 加 pinyin_full/pinyin_initials 列 + 按 title 回填存量行
 //!
 //! 注:版本号跳过 1(0 → 2),与 m2-research 的 CURRENT_SCHEMA_VERSION=2 对齐,
 //! 为未来小幅变更留余地。
@@ -129,7 +130,7 @@ fn migrate_to_v2_inner(conn: &Connection) -> Result<(), AppError> {
         .map_err(|e| AppError::internal(format!("FTS rebuild 失败: {e}")))?;
 
     // 6. 写版本号
-    write_version(conn, CURRENT_SCHEMA_VERSION)?;
+    write_version(conn, 2)?;
 
     Ok(())
 }
@@ -220,7 +221,7 @@ fn migrate_to_v3_inner(conn: &Connection) -> Result<(), AppError> {
     backfill_content_subtype(conn)?;
 
     // 3. 写版本号
-    write_version(conn, CURRENT_SCHEMA_VERSION)?;
+    write_version(conn, 3)?;
 
     Ok(())
 }
@@ -324,7 +325,7 @@ fn migrate_to_v4_inner(conn: &Connection) -> Result<(), AppError> {
     .map_err(|e| AppError::internal(format!("建 idx_items_pinned 失败: {e}")))?;
 
     // 4. 写版本号
-    write_version(conn, CURRENT_SCHEMA_VERSION)?;
+    write_version(conn, 4)?;
 
     Ok(())
 }
@@ -392,7 +393,7 @@ fn migrate_to_v5_inner(conn: &Connection) -> Result<(), AppError> {
     }
 
     // 3. 写版本号
-    write_version(conn, CURRENT_SCHEMA_VERSION)?;
+    write_version(conn, 5)?;
 
     Ok(())
 }

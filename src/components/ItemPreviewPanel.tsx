@@ -108,7 +108,7 @@ export function ItemPreviewPanel({ item, fullText }: ItemPreviewPanelProps) {
         <MetaRow label="置顶">
           {item.pinned ? (
             <span className="inline-flex items-center gap-1">
-              <Pin className="h-3 w-3 shrink-0" style={{ color: '#e8c87a', fill: '#e8c87a' }} aria-hidden />
+              <Pin className="h-3 w-3 shrink-0" style={{ color: 'var(--badge-gold)', fill: 'var(--badge-gold)' }} aria-hidden />
               {formatDateTime(item.pinnedAt ?? item.firstCopiedAt)}
             </span>
           ) : (

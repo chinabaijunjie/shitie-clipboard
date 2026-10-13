@@ -55,6 +55,7 @@ extern "C" {
     fn CFStringGetCString(string: *const std::ffi::c_void, buffer: *mut std::ffi::c_char, bufferSize: isize, encoding: u32) -> u8;
     fn CFArrayGetCount(array: *const std::ffi::c_void) -> isize;
     fn CFArrayGetValueAtIndex(array: *const std::ffi::c_void, index: isize) -> *const std::ffi::c_void;
+    fn CFRelease(cf: *const std::ffi::c_void);
 }
 
 /// Rust String → CFString(调用方负责释放)
@@ -79,24 +80,37 @@ unsafe fn cf_to_string(s: *const std::ffi::c_void) -> String {
     String::from_utf8_lossy(&buf[..end]).into_owned()
 }
 
-/// 按输入源 ID 找启用的输入源
-fn find_enabled_input_source(id: &str) -> Option<*const std::ffi::c_void> {
+/// 按输入源 ID 切换(CR 修复:CF 对象即用即释,Find+Select 合一避免跨函数持有借来指针)。
+/// 返回是否成功找到并切换。
+fn select_enabled_input_source(id: &str) -> bool {
     unsafe {
+        // Create 规则:list 为 +1 引用,用完必须 CFRelease
         let list = TISCreateInputSourceList(std::ptr::null(), 0);
         if list.is_null() {
-            return None;
+            log::warn!("[input-source] TISCreateInputSourceList 返回空,无法按 ID 查找: {id}");
+            return false;
         }
         let id_cf = cf_string(id);
         let count = CFArrayGetCount(list);
+        let mut found = false;
         for i in 0..count {
             let src = CFArrayGetValueAtIndex(list, i);
             let src_id = cf_to_string(TISGetInputSourceProperty(src, kTISPropertyInputSourceID as *const _));
             if src_id == id {
-                return Some(src);
+                found = TISSelectInputSource(src) == 0;
+                if !found {
+                    log::warn!("[input-source] 切到 {id} 失败: TISSelectInputSource 非 0");
+                }
+                break;
             }
         }
+        CFRelease(id_cf);
+        CFRelease(list);
+        if !found {
+            log::warn!("[input-source] 未在启用列表中找到输入源: {id}");
+        }
+        found
     }
-    None
 }
 
 /// 保存当前输入源并切到 ABC(面板显示时调用;主线程)
@@ -106,19 +120,19 @@ fn switch_to_abc_and_save() {
         if SAVED_INPUT_SOURCE_ID.lock().unwrap().is_some() {
             return;
         }
+        // Copy 规则:current 为 +1 引用,读取属性后 CFRelease
         let current = TISCopyCurrentKeyboardInputSource();
         let current_id = cf_to_string(TISGetInputSourceProperty(current, kTISPropertyInputSourceID as *const _));
-        *SAVED_INPUT_SOURCE_ID.lock().unwrap() = Some(current_id);
-    }
-    if let Some(abc) = find_enabled_input_source(ABC_INPUT_SOURCE_ID) {
-        unsafe {
-            let status = TISSelectInputSource(abc);
-            if status != 0 {
-                log::warn!("[input-source] 切到 ABC 失败: status={status}");
-            }
+        CFRelease(current);
+        if current_id.is_empty() {
+            // CR 修复:读取失败(空串)时仍保存占位,避免 restore 阶段误把 ABC 当作用户原输入源
+            log::warn!("[input-source] 读取当前输入源 ID 失败,保存占位符以防误恢复");
+            *SAVED_INPUT_SOURCE_ID.lock().unwrap() = Some(String::new());
+        } else {
+            *SAVED_INPUT_SOURCE_ID.lock().unwrap() = Some(current_id.clone());
         }
-    } else {
-        log::warn!("[input-source] 未找到启用的 ABC 布局,跳过切换");
+        // 切到 ABC(内部完成 CF 释放与失败日志)
+        select_enabled_input_source(ABC_INPUT_SOURCE_ID);
     }
 }
 
@@ -126,15 +140,9 @@ fn switch_to_abc_and_save() {
 fn restore_input_source() {
     let saved = SAVED_INPUT_SOURCE_ID.lock().unwrap().take();
     if let Some(id) = saved {
-        if id != ABC_INPUT_SOURCE_ID {
-            if let Some(src) = find_enabled_input_source(&id) {
-                unsafe {
-                    let status = TISSelectInputSource(src);
-                    if status != 0 {
-                        log::warn!("[input-source] 恢复输入源 {id} 失败: status={status}");
-                    }
-                }
-            }
+        // 空串 = show 时读取失败占位(无法可靠恢复,保持 ABC 并留日志)
+        if !id.is_empty() && id != ABC_INPUT_SOURCE_ID {
+            select_enabled_input_source(&id);
         }
     }
 }

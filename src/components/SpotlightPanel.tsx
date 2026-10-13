@@ -217,12 +217,13 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
         case 'ArrowDown':
           if (items.length === 0) return
           e.preventDefault()
-          setSelectedIndex((i) => {
-            const next = nextIndex(i, 1, items.length)
+          {
+            // CR 修复:loadMore 副作用移出 setState updater(updater 需纯函数,StrictMode 下会双调)
+            const next = nextIndex(selectedIndex, 1, items.length)
+            setSelectedIndex(next)
             // 接近已加载尾部(剩 3 条内)→ 预加载下一页,保证连续导航不断档
             if (hasMore && next >= items.length - 3) void loadMore()
-            return next
-          })
+          }
           break
         case 'Enter':
           if (items.length === 0) return
@@ -311,7 +312,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
               />
               {searchQuery && (
                 <span className="shrink-0 text-[10px] text-text-tertiary">
-                  {items.length} 条结果
+                  {total} 条结果
                 </span>
               )}
             </div>

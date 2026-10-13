@@ -244,8 +244,11 @@ export function useClipboardItems(): UseClipboardItemsResult {
           })
           if (!matches) return
         }
+        // CR 修复:重复复制(同 id)走后端 dedup 更新也会 emit,但列表长度不变——
+        // 仅新增条目才递增 total,否则 total 单调虚增导致 hasMore 恒真
+        const isNew = !itemsRef.current.some((it) => it.id === item.id)
         setItems((prev) => applyAddedItem(prev, item))
-        setTotal((t) => t + 1)
+        if (isNew) setTotal((t) => t + 1)
       } catch (e) {
         console.error('[clipboard] added 事件 payload 校验失败:', e)
       }
@@ -278,6 +281,9 @@ export function useClipboardItems(): UseClipboardItemsResult {
   // useCallback 保证引用稳定(否则 debounce effect 会因依赖变化无限重建 → 闪烁)
   const search = useCallback(async (query: string) => {
     const trimmed = query.trim()
+    // CR 修复:与 setKindFilter 同理,必须先同步 ref 再发请求——
+    // 否则 loadMore 在途响应的过期页防护(searchQueryRef 比对)在 ref 异步同步窗口内被穿透
+    searchQueryRef.current = trimmed === '' ? null : trimmed
     if (trimmed === '') {
       // 清空搜索:回退到全列表(带 kindFilter)
       setSearchQuery(null)

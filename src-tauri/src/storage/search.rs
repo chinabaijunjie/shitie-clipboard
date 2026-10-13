@@ -111,7 +111,7 @@ fn escape_fts_phrase(token: &str) -> String {
 ///
 /// 查询策略:
 /// - 空查询 → 返回空列表(调用方可用 list 替代)
-/// - 纯 ASCII 字母数字 → 三路 LIKE(search_text / pinyin_full / pinyin_initials)
+/// - 纯 ASCII 字母数字 → 拼音直搜合并(FTS BM25 全量在前 + 三路 LIKE 去重追加,内存分页,见 search_by_pinyin_all)
 /// - 单字查询 → `LIKE '%字%'` 兜底(bigram 对单字不可靠)
 /// - 多字查询 → bigram 预处理 → FTS MATCH + BM25 排序
 ///
@@ -182,8 +182,8 @@ pub fn count(conn: &Connection, query: &str) -> Result<i64, AppError> {
 
 /// 查询是否为纯 ASCII 字母数字(拼音直搜路由判据)。
 ///
-/// 这类查询走「三路 LIKE」:search_text(英文内容)OR pinyin_full(全拼)OR
-/// pinyin_initials(首母)——英文内容搜索行为保持,叠加拼音命中。
+/// 这类查询走拼音直搜合并路径(FTS 保留 BM25 相关性 + 三路 LIKE),详见 search_by_pinyin_all。
+/// 注意:ASCII 判据优先于单字判据(单字母 "a" 也进本分支)。
 pub fn is_ascii_alnum_query(query: &str) -> bool {
     !query.is_empty() && query.chars().all(|c| c.is_ascii_alphanumeric())
 }
