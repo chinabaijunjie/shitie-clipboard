@@ -9,11 +9,13 @@
 //! - list_items:查历史列表(last_copied_at DESC)
 //! - copy_back:读 DB 多格式 → set(Vec<ClipboardContent>) 原子写回剪贴板(回填)
 //! - delete_item:删单条(CASCADE 清 formats)
+//! - get_item_text:读条目完整文本(预览面板用,title 截断 1000 字符以外的全文)
 
 use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext};
 use rusqlite::Connection;
 use tauri::State;
 
+use crate::clipboard::{title, uti};
 use crate::error::{codes, AppError};
 use crate::models::{ClipboardItem, StorageStats};
 use crate::storage::{cleanup, items};
@@ -71,6 +73,38 @@ pub fn search_items_with_conn(
 ) -> Result<Vec<ClipboardItem>, AppError> {
     // search::search 内部已通过 fill_image_fields 把 thumb_path 填为绝对路径
     crate::storage::search::search(conn, query, limit, images_dir)
+}
+
+/// 在格式行中找指定 UTI 的 blob,按 UTF-8(lossy)解码为文本。
+///
+/// lossy 而非 strict:预览是尽力展示,坏字节替换 U+FFFD 优于整段报错
+/// (与 M2 rich/html 捕获时的 lossy 策略一致)。
+fn find_blob_text(formats: &[items::FormatRow], want_uti: &str) -> Option<String> {
+    formats
+        .iter()
+        .find(|(u, blob, _)| u == want_uti && blob.is_some())
+        .map(|(_, blob, _)| String::from_utf8_lossy(blob.as_ref().unwrap()).into_owned())
+}
+
+/// 读条目完整文本(右侧预览面板用)。
+///
+/// 格式优先级与 generate_title 一致:plain-text 直读 → RTF 粗提取 → HTML 粗提取。
+/// 条目不存在、或无任何文本格式(纯图片/纯文件)→ NOT_FOUND。
+pub fn get_item_text_with_conn(conn: &Connection, id: i64) -> Result<String, AppError> {
+    let formats = items::get_formats(conn, id)?;
+    if formats.is_empty() {
+        return Err(AppError::new(codes::NOT_FOUND, format!("条目 {id} 不存在")));
+    }
+    if let Some(text) = find_blob_text(&formats, uti::UTI_PLAIN_TEXT) {
+        return Ok(text);
+    }
+    if let Some(rtf) = find_blob_text(&formats, uti::UTI_RTF) {
+        return Ok(title::extract_text_from_rtf(&rtf));
+    }
+    if let Some(html) = find_blob_text(&formats, uti::UTI_HTML) {
+        return Ok(title::extract_text_from_html(&html));
+    }
+    Err(AppError::new(codes::NOT_FOUND, format!("条目 {id} 无文本格式")))
 }
 
 /// 日志预览用安全截断:按**字符数**取前 `n` 个字符。
@@ -308,6 +342,18 @@ pub fn search_items(
     search_items_with_conn(&conn, &query, limit.unwrap_or(DEFAULT_LIST_LIMIT), state.images_dir())
 }
 
+/// 读条目完整文本(右侧预览面板用)。
+///
+/// title 截断在 1000 字符(TITLE_MAX_CHARS),超长条目以此命令取全文。
+#[tauri::command]
+pub fn get_item_text(
+    state: State<'_, crate::AppState>,
+    id: i64,
+) -> Result<String, AppError> {
+    let conn = state.db();
+    get_item_text_with_conn(&conn, id)
+}
+
 /// 回填:读 DB 多格式 → set 原子写回剪贴板。
 ///
 /// ⚠️ ClipboardContext 在 command 里现造一个(短生命周期,用完即弃)。
@@ -430,6 +476,98 @@ mod tests {
         let conn = init_db_in_memory().unwrap();
         let clipboard = ClipboardContext::new().expect("ClipboardContext");
         let err = copy_back_with_conn(&conn, &clipboard, 9999, &test_images_dir()).unwrap_err();
+        assert_eq!(err.code, codes::NOT_FOUND);
+    }
+
+    // ============================================================
+    // get_item_text(预览面板全文)
+    // ============================================================
+
+    /// 构造单条多格式条目,返回其 id。
+    fn insert_with_formats(
+        conn: &Connection,
+        formats: &[(&str, &[u8])],
+        kind: ContentKind,
+        title: &str,
+    ) -> i64 {
+        let captured: Vec<CapturedFormat> = formats
+            .iter()
+            .map(|(u, d)| CapturedFormat {
+                uti: u.to_string(),
+                data: d.to_vec(),
+                file_path: None,
+            })
+            .collect();
+        let inputs: Vec<items::FormatInput<'_>> = captured
+            .iter()
+            .map(|f| items::FormatInput {
+                uti: &f.uti,
+                data: &f.data,
+                file_path: None,
+            })
+            .collect();
+        items::insert_or_update_multi(conn, &inputs, kind, title, &test_images_dir())
+            .unwrap()
+            .id
+    }
+
+    #[test]
+    fn get_item_text_plain_direct() {
+        let conn = init_db_in_memory().unwrap();
+        // 超过 TITLE_MAX_CHARS(1000)的长文本,预览面板需要全文而非截断 title
+        let long = "长".repeat(1500);
+        let id = insert_with_formats(
+            &conn,
+            &[(uti::UTI_PLAIN_TEXT, long.as_bytes())],
+            ContentKind::Text,
+            "长文本",
+        );
+        assert_eq!(get_item_text_with_conn(&conn, id).unwrap(), long);
+    }
+
+    #[test]
+    fn get_item_text_rtf_fallback() {
+        let conn = init_db_in_memory().unwrap();
+        let id = insert_with_formats(
+            &conn,
+            &[(uti::UTI_RTF, "{\\rtf1\\ansi RTF 内容}".as_bytes())],
+            ContentKind::Rich,
+            "RTF 条目",
+        );
+        let text = get_item_text_with_conn(&conn, id).unwrap();
+        assert!(text.contains("RTF 内容"), "应剥离控制词,实际: {text}");
+    }
+
+    #[test]
+    fn get_item_text_html_fallback() {
+        let conn = init_db_in_memory().unwrap();
+        let id = insert_with_formats(
+            &conn,
+            &[(uti::UTI_HTML, b"<p>Hello <b>world</b></p>".as_slice())],
+            ContentKind::Rich,
+            "HTML 条目",
+        );
+        assert_eq!(get_item_text_with_conn(&conn, id).unwrap(), "Hello world");
+    }
+
+    #[test]
+    fn get_item_text_nonexistent_not_found() {
+        let conn = init_db_in_memory().unwrap();
+        let err = get_item_text_with_conn(&conn, 9999).unwrap_err();
+        assert_eq!(err.code, codes::NOT_FOUND);
+    }
+
+    #[test]
+    fn get_item_text_no_text_format_not_found() {
+        let conn = init_db_in_memory().unwrap();
+        // 仅文件 URL 格式(无任何文本格式)→ NOT_FOUND
+        let id = insert_with_formats(
+            &conn,
+            &[(uti::UTI_FILE_URL, b"file:///tmp/a.txt".as_slice())],
+            ContentKind::File,
+            "a.txt",
+        );
+        let err = get_item_text_with_conn(&conn, id).unwrap_err();
         assert_eq!(err.code, codes::NOT_FOUND);
     }
 

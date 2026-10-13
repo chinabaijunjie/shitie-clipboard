@@ -154,7 +154,8 @@ fn find_text(formats: &[CapturedFormat], uti: &str) -> Option<String> {
 /// 提取:粗体普通文本(剥离 \xxx 控制词和 {} 结构)
 ///
 /// 这是最简实现(不引 rtf crate)。M2 标题只需可读预览,精度够用。
-fn extract_text_from_rtf(rtf: &str) -> String {
+/// 预览面板的 `get_item_text` 命令复用此函数做 rich 回退提取。
+pub fn extract_text_from_rtf(rtf: &str) -> String {
     let mut out = String::with_capacity(rtf.len());
     let chars: Vec<char> = rtf.chars().collect();
     let mut i = 0;
@@ -199,7 +200,8 @@ fn extract_text_from_rtf(rtf: &str) -> String {
 /// 从 HTML 粗提取纯文本(剥离标签)。
 ///
 /// 最简实现:`<p>Hello <b>world</b></p>` → `Hello world`
-fn extract_text_from_html(html: &str) -> String {
+/// 预览面板的 `get_item_text` 命令复用此函数做 rich 回退提取。
+pub fn extract_text_from_html(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;
 
