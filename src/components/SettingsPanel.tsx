@@ -34,7 +34,7 @@ interface SettingsPanelProps {
 }
 
 /** 下拉选项常量 */
-const MAX_ITEMS_OPTIONS = [10, 20, 50, 100, 200, 500]
+const MAX_ITEMS_OPTIONS = [10, 20, 50, 100, 200, 500, 1000]
 const RETENTION_OPTIONS = [
   { value: 0, label: '永久保留' },
   { value: 7, label: '7 天' },

@@ -15,11 +15,11 @@ import { listen } from '@tauri-apps/api/event'
 
 import { call } from '@core/api'
 import { TAURI_EVENTS } from '@core/events'
-import { ClipboardItemListSchema, ClipboardItemSchema } from '@core/types'
+import { ClipboardItemSchema, ListPageSchema } from '@core/types'
 import type { ClipboardItem } from '@core/types'
 
-/** 列表默认拉取条数(与 Rust DEFAULT_LIST_LIMIT 对齐) */
-const DEFAULT_LIMIT = 50
+/** 每页拉取条数(与 Rust DEFAULT_LIST_LIMIT 对齐;触底自动加载下一页) */
+const PAGE_SIZE = 50
 
 /**
  * 置顶优先排序(不可变)。
@@ -62,6 +62,16 @@ export function removeItem(items: ClipboardItem[], id: number): ClipboardItem[] 
 }
 
 /**
+ * 合并下一页数据(不可变更新,按 id 去重)。纯函数,可单测。
+ *
+ * 已存在的条目(滚动期间数据变化导致的边界重复)以旧列表为准,只追加新 id。
+ */
+export function mergePage(existing: ClipboardItem[], pageItems: ClipboardItem[]): ClipboardItem[] {
+  const seen = new Set(existing.map((it) => it.id))
+  return [...existing, ...pageItems.filter((it) => !seen.has(it.id))]
+}
+
+/**
  * 把指定 id 的条目移到其分区的最前(不可变更新)。纯函数,可单测。
  *
  * - 置顶条目:移到置顶区最前
@@ -94,6 +104,14 @@ export interface UseClipboardItemsResult {
   items: ClipboardItem[]
   loading: boolean
   error: string | null
+  /** 过滤口径下的命中总数(分页 total;hasMore = items.length < total) */
+  total: number
+  /** 是否还有下一页(触底加载用) */
+  hasMore: boolean
+  /** 正在加载下一页 */
+  loadingMore: boolean
+  /** 加载下一页(滚动触底/键盘接近尾部时调用;重复调用有防重入保护) */
+  loadMore: () => Promise<void>
   /** 当前搜索查询(null = 非搜索模式,显示全列表) */
   searchQuery: string | null
   /** 当前类型筛选(空数组 = 不过滤) */
@@ -114,19 +132,30 @@ export function useClipboardItems(): UseClipboardItemsResult {
   const [items, setItems] = useState<ClipboardItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [total, setTotal] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
   const [kindFilter, setKindFilterState] = useState<string[]>([])
-  // ref 跟踪 searchQuery / kindFilter,让 listen 回调和 reload(只挂载一次)能读到最新值
+  // ref 跟踪最新值,让 listen 回调、reload、loadMore(闭包只建一次)能读到当前值
   const searchQueryRef = useRef<string | null>(null)
   const kindFilterRef = useRef<string[]>([])
+  const itemsRef = useRef<ClipboardItem[]>([])
+  const totalRef = useRef(0)
+  const loadingMoreRef = useRef(false)
   useEffect(() => {
     searchQueryRef.current = searchQuery
   }, [searchQuery])
   useEffect(() => {
     kindFilterRef.current = kindFilter
   }, [kindFilter])
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
+  useEffect(() => {
+    totalRef.current = total
+  }, [total])
 
-  // 重新加载列表(用当前 searchQuery + kindFilter 的 ref 值)
+  // 重新加载列表第 0 页(用当前 searchQuery + kindFilter 的 ref 值)
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -134,9 +163,11 @@ export function useClipboardItems(): UseClipboardItemsResult {
       const q = searchQueryRef.current
       const kinds = kindFilterRef.current
       const raw = q
-        ? await call<unknown>('search_items', { query: q, limit: DEFAULT_LIMIT })
-        : await call<unknown>('list_items', { limit: DEFAULT_LIMIT, kinds: kinds.length > 0 ? kinds : undefined })
-      setItems(ClipboardItemListSchema.parse(raw))
+        ? await call<unknown>('search_items', { query: q, limit: PAGE_SIZE, offset: 0 })
+        : await call<unknown>('list_items', { limit: PAGE_SIZE, offset: 0, kinds: kinds.length > 0 ? kinds : undefined })
+      const page = ListPageSchema.parse(raw)
+      setItems(page.items)
+      setTotal(page.total)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -144,17 +175,45 @@ export function useClipboardItems(): UseClipboardItemsResult {
     }
   }, [])
 
-  // 初次加载 + 监听实时更新(只挂载一次,依赖 [])
+  // 加载下一页(触底/键盘接近尾部调用)。
+  // 失败不弹错误屏(列表已在展示,追加失败仅记录日志,保留 hasMore 让用户可再触发重试)。
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current) return
+    const existing = itemsRef.current
+    if (existing.length >= totalRef.current) return // 没有下一页
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    try {
+      const q = searchQueryRef.current
+      const kinds = kindFilterRef.current
+      const raw = q
+        ? await call<unknown>('search_items', { query: q, limit: PAGE_SIZE, offset: existing.length })
+        : await call<unknown>('list_items', { limit: PAGE_SIZE, offset: existing.length, kinds: kinds.length > 0 ? kinds : undefined })
+      // 请求期间用户切换了搜索/筛选 → 这页已过期,丢弃(refresh 会重置到第 0 页)
+      if (searchQueryRef.current !== q || kindFilterRef.current !== kinds) return
+      const page = ListPageSchema.parse(raw)
+      setItems((prev) => mergePage(prev, page.items))
+      setTotal(page.total)
+    } catch (e) {
+      console.error('[clipboard] 加载下一页失败:', e)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [])
+
+  // 初次加载第 0 页 + 监听实时更新(只挂载一次,依赖 [])
   useEffect(() => {
     let cancelled = false
 
     const load = async () => {
       try {
-        const raw = await call<unknown>('list_items', { limit: DEFAULT_LIMIT })
+        const raw = await call<unknown>('list_items', { limit: PAGE_SIZE, offset: 0 })
         // §8 边界校验:后端响应进入即用 Zod 校验,畸形数据快速失败
-        const list = ClipboardItemListSchema.parse(raw)
+        const page = ListPageSchema.parse(raw)
         if (!cancelled) {
-          setItems(list)
+          setItems(page.items)
+          setTotal(page.total)
           setLoading(false)
         }
       } catch (e) {
@@ -186,6 +245,7 @@ export function useClipboardItems(): UseClipboardItemsResult {
           if (!matches) return
         }
         setItems((prev) => applyAddedItem(prev, item))
+        setTotal((t) => t + 1)
       } catch (e) {
         console.error('[clipboard] added 事件 payload 校验失败:', e)
       }
@@ -201,8 +261,9 @@ export function useClipboardItems(): UseClipboardItemsResult {
 
   const deleteItem = useCallback(async (id: number) => {
     await call('delete_item', { id })
-    // 后端确认成功后,移除本地(不可变更新)
+    // 后端确认成功后,移除本地(不可变更新)+ 同步 total
     setItems((prev) => removeItem(prev, id))
+    setTotal((t) => Math.max(0, t - 1))
   }, [])
 
   // 设置类型筛选(同时同步 ref + 触发重新加载)
@@ -223,8 +284,10 @@ export function useClipboardItems(): UseClipboardItemsResult {
       setLoading(true)
       try {
         const kinds = kindFilterRef.current
-        const raw = await call<unknown>('list_items', { limit: DEFAULT_LIMIT, kinds: kinds.length > 0 ? kinds : undefined })
-        setItems(ClipboardItemListSchema.parse(raw))
+        const raw = await call<unknown>('list_items', { limit: PAGE_SIZE, offset: 0, kinds: kinds.length > 0 ? kinds : undefined })
+        const page = ListPageSchema.parse(raw)
+        setItems(page.items)
+        setTotal(page.total)
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -235,8 +298,10 @@ export function useClipboardItems(): UseClipboardItemsResult {
     setSearchQuery(trimmed)
     setLoading(true)
     try {
-      const raw = await call<unknown>('search_items', { query: trimmed, limit: DEFAULT_LIMIT })
-      setItems(ClipboardItemListSchema.parse(raw))
+      const raw = await call<unknown>('search_items', { query: trimmed, limit: PAGE_SIZE, offset: 0 })
+      const page = ListPageSchema.parse(raw)
+      setItems(page.items)
+      setTotal(page.total)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -264,5 +329,5 @@ export function useClipboardItems(): UseClipboardItemsResult {
     )
   }, [])
 
-  return { items, loading, error, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront: moveToFrontAction, togglePin }
+  return { items, loading, error, total, hasMore: items.length < total, loadingMore, loadMore, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront: moveToFrontAction, togglePin }
 }

@@ -1,21 +1,19 @@
 /**
- * useClipboardItems 单测 — 列表数据逻辑 + 搜索状态机
+ * useClipboardItems 单测 — 列表数据逻辑 + 搜索状态机 + 分页加载
  *
  * 测试覆盖(随写随测 §1.22):
- * - 纯函数 applyAddedItem:新条目前置 / 已存在则更新并前置 / 不可变
- * - 纯函数 removeItem:按 id 移除 / 不可变
- * - 搜索状态机(test-analyzer 7/10 建议):
- *   - 搜索模式忽略 added 事件(searchQueryRef 闭包防过时)
- *   - 非搜索模式接收 added 事件
- *   - search('') 清空搜索回退全列表
- *   - search 引用稳定(防 debounce 闪烁)
+ * - 纯函数 applyAddedItem / removeItem / mergePage:不可变 + 去重
+ * - 搜索状态机(test-analyzer 7/10 建议):搜索模式忽略 added / search('') 回退 / 引用稳定
+ * - 分页:初次加载 ListPage / loadMore 追加去重 / hasMore 边界 / added 与删除同步 total
  *
  * mock 策略:@tauri-apps/api/event 的 listen、@core/api 的 call。
+ * call mock 的返回值:数组 → 自动包成 {items, total}(兼容旧用例);
+ * 函数 → 以 invoke args 调用后取返回值(分页按 offset 出不同页)。
  */
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { applyAddedItem, moveToFront, removeItem, sortByPinned, useClipboardItems } from './useClipboardItems'
+import { applyAddedItem, mergePage, moveToFront, removeItem, sortByPinned, useClipboardItems } from './useClipboardItems'
 import type { ClipboardItem } from '@core/types'
 
 // ============================================================
@@ -27,7 +25,7 @@ import type { ClipboardItem } from '@core/types'
 const mockState = vi.hoisted(() => ({
   /** 捕获 listen 注册的回调(测试中手动触发,模拟后端 emit)。 */
   listenCallback: null as ((event: { payload: unknown }) => void) | null,
-  /** call mock:按命令名返回不同数据。测试中可覆写。 */
+  /** call mock:按命令名返回数据。数组自动包 ListPage;函数按 args 求值。 */
   callData: {} as Record<string, unknown>,
 }))
 
@@ -41,8 +39,11 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 vi.mock('@core/api', () => ({
-  call: vi.fn(async (cmd: string) => {
-    return mockState.callData[cmd] ?? []
+  call: vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
+    const data = mockState.callData[cmd]
+    const resolved = typeof data === 'function' ? (data as (a: unknown) => unknown)(args) : data
+    if (resolved === undefined) return { items: [], total: 0 }
+    return Array.isArray(resolved) ? { items: resolved, total: resolved.length } : resolved
   }),
 }))
 
@@ -151,6 +152,35 @@ describe('removeItem', () => {
 
     removeItem(original, 1)
 
+    expect(original).toEqual(snapshot)
+  })
+})
+
+describe('mergePage(分页追加去重)', () => {
+  it('新 id → 追加到尾部', () => {
+    const existing = [makeItem(1, 'A'), makeItem(2, 'B')]
+    const result = mergePage(existing, [makeItem(3, 'C'), makeItem(4, 'D')])
+    expect(result.map((i) => i.id)).toEqual([1, 2, 3, 4])
+  })
+
+  it('滚动期间数据变化的边界重复 id → 以旧列表为准,不重复追加', () => {
+    const existing = [makeItem(1, 'A'), makeItem(2, 'B')]
+    // 第 2 页里混入了已有 id=2(期间该条被更新过)
+    const result = mergePage(existing, [makeItem(2, 'B-新'), makeItem(3, 'C')])
+    expect(result.map((i) => i.id)).toEqual([1, 2, 3])
+    expect(result[1].title).toBe('B') // 旧列表条目保留
+  })
+
+  it('整页重复(重复触发)→ 列表不变', () => {
+    const existing = [makeItem(1, 'A')]
+    const result = mergePage(existing, [makeItem(1, 'A')])
+    expect(result).toHaveLength(1)
+  })
+
+  it('不可变性:不修改原数组', () => {
+    const original = [makeItem(1, 'A')]
+    const snapshot = [...original]
+    mergePage(original, [makeItem(2, 'B')])
     expect(original).toEqual(snapshot)
   })
 })
@@ -360,6 +390,88 @@ describe('useClipboardItems 搜索状态机', () => {
 
     expect(result.current.items).toHaveLength(2)
     expect(result.current.items[0].id).toBe(2)
+  })
+})
+
+// ============================================================
+// 分页加载测试(renderHook)
+// ============================================================
+
+describe('useClipboardItems 分页加载', () => {
+  /** 造一批连续 id 的条目 */
+  function makeRange(from: number, to: number): ClipboardItem[] {
+    return Array.from({ length: to - from + 1 }, (_, i) => makeItem(from + i, `条目${from + i}`))
+  }
+
+  it('初次加载 ListPage:items + total + hasMore', async () => {
+    mockState.callData = {
+      list_items: { items: makeRange(1, 50), total: 120 },
+    }
+    const { result } = renderHook(() => useClipboardItems())
+    await flushAsync()
+
+    expect(result.current.items).toHaveLength(50)
+    expect(result.current.total).toBe(120)
+    expect(result.current.hasMore).toBe(true)
+    expect(result.current.loadingMore).toBe(false)
+  })
+
+  it('total 不大于已加载数 → hasMore false', async () => {
+    mockState.callData = {
+      list_items: { items: makeRange(1, 3), total: 3 },
+    }
+    const { result } = renderHook(() => useClipboardItems())
+    await flushAsync()
+
+    expect(result.current.hasMore).toBe(false)
+    // 无下一页时 loadMore 不发请求(callData 计数不变 — 通过 items/total 稳定验证)
+    await act(async () => {
+      await result.current.loadMore()
+    })
+    expect(result.current.items).toHaveLength(3)
+  })
+
+  it('loadMore:按 offset 拉下一页并追加(去重)', async () => {
+    mockState.callData = {
+      list_items: (args: { offset?: number } | undefined) =>
+        (args?.offset ?? 0) === 0
+          ? { items: makeRange(1, 50), total: 52 }
+          : { items: [makeItem(50, '条目50'), ...makeRange(51, 52)], total: 52 }, // 故意混入边界重复 id=50
+    }
+    const { result } = renderHook(() => useClipboardItems())
+    await flushAsync()
+    expect(result.current.items).toHaveLength(50)
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    // 第 2 页混入 id=50 重复 → 去重后只追加 51/52
+    expect(result.current.items).toHaveLength(52)
+    expect(result.current.items.map((i) => i.id)).toEqual([...Array.from({ length: 50 }, (_, i) => i + 1), 51, 52])
+    expect(result.current.hasMore).toBe(false)
+  })
+
+  it('added 事件 → total 同步 +1;删除 → total 同步 -1', async () => {
+    mockState.callData = {
+      list_items: { items: makeRange(1, 2), total: 2 },
+    }
+    const { result } = renderHook(() => useClipboardItems())
+    await flushAsync()
+
+    act(() => {
+      mockState.listenCallback?.({ payload: makeItem(99, '新') })
+    })
+    // 新条目入列表,total 同步增长(items 3 / total 3,hasMore 仍 false)
+    expect(result.current.total).toBe(3)
+    expect(result.current.items).toHaveLength(3)
+    expect(result.current.hasMore).toBe(false)
+
+    await act(async () => {
+      await result.current.deleteItem(99)
+    })
+    expect(result.current.total).toBe(2)
+    expect(result.current.items).toHaveLength(2)
   })
 })
 

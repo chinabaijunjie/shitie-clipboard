@@ -60,16 +60,26 @@ interface SpotlightPanelProps {
 }
 
 export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
-  const { items, loading, error, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront, togglePin } = useClipboardItems()
+  const { items, loading, error, total, hasMore, loadingMore, loadMore, searchQuery, kindFilter, setKindFilter, deleteItem, search, moveToFront, togglePin } = useClipboardItems()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [probe, setProbe] = useState<ProbeStatus>('checking')
   const [actionError, setActionError] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const listScrollRef = useRef<HTMLDivElement>(null)
   const [searchText, setSearchText] = useState('')
 
   // 右侧预览区:当前选中条目 + 应展示文本(title 被截断的超长条目自动拉全文)
   const selectedItem = items[selectedIndex] ?? null
   const fullText = useItemFullText(selectedItem)
+
+  // 列表滚动触底(距底 < 200px)→ 加载下一页
+  const handleListScroll = useCallback(() => {
+    const el = listScrollRef.current
+    if (!el || !hasMore || loadingMore) return
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
+      void loadMore()
+    }
+  }, [hasMore, loadingMore, loadMore])
 
   /** 设置操作错误(回填/删除失败时),3 秒后自动清除 */
   const showActionError = useCallback((msg: string) => {
@@ -207,7 +217,12 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
         case 'ArrowDown':
           if (items.length === 0) return
           e.preventDefault()
-          setSelectedIndex((i) => nextIndex(i, 1, items.length))
+          setSelectedIndex((i) => {
+            const next = nextIndex(i, 1, items.length)
+            // 接近已加载尾部(剩 3 条内)→ 预加载下一页,保证连续导航不断档
+            if (hasMore && next >= items.length - 3) void loadMore()
+            return next
+          })
           break
         case 'Enter':
           if (items.length === 0) return
@@ -230,7 +245,7 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [items.length, selectedIndex, handleCopyBack, handleDelete, handleTogglePin])
+  }, [items.length, selectedIndex, handleCopyBack, handleDelete, handleTogglePin, hasMore, loadMore])
 
   return (
     <div
@@ -331,8 +346,12 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
             </div>
           </div>
 
-          {/* 列表区(可滚动 + 隐形细滚动条 + 禁止横向溢出) */}
-          <div className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden py-1">
+          {/* 列表区(可滚动 + 隐形细滚动条 + 禁止横向溢出;触底自动加载下一页) */}
+          <div
+            ref={listScrollRef}
+            onScroll={handleListScroll}
+            className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden py-1"
+          >
             {error ? (
               <p className="py-8 text-center text-xs text-destructive">加载失败:{error}</p>
             ) : loading ? (
@@ -344,6 +363,12 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
                 onSelect={setSelectedIndex}
                 onCopyBack={(index) => void handleCopyBack(index)}
               />
+            )}
+            {/* 触底加载指示:加载中 / 已全部加载(total 仅在非空时有意义) */}
+            {!error && !loading && items.length > 0 && (
+              <p className="py-2 text-center text-[10px] text-text-tertiary select-none">
+                {loadingMore ? '加载中…' : hasMore ? '↓ 继续下滑加载更多' : `已加载全部 ${total} 条`}
+              </p>
             )}
           </div>
         </div>

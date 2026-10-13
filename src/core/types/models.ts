@@ -37,6 +37,18 @@ export const ClipboardItemSchema = z.object({
 /** 列表的 Zod schema */
 export const ClipboardItemListSchema = z.array(ClipboardItemSchema)
 
+/** 分页列表响应的 Zod schema(list_items / search_items 返回,§8 边界校验)。
+ *  镜像 Rust models.rs 的 ListPage(camelCase)。 */
+export const ListPageSchema = z.object({
+  items: ClipboardItemListSchema,
+  total: z.number().int().nonnegative(),
+})
+
+export interface ListPage {
+  readonly items: ClipboardItem[]
+  readonly total: number
+}
+
 export interface ClipboardItem {
   readonly id: number
   /** 首次复制时间(unix epoch ms) */
