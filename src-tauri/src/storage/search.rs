@@ -111,6 +111,7 @@ fn escape_fts_phrase(token: &str) -> String {
 ///
 /// 查询策略:
 /// - 空查询 → 返回空列表(调用方可用 list 替代)
+/// - 纯 ASCII 字母数字 → 三路 LIKE(search_text / pinyin_full / pinyin_initials)
 /// - 单字查询 → `LIKE '%字%'` 兜底(bigram 对单字不可靠)
 /// - 多字查询 → bigram 预处理 → FTS MATCH + BM25 排序
 ///
@@ -128,7 +129,14 @@ pub fn search(
         return Ok(Vec::new());
     }
 
-    let mut results = if is_single_char_query(trimmed) {
+    let mut results = if is_ascii_alnum_query(trimmed) {
+        // 拼音直搜:全量合并后内存分页(FTS BM25 在前 + 三路 LIKE 去重追加)
+        search_by_pinyin_all(conn, trimmed)?
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect::<Vec<_>>()
+    } else if is_single_char_query(trimmed) {
         search_by_like(conn, trimmed, limit, offset)?
     } else {
         search_by_fts(conn, trimmed, limit, offset)?
@@ -147,7 +155,11 @@ pub fn count(conn: &Connection, query: &str) -> Result<i64, AppError> {
     if trimmed.is_empty() {
         return Ok(0);
     }
-    if is_single_char_query(trimmed) {
+    if is_ascii_alnum_query(trimmed) {
+        // 与 search 同源:全量合并后取长度(total = FTS + LIKE 去重并集)
+        let total = search_by_pinyin_all(conn, trimmed)?.len() as i64;
+        Ok(total)
+    } else if is_single_char_query(trimmed) {
         let pattern = format!("%{trimmed}%");
         conn.query_row(
             "SELECT COUNT(*) FROM clipboard_items WHERE search_text LIKE ?1",
@@ -166,6 +178,53 @@ pub fn count(conn: &Connection, query: &str) -> Result<i64, AppError> {
         )
         .map_err(|e| AppError::internal(format!("fts count 查询失败: {e}")))
     }
+}
+
+/// 查询是否为纯 ASCII 字母数字(拼音直搜路由判据)。
+///
+/// 这类查询走「三路 LIKE」:search_text(英文内容)OR pinyin_full(全拼)OR
+/// pinyin_initials(首母)——英文内容搜索行为保持,叠加拼音命中。
+pub fn is_ascii_alnum_query(query: &str) -> bool {
+    !query.is_empty() && query.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// 拼音直搜(纯 ASCII 查询):返回**全部**命中(调用方负责分页切片)。
+///
+/// 合并策略(Rust 侧两段,不用 SQL UNION):
+/// 1. FTS 命中在前——保留 BM25 相关性排序,英文搜索质量不回退
+///    (bm25() 不能出现在 LEFT JOIN 非匹配行的排序里,单 SQL 方案实测报 no such cursor)
+/// 2. 三路 LIKE 命中(search_text / pinyin_full / pinyin_initials)按 id 去重后追加,
+///    置顶优先、最近复制靠前
+///
+/// 当前量级(≤1000 行)全量取回为毫秒级;条数级增长后再考虑下推 SQL。
+fn search_by_pinyin_all(conn: &Connection, query: &str) -> Result<Vec<ClipboardItem>, AppError> {
+    let pattern = format!("%{}%", query.to_lowercase());
+
+    // 1. FTS 命中(全量,BM25 排序)
+    let mut merged = search_by_fts(conn, query, i64::MAX, 0)?;
+    let mut seen: std::collections::HashSet<i64> = merged.iter().map(|i| i.id).collect();
+
+    // 2. 三路 LIKE 命中(去重后追加)
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
+             FROM clipboard_items \
+             WHERE (search_text LIKE ?1 OR pinyin_full LIKE ?1 OR pinyin_initials LIKE ?1) \
+             ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC, id DESC",
+        )
+        .map_err(|e| AppError::internal(format!("prepare pinyin search 失败: {e}")))?;
+
+    let rows = stmt
+        .query_map(params![&pattern], row_to_item)
+        .map_err(|e| AppError::internal(format!("pinyin search 查询失败: {e}")))?;
+    for row in rows {
+        let item = row.map_err(|e| AppError::internal(format!("读 pinyin 命中行失败: {e}")))?;
+        if !seen.contains(&item.id) {
+            seen.insert(item.id);
+            merged.push(item);
+        }
+    }
+    Ok(merged)
 }
 
 /// FTS + BM25 搜索(多字查询)。
@@ -227,6 +286,7 @@ fn collect_items(
 mod tests {
     use super::*;
     use crate::storage::init_db_in_memory;
+    use crate::storage::items;
 
     /// 测试用 images_dir(临时目录,搜索测试不实际写图,但 fill_image_fields 签名要求传)。
     fn test_images_dir() -> std::path::PathBuf {
@@ -385,5 +445,68 @@ mod tests {
         let r = search(&conn, "rust", 50, 0, &test_images_dir()).unwrap();
         assert_eq!(r[0].title, "rust x3", "词频高的应排前(BM25)");
         assert_eq!(r[1].title, "rust x1");
+    }
+
+    // ============================================================
+    // 拼音直搜(纯 ASCII 查询三路 LIKE + FTS 合并)
+    // ============================================================
+
+    /// 构造带拼音列的数据:中文条目(可以)+ 英文条目(hello)
+    fn setup_pinyin_data() -> Connection {
+        let conn = init_db_in_memory().expect("init 失败");
+        let dir = test_images_dir();
+        // 走正式 insert 路径(拼音列由 compute_pinyin 计算)
+        items::insert_or_update(&conn, "可以复制", &dir).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        items::insert_or_update(&conn, "hello world", &dir).unwrap();
+        conn
+    }
+
+    #[test]
+    fn pinyin_search_full_pinyin() {
+        let conn = setup_pinyin_data();
+        let r = search(&conn, "keyi", 50, 0, &test_images_dir()).unwrap();
+        assert_eq!(r.len(), 1, "全拼 keyi 应命中「可以复制」");
+        assert_eq!(r[0].title, "可以复制");
+    }
+
+    #[test]
+    fn pinyin_search_initials() {
+        let conn = setup_pinyin_data();
+        let r = search(&conn, "ky", 50, 0, &test_images_dir()).unwrap();
+        assert_eq!(r.len(), 1, "首母 ky 应命中「可以复制」");
+        assert_eq!(r[0].title, "可以复制");
+    }
+
+    #[test]
+    fn pinyin_search_case_insensitive() {
+        let conn = setup_pinyin_data();
+        let r = search(&conn, "KEYI", 50, 0, &test_images_dir()).unwrap();
+        assert_eq!(r.len(), 1, "LIKE 大小写不敏感,KEYI 应命中");
+    }
+
+    #[test]
+    fn pinyin_search_english_content_not_regressed() {
+        let conn = setup_pinyin_data();
+        let r = search(&conn, "hello", 50, 0, &test_images_dir()).unwrap();
+        assert_eq!(r.len(), 1, "英文内容搜索不回归");
+        assert_eq!(r[0].title, "hello world");
+    }
+
+    #[test]
+    fn pinyin_search_count_matches_results() {
+        let conn = setup_pinyin_data();
+        let r = search(&conn, "keyi", 50, 0, &test_images_dir()).unwrap();
+        let total = count(&conn, "keyi").unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(r.len() as i64, total);
+    }
+
+    #[test]
+    fn pinyin_search_no_match_empty() {
+        let conn = setup_pinyin_data();
+        let r = search(&conn, "zzzz", 50, 0, &test_images_dir()).unwrap();
+        assert!(r.is_empty());
+        assert_eq!(count(&conn, "zzzz").unwrap(), 0);
     }
 }

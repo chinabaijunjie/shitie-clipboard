@@ -115,6 +115,27 @@ pub fn truncate_title(text: &str) -> String {
     text.chars().take(TITLE_MAX_CHARS).collect()
 }
 
+/// 标题转拼音(拼音直搜用,纯函数)。
+///
+/// 仅 CJK 字符参与:full = 逐字全拼连写(可以 → keyi);initials = 各字首母(ky)。
+/// 非 CJK 字符跳过(英文内容已由 search_text 覆盖)。
+/// 多音字取 pinyin 库默认读音,v1 接受。
+pub fn compute_pinyin(title: &str) -> (String, String) {
+    use pinyin::ToPinyin;
+    let mut full = String::with_capacity(title.len());
+    let mut initials = String::new();
+    for ch in title.chars() {
+        if let Some(p) = ch.to_pinyin() {
+            let plain = p.plain();
+            full.push_str(plain);
+            if let Some(first) = plain.chars().next() {
+                initials.push(first);
+            }
+        }
+    }
+    (full, initials)
+}
+
 /// 存储统计(设置面板「存储」模块用,序列化给前端)。
 ///
 /// `by_kind` 按 contentKind 分组计数;`link` / `markdown` 是预留位,
@@ -179,6 +200,21 @@ mod tests {
     #[test]
     fn truncate_title_keeps_short_text_intact() {
         assert_eq!(truncate_title("短文本"), "短文本");
+    }
+
+    #[test]
+    fn compute_pinyin_full_and_initials() {
+        // CJK:可以 → keyi / ky
+        assert_eq!(compute_pinyin("可以"), ("keyi".to_string(), "ky".to_string()));
+        // 非 CJK 字符跳过(英文内容由 search_text 覆盖)
+        assert_eq!(compute_pinyin("可以OK搜索"), ("keyisousuo".to_string(), "kyss".to_string()));
+    }
+
+    #[test]
+    fn compute_pinyin_non_cjk_and_empty() {
+        // 纯英文 → 空(不产生拼音)
+        assert_eq!(compute_pinyin("hello"), (String::new(), String::new()));
+        assert_eq!(compute_pinyin(""), (String::new(), String::new()));
     }
 
     #[test]

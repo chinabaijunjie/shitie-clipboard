@@ -57,6 +57,7 @@ pub fn insert_or_update(
     let title = truncate_title(text);
     let text_bytes = text.as_bytes();
     let search_text = bigram_cjk(text);
+    let (pinyin_full, pinyin_initials) = crate::models::compute_pinyin(&title);
 
     // 先查是否已存在相同文本的条目
     let existing_id: Option<i64> = conn
@@ -85,9 +86,9 @@ pub fn insert_or_update(
             let subtype_str = if subtype.is_some() { Some(subtype.as_db_str()) } else { None };
             conn.execute(
                 "INSERT INTO clipboard_items \
-                 (first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, search_text) \
-                 VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6)",
-                params![now, now, title, ContentKind::Text.as_db_str(), subtype_str, &search_text],
+                 (first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, search_text, pinyin_full, pinyin_initials) \
+                 VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![now, now, title, ContentKind::Text.as_db_str(), subtype_str, &search_text, &pinyin_full, &pinyin_initials],
             )
             .map_err(|e| AppError::internal(format!("INSERT items 失败: {e}")))?;
             let new_id = conn.last_insert_rowid();
@@ -174,6 +175,7 @@ pub fn insert_or_update_multi(
 ) -> Result<ClipboardItem, AppError> {
     let now = now_epoch_ms();
     let title = truncate_title(title);
+    let (pinyin_full, pinyin_initials) = crate::models::compute_pinyin(&title);
 
     // search_text:从纯文本格式提取 → bigram;无文本格式则空
     let plain_text = formats
@@ -258,9 +260,9 @@ pub fn insert_or_update_multi(
 
             tx.execute(
                 "INSERT INTO clipboard_items \
-                 (first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, search_text) \
-                 VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6)",
-                params![now, now, &title, kind.as_db_str(), subtype_str, &search_text],
+                 (first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, search_text, pinyin_full, pinyin_initials) \
+                 VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![now, now, &title, kind.as_db_str(), subtype_str, &search_text, &pinyin_full, &pinyin_initials],
             )
             .map_err(|e| AppError::internal(format!("INSERT items 失败: {e}")))?;
             let new_id = tx.last_insert_rowid();

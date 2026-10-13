@@ -29,6 +29,116 @@ use crate::window_control::MAIN_WINDOW;
 /// show 前延迟(等窗口几何应用完,避免闪烁。EcoPaste 经验值)。
 const PANEL_SHOW_DELAY: Duration = Duration::from_millis(16);
 
+// ============================================================
+// 输入源自动切换(拼音直搜配套)
+// ============================================================
+//
+// 面板显示 → 切到 ABC(英文)布局:搜索框直接接收原始字母,配合后端拼音直搜
+// (pinyin_full/pinyin_initials)完成中文内容检索——全屏 Space 下系统输入法
+// 候选窗不渲染的问题由此彻底绕开。面板隐藏 → 恢复用户原输入源。
+
+/// 面板打开期间保存的用户原输入源 ID
+static SAVED_INPUT_SOURCE_ID: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+const ABC_INPUT_SOURCE_ID: &str = "com.apple.keylayout.ABC";
+const K_CF_STRING_UTF8: u32 = 0x08000100;
+
+#[link(name = "Carbon", kind = "framework")]
+extern "C" {
+    static kTISPropertyInputSourceID: *const std::ffi::c_void;
+    fn TISCreateInputSourceList(filterProperties: *const std::ffi::c_void, includeAllInstalled: u8) -> *const std::ffi::c_void;
+    fn TISGetInputSourceProperty(source: *const std::ffi::c_void, propertyKey: *const std::ffi::c_void) -> *const std::ffi::c_void;
+    fn TISSelectInputSource(source: *const std::ffi::c_void) -> i32;
+    fn TISCopyCurrentKeyboardInputSource() -> *const std::ffi::c_void;
+    fn CFStringCreateWithCString(alloc: *const std::ffi::c_void, cStr: *const std::ffi::c_char, encoding: u32) -> *const std::ffi::c_void;
+    fn CFStringGetLength(string: *const std::ffi::c_void) -> isize;
+    fn CFStringGetCString(string: *const std::ffi::c_void, buffer: *mut std::ffi::c_char, bufferSize: isize, encoding: u32) -> u8;
+    fn CFArrayGetCount(array: *const std::ffi::c_void) -> isize;
+    fn CFArrayGetValueAtIndex(array: *const std::ffi::c_void, index: isize) -> *const std::ffi::c_void;
+}
+
+/// Rust String → CFString(调用方负责释放)
+unsafe fn cf_string(s: &str) -> *const std::ffi::c_void {
+    let c = std::ffi::CString::new(s).unwrap_or_default();
+    CFStringCreateWithCString(std::ptr::null(), c.as_ptr(), K_CF_STRING_UTF8)
+}
+
+/// CFString → Rust String
+unsafe fn cf_to_string(s: *const std::ffi::c_void) -> String {
+    if s.is_null() {
+        return String::new();
+    }
+    let len = CFStringGetLength(s);
+    let max = len * 4 + 1;
+    let mut buf = vec![0u8; max as usize];
+    let ok = CFStringGetCString(s, buf.as_mut_ptr() as *mut std::ffi::c_char, max, K_CF_STRING_UTF8);
+    if ok == 0 {
+        return String::new();
+    }
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[..end]).into_owned()
+}
+
+/// 按输入源 ID 找启用的输入源
+fn find_enabled_input_source(id: &str) -> Option<*const std::ffi::c_void> {
+    unsafe {
+        let list = TISCreateInputSourceList(std::ptr::null(), 0);
+        if list.is_null() {
+            return None;
+        }
+        let id_cf = cf_string(id);
+        let count = CFArrayGetCount(list);
+        for i in 0..count {
+            let src = CFArrayGetValueAtIndex(list, i);
+            let src_id = cf_to_string(TISGetInputSourceProperty(src, kTISPropertyInputSourceID as *const _));
+            if src_id == id {
+                return Some(src);
+            }
+        }
+    }
+    None
+}
+
+/// 保存当前输入源并切到 ABC(面板显示时调用;主线程)
+fn switch_to_abc_and_save() {
+    unsafe {
+        // 已保存过(面板重复 show)不覆盖用户原输入源
+        if SAVED_INPUT_SOURCE_ID.lock().unwrap().is_some() {
+            return;
+        }
+        let current = TISCopyCurrentKeyboardInputSource();
+        let current_id = cf_to_string(TISGetInputSourceProperty(current, kTISPropertyInputSourceID as *const _));
+        *SAVED_INPUT_SOURCE_ID.lock().unwrap() = Some(current_id);
+    }
+    if let Some(abc) = find_enabled_input_source(ABC_INPUT_SOURCE_ID) {
+        unsafe {
+            let status = TISSelectInputSource(abc);
+            if status != 0 {
+                log::warn!("[input-source] 切到 ABC 失败: status={status}");
+            }
+        }
+    } else {
+        log::warn!("[input-source] 未找到启用的 ABC 布局,跳过切换");
+    }
+}
+
+/// 恢复用户原输入源(面板隐藏时调用;主线程)
+fn restore_input_source() {
+    let saved = SAVED_INPUT_SOURCE_ID.lock().unwrap().take();
+    if let Some(id) = saved {
+        if id != ABC_INPUT_SOURCE_ID {
+            if let Some(src) = find_enabled_input_source(&id) {
+                unsafe {
+                    let status = TISSelectInputSource(src);
+                    if status != 0 {
+                        log::warn!("[input-source] 恢复输入源 {id} 失败: status={status}");
+                    }
+                }
+            }
+        }
+    }
+}
+
 // 定义 NSPanel 子类 + 失焦 delegate。
 //
 // - `can_become_key_window: true` — NSPanel 默认返回 NO,必须 override 成 true 才能接收键盘
@@ -144,6 +254,9 @@ pub fn show_panel<R: Runtime>(app: &AppHandle<R>) {
                 // 所在 Space 正常显示;面板本身是 auxiliary,不会挤走全屏应用
                 // (Raycast 同款行为:全屏唤出时菜单栏切到面板 app)。
                 activate_app();
+                // 拼音直搜配套:切到 ABC 布局,搜索框直接接收原始字母
+                // (全屏 Space 下系统输入法候选窗不渲染,拼音查询在 ABC 下完成)
+                switch_to_abc_and_save();
             } else {
                 log::warn!("[panel] show: 找不到 panel(未 setup?)");
             }
@@ -164,7 +277,7 @@ fn activate_app() {
     }
 }
 
-/// hide panel(主线程 + 切回 move_to_active_space)。
+/// hide panel(主线程 + 切回 move_to_active_space + 恢复用户输入源)。
 pub fn hide_panel<R: Runtime>(app: &AppHandle<R>) {
     let handle = app.clone();
     let inner = handle.clone();
@@ -179,5 +292,7 @@ pub fn hide_panel<R: Runtime>(app: &AppHandle<R>) {
                 .into();
             panel.set_collection_behavior(behavior);
         }
+        // 拼音直搜配套:恢复用户原输入源
+        restore_input_source();
     });
 }

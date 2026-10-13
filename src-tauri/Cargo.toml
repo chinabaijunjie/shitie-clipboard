@@ -44,6 +44,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-store = "2"
 # 单实例保护:防止多个进程同时运行(Windows 开机自启 + 手动启动叠加)
 single-instance = "0.3"
+pinyin = "0.10"
 
 # macOS 全屏悬浮支持:tauri-nspanel 用 isa-swizzle 把 NSWindow 转成 NSPanel 子类,
 # 获得 nonactivatingPanel + canBecomeKeyWindow 能力,能悬浮在全屏应用之上。

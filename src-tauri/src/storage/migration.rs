@@ -13,7 +13,7 @@
 //! 注:版本号跳过 1(0 → 2),与 m2-research 的 CURRENT_SCHEMA_VERSION=2 对齐,
 //! 为未来小幅变更留余地。
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 
 use crate::clipboard::classify::{detect_subtype, ContentSubtype};
 use crate::error::AppError;
@@ -21,7 +21,7 @@ use crate::storage::fts;
 use crate::storage::search::bigram_cjk;
 
 /// 当前 schema 版本。每次 schema 变更 bump 这个值 + 在 migrate 里加分支。
-pub const CURRENT_SCHEMA_VERSION: i64 = 4;
+pub const CURRENT_SCHEMA_VERSION: i64 = 5;
 
 /// 跑增量迁移,把 DB 升级到 CURRENT_SCHEMA_VERSION。
 ///
@@ -40,6 +40,10 @@ pub fn migrate(conn: &Connection) -> Result<(), AppError> {
 
     if current < 4 {
         migrate_to_v4(conn)?;
+    }
+
+    if current < 5 {
+        migrate_to_v5(conn)?;
     }
 
     // 兜底:若库的 user_version 已超过 CURRENT(不应发生),记 warn 但不阻断。
@@ -332,6 +336,67 @@ fn write_version(conn: &Connection, version: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+/// v5:拼音直搜 — 加 pinyin_full / pinyin_initials 两列并按 title 回填存量行。
+fn migrate_to_v5(conn: &Connection) -> Result<(), AppError> {
+    log::info!("[migration] 升级到 schema v5(pinyin 直搜列)");
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| AppError::internal(format!("开启 migration v5 事务失败: {e}")))?;
+
+    let result = migrate_to_v5_inner(&tx);
+    match result {
+        Ok(()) => {
+            tx.commit()
+                .map_err(|e| AppError::internal(format!("migration v5 commit 失败: {e}")))?;
+            log::info!("[migration] schema v5 升级完成");
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("[migration] schema v5 升级失败,已回滚: {}", e.message);
+            Err(e)
+        }
+    }
+}
+
+fn migrate_to_v5_inner(conn: &Connection) -> Result<(), AppError> {
+    // 1. 加两列拼音(NOT NULL DEFAULT '',旧行回填前为空串)
+    conn.execute(
+        "ALTER TABLE clipboard_items ADD COLUMN pinyin_full TEXT NOT NULL DEFAULT ''",
+        [],
+    )
+    .map_err(|e| AppError::internal(format!("ALTER TABLE 加 pinyin_full 失败: {e}")))?;
+    conn.execute(
+        "ALTER TABLE clipboard_items ADD COLUMN pinyin_initials TEXT NOT NULL DEFAULT ''",
+        [],
+    )
+    .map_err(|e| AppError::internal(format!("ALTER TABLE 加 pinyin_initials 失败: {e}")))?;
+
+    // 2. 回填存量行:按 title 计算拼音(逐行 UPDATE,当前量级 ≤1000 行毫秒级)
+    let rows: Vec<(i64, String)> = {
+        let mut stmt = conn
+            .prepare("SELECT id, title FROM clipboard_items")
+            .map_err(|e| AppError::internal(format!("prepare v5 回填查询失败: {e}")))?;
+        let mapped = stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            .map_err(|e| AppError::internal(format!("query v5 回填失败: {e}")))?;
+        mapped.filter_map(Result::ok).collect()
+    };
+    for (id, title) in rows {
+        let (full, initials) = crate::models::compute_pinyin(&title);
+        conn.execute(
+            "UPDATE clipboard_items SET pinyin_full = ?1, pinyin_initials = ?2 WHERE id = ?3",
+            params![full, initials, id],
+        )
+        .map_err(|e| AppError::internal(format!("回填 pinyin 失败(id={id}): {e}")))?;
+    }
+
+    // 3. 写版本号
+    write_version(conn, CURRENT_SCHEMA_VERSION)?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -443,6 +508,30 @@ mod tests {
             )
             .unwrap();
         assert_eq!(hit, 1, "存量数据应被 FTS 索引(搜「你好」命中)");
+    }
+
+    #[test]
+    fn migrate_to_v5_backfills_pinyin() {
+        // 模拟旧库(v1 schema + 中文数据)→ migrate 到 v5 后拼音列应被回填
+        let conn = init_db_in_memory_v1().expect("init v1 失败");
+        conn.execute(
+            "INSERT INTO clipboard_items (first_copied_at, last_copied_at, title, content_kind) \
+             VALUES (1000, 1000, '可以搜索', 'text')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).expect("migrate 失败");
+
+        let (full, initials): (String, String) = conn
+            .query_row(
+                "SELECT pinyin_full, pinyin_initials FROM clipboard_items WHERE title = '可以搜索'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(full, "keyisousuo");
+        assert_eq!(initials, "kyss");
     }
 
     #[test]
