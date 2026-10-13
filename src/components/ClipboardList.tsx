@@ -14,10 +14,11 @@
  */
 import { useEffect } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { FileText, Type, Layers, Link2, FileCode, Clipboard as ClipboardIcon, Pin } from 'lucide-react'
+import { Pin, Clipboard as ClipboardIcon } from 'lucide-react'
 
 import { cn } from '@lib/utils'
 import type { ClipboardItem } from '@core/types'
+import { getTypeMeta, isFileItem, isImageItem } from '@core/type-meta'
 
 interface ClipboardListProps {
   items: ClipboardItem[]
@@ -35,34 +36,6 @@ const PREVIEW_MAX_CHARS = 60
 /** 单行截断预览文本(纯函数,可单测)。选中态与非选中态共用,保证行高一致。 */
 export function previewText(title: string): string {
   return (title.slice(0, PREVIEW_MAX_CHARS) || '<空>') + (title.length > PREVIEW_MAX_CHARS ? '…' : '')
-}
-
-/** 类型图标配置(图片类型不在此列 —— 用缩略图替代图标位) */
-interface TypeIconConfig {
-  icon: typeof FileText
-  color: string
-}
-
-/** 根据条目类型返回图标配置。图片返回 null(用缩略图)。 */
-function getTypeIcon(item: ClipboardItem): TypeIconConfig | null {
-  // 图片:无图标(缩略图替代)
-  if (item.thumbPath && !item.fileUrl) return null
-
-  // 文件
-  if (item.fileUrl) return { icon: FileText, color: 'var(--type-file)' }
-
-  // 子类型优先:链接 / Markdown
-  if (item.contentSubtype === 'link') return { icon: Link2, color: 'var(--accent)' }
-  if (item.contentSubtype === 'markdown') return { icon: FileCode, color: 'var(--type-md)' }
-
-  // 按 contentKind:text / rich 归为「文字」,mixed 单独
-  switch (item.contentKind) {
-    case 'mixed':
-      return { icon: Layers, color: 'var(--text-secondary)' }
-    default:
-      // text + rich:都用 Type 图标(与统计卡片「文字」对应)
-      return { icon: Type, color: 'var(--text-secondary)' }
-  }
 }
 
 /** 格式化时间为 HH:MM */
@@ -102,8 +75,8 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
     <ul className="flex flex-col overflow-hidden">
       {items.map((item, index) => {
         const isSelected = index === selectedIndex
-        const isImage = !!item.thumbPath && !item.fileUrl
-        const isFile = !!item.fileUrl
+        const isImage = isImageItem(item)
+        const isFile = isFileItem(item)
 
         return (
           <li
@@ -141,15 +114,10 @@ export function ClipboardList({ items, selectedIndex, onSelect, onCopyBack }: Cl
                 draggable={false}
               />
             ) : (() => {
-              const cfg = getTypeIcon(item)
-              const Icon = cfg?.icon
-              return Icon ? (
-                <Icon
-                  className="h-4 w-4 shrink-0"
-                  style={{ color: cfg!.color }}
-                  aria-hidden
-                />
-              ) : null
+              // 图片走缩略图分支,这里渲染类型图标(元数据与预览面板共用 @core/type-meta)
+              const Icon = getTypeMeta(item).icon
+              const color = getTypeMeta(item).color
+              return <Icon className="h-4 w-4 shrink-0" style={{ color }} aria-hidden />
             })()}
 
             {/* 列2:主内容 —— 统一单行截断(选中不展开,完整内容在右侧预览面板)

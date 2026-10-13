@@ -24,3 +24,12 @@ export const STORAGE_KEY_PREFIX = 'clipboard-manager:'
 export const STORAGE_KEYS = {
   THEME: `${STORAGE_KEY_PREFIX}theme`,
 } as const
+
+// ============================================================
+// 业务常量
+// ============================================================
+
+/** 列表 title 的截断上限(字符)。
+ *  与 Rust 侧 models.rs 的 TITLE_MAX_CHARS 对齐(两端镜像,改须同步)。
+ *  title 达到该长度视为可能被截断,预览面板据此决定是否 invoke get_item_text 取全文。 */
+export const TITLE_MAX_CHARS = 1000

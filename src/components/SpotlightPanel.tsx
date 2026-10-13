@@ -1,17 +1,18 @@
 /**
- * SpotlightPanel — Spotlight 风格主面板(M1 历史列表)
+ * SpotlightPanel — Spotlight 风格主面板(master-detail 布局)
  *
  * 窗口形态:无边框 + 透明 + 圆角 + 阴影(tauri.conf.json + index.css)。
  *
- * M1 职责(容器):
- * - 装配 useClipboardItems(数据)+ ClipboardList(展示)
+ * 职责(容器):
+ * - 装配 useClipboardItems(数据)+ ClipboardList(列表)+ ItemPreviewPanel(预览)
+ * - 布局:顶/底栏跨全宽,中间左列表(~70%)/ 右预览(30%)
  * - 键盘交互:↑↓ 导航 / ⏎ 回填 / ⌫ 删除
  * - 探活:M0 遗留的 ping 探活(列表加载成功即代表就绪)
  *
  * 探活机制(constraints.md「Tauri v2 setup 时序坑」):用 invoke 调通即就绪。
  *
- * 模块化(§1.21):本组件是容器,数据逻辑在 hook,展示在 ClipboardList,键盘导航
- * 边界计算在 nextIndex 纯函数(可单测)。
+ * 模块化(§1.21):本组件是容器,数据逻辑在 hook,展示在 ClipboardList/
+ * ItemPreviewPanel,键盘导航边界计算在 nextIndex 纯函数(可单测)。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Settings, Search, Type, FileText, Image as ImageIcon, Layers, Link2, FileCode } from 'lucide-react'
@@ -21,7 +22,9 @@ import { hideWindow } from '@core/window'
 import { APP_VERSION } from '@core/constants'
 import { cn } from '@lib/utils'
 import { useClipboardItems } from '@hooks/useClipboardItems'
+import { useItemFullText } from '@hooks/useItemFullText'
 import { ClipboardList } from '@components/ClipboardList'
+import { ItemPreviewPanel } from '@components/ItemPreviewPanel'
 
 type ProbeStatus = 'checking' | 'ready' | 'timeout'
 
@@ -63,6 +66,10 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
   const [actionError, setActionError] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [searchText, setSearchText] = useState('')
+
+  // 右侧预览区:当前选中条目 + 应展示文本(title 被截断的超长条目自动拉全文)
+  const selectedItem = items[selectedIndex] ?? null
+  const fullText = useItemFullText(selectedItem)
 
   /** 设置操作错误(回填/删除失败时),3 秒后自动清除 */
   const showActionError = useCallback((msg: string) => {
@@ -272,69 +279,79 @@ export function SpotlightPanel({ onOpenSettings }: SpotlightPanelProps) {
         </div>
       </div>
 
-      {/* 搜索框 —— 圆角卡片样式(左右留白 + 半透明背景 + 圆角边框) */}
-      <div className="px-3 py-2">
-        <div className="flex items-center gap-2 rounded-card border border-divider bg-card-raised px-3 py-1.5">
-          <Search className="h-[13px] w-[13px] shrink-0 text-text-tertiary" aria-hidden />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            placeholder="搜索剪贴板历史…  (按 / 快速聚焦)"
-            className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-text-tertiary focus:outline-none"
-          />
-          {searchQuery && (
-            <span className="shrink-0 text-[10px] text-text-tertiary">
-              {items.length} 条结果
-            </span>
-          )}
+      {/* 中间区:左列表栏(~70%) + 右预览栏(30%) */}
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* 搜索框 —— 圆角卡片样式(左右留白 + 半透明背景 + 圆角边框) */}
+          <div className="px-3 py-2">
+            <div className="flex items-center gap-2 rounded-card border border-divider bg-card-raised px-3 py-1.5">
+              <Search className="h-[13px] w-[13px] shrink-0 text-text-tertiary" aria-hidden />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="搜索剪贴板历史…  (按 / 快速聚焦)"
+                className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-text-tertiary focus:outline-none"
+              />
+              {searchQuery && (
+                <span className="shrink-0 text-[10px] text-text-tertiary">
+                  {items.length} 条结果
+                </span>
+              )}
+            </div>
+
+            {/* 类型筛选 tag 行(全部未选中 = 不过滤;选中 = 只显示对应类型) */}
+            <div className="mt-1.5 flex items-center gap-1 overflow-x-auto scrollbar-thin">
+              {TYPE_TAGS.map((tag) => {
+                const active = kindFilter.includes(tag.filter)
+                return (
+                  <button
+                    key={tag.filter}
+                    onClick={() => {
+                      const next = active
+                        ? kindFilter.filter((k) => k !== tag.filter)
+                        : [...kindFilter, tag.filter]
+                      setKindFilter(next)
+                      setSelectedIndex(0)
+                    }}
+                    className={cn(
+                      'flex shrink-0 items-center gap-1 rounded-card-small px-2 py-0.5 text-[10px] font-medium',
+                      'transition-colors duration-fast ease-out-strong',
+                      active
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-text-tertiary hover:bg-hover hover:text-foreground',
+                    )}
+                  >
+                    <tag.icon className="h-2.5 w-2.5" aria-hidden />
+                    {tag.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 列表区(可滚动 + 隐形细滚动条 + 禁止横向溢出) */}
+          <div className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden py-1">
+            {error ? (
+              <p className="py-8 text-center text-xs text-destructive">加载失败:{error}</p>
+            ) : loading ? (
+              <p className="py-8 text-center text-xs text-text-secondary">加载中…</p>
+            ) : (
+              <ClipboardList
+                items={items}
+                selectedIndex={selectedIndex}
+                onSelect={setSelectedIndex}
+                onCopyBack={(index) => void handleCopyBack(index)}
+              />
+            )}
+          </div>
         </div>
 
-        {/* 类型筛选 tag 行(全部未选中 = 不过滤;选中 = 只显示对应类型) */}
-        <div className="mt-1.5 flex items-center gap-1 overflow-x-auto scrollbar-thin">
-          {TYPE_TAGS.map((tag) => {
-            const active = kindFilter.includes(tag.filter)
-            return (
-              <button
-                key={tag.filter}
-                onClick={() => {
-                  const next = active
-                    ? kindFilter.filter((k) => k !== tag.filter)
-                    : [...kindFilter, tag.filter]
-                  setKindFilter(next)
-                  setSelectedIndex(0)
-                }}
-                className={cn(
-                  'flex shrink-0 items-center gap-1 rounded-card-small px-2 py-0.5 text-[10px] font-medium',
-                  'transition-colors duration-fast ease-out-strong',
-                  active
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-text-tertiary hover:bg-hover hover:text-foreground',
-                )}
-              >
-                <tag.icon className="h-2.5 w-2.5" aria-hidden />
-                {tag.label}
-              </button>
-            )
-          })}
+        {/* 右侧预览区(30% 宽):选中条目的完整内容 + 元信息 */}
+        <div className="w-[30%] min-w-0 shrink-0">
+          <ItemPreviewPanel item={selectedItem} fullText={fullText} />
         </div>
-      </div>
-
-      {/* 列表区(可滚动 + 隐形细滚动条 + 禁止横向溢出) */}
-      <div className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden py-1">
-        {error ? (
-          <p className="py-8 text-center text-xs text-destructive">加载失败:{error}</p>
-        ) : loading ? (
-          <p className="py-8 text-center text-xs text-text-secondary">加载中…</p>
-        ) : (
-          <ClipboardList
-            items={items}
-            selectedIndex={selectedIndex}
-            onSelect={setSelectedIndex}
-            onCopyBack={(index) => void handleCopyBack(index)}
-          />
-        )}
       </div>
 
       {/* 底栏:快捷键提示(左) + 版本号(右) / 操作错误 —— 顶部半透明分隔线 */}
