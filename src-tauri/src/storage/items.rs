@@ -300,92 +300,88 @@ pub fn get_item(conn: &Connection, id: i64, images_dir: &Path) -> Result<Clipboa
     Ok(item)
 }
 
-/// 查列表(按 last_copied_at DESC)。
+/// 构建类型过滤的 WHERE 子句(列表与计数共用,防口径漂移)。
+///
+/// `kinds`:普通值匹配 content_kind(且要求无子类型),`subtype:xxx` 匹配 content_subtype,
+/// 各条件 OR 组合。空/None 返回 ("1=1", 空参数)。
+fn kind_where(kinds: Option<&[String]>) -> (String, Vec<rusqlite::types::Value>) {
+    let Some(ks) = kinds.filter(|ks| !ks.is_empty()) else {
+        return ("1=1".to_string(), Vec::new());
+    };
+    let kind_filters: Vec<&String> = ks.iter().filter(|k| !k.starts_with("subtype:")).collect();
+    let subtype_filters: Vec<String> = ks.iter()
+        .filter_map(|k| k.strip_prefix("subtype:").map(|s| s.to_string()))
+        .collect();
+
+    let mut clauses = Vec::new();
+    let mut param_values: Vec<rusqlite::types::Value> = Vec::new();
+
+    if !kind_filters.is_empty() {
+        let placeholders = (0..kind_filters.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+        // 排除有子类型的记录(link/markdown 有独立筛选条件)
+        clauses.push(format!("(content_kind IN ({placeholders}) AND content_subtype IS NULL)"));
+        for k in &kind_filters {
+            param_values.push(rusqlite::types::Value::Text((**k).clone()));
+        }
+    }
+    if !subtype_filters.is_empty() {
+        let placeholders = (0..subtype_filters.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+        clauses.push(format!("content_subtype IN ({placeholders})"));
+        for s in &subtype_filters {
+            param_values.push(rusqlite::types::Value::Text(s.clone()));
+        }
+    }
+    (clauses.join(" OR "), param_values)
+}
+
+/// 查列表(按 last_copied_at DESC,支持分页)。
 ///
 /// `kinds`:可选的类型过滤(只返回这些 content_kind 的记录)。None 或空 = 不过滤。
+/// `offset`:分页偏移(与 limit 组成页窗口;排序尾带 id DESC 保证翻页稳定)。
 /// `images_dir`:图片存储根目录,用于把缩略图相对路径转绝对路径。
 pub fn list(
     conn: &Connection,
     limit: i64,
+    offset: i64,
     images_dir: &Path,
     kinds: Option<&[String]>,
 ) -> Result<Vec<ClipboardItem>, AppError> {
-    match kinds {
-        Some(ks) if !ks.is_empty() => {
-            // 拆分筛选值:普通值走 content_kind,'subtype:xxx' 走 content_subtype
-            let kind_filters: Vec<&String> = ks.iter().filter(|k| !k.starts_with("subtype:")).collect();
-            let subtype_filters: Vec<String> = ks.iter()
-                .filter_map(|k| k.strip_prefix("subtype:").map(|s| s.to_string()))
-                .collect();
+    let (where_clause, mut param_values) = kind_where(kinds);
+    let sql = format!(
+        "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
+         FROM clipboard_items WHERE {where_clause} \
+         ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC, id DESC LIMIT ? OFFSET ?"
+    );
+    param_values.push(rusqlite::types::Value::from(limit));
+    param_values.push(rusqlite::types::Value::from(offset));
 
-            // 动态构建 WHERE 子句(各条件 OR 组合):
-            // - content_kind 筛选:匹配 kind 且无子类型(纯文字不含链接/Markdown)
-            // - content_subtype 筛选:直接匹配子类型
-            let mut clauses = Vec::new();
-            let mut param_values: Vec<rusqlite::types::Value> = Vec::new();
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| AppError::internal(format!("prepare list 失败: {e}")))?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(param_values.iter()), row_to_item)
+        .map_err(|e| AppError::internal(format!("query list 失败: {e}")))?;
 
-            if !kind_filters.is_empty() {
-                let placeholders = (0..kind_filters.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
-                // 排除有子类型的记录(link/markdown 有独立筛选条件)
-                clauses.push(format!("(content_kind IN ({placeholders}) AND content_subtype IS NULL)"));
-                for k in &kind_filters {
-                    param_values.push(rusqlite::types::Value::Text((**k).clone()));
-                }
-            }
-            if !subtype_filters.is_empty() {
-                let placeholders = (0..subtype_filters.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
-                clauses.push(format!("content_subtype IN ({placeholders})"));
-                for s in &subtype_filters {
-                    param_values.push(rusqlite::types::Value::Text(s.clone()));
-                }
-            }
-
-            let where_clause = clauses.join(" OR ");
-            let sql = format!(
-                "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
-                 FROM clipboard_items WHERE {where_clause} ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC LIMIT ?"
-            );
-            param_values.push(rusqlite::types::Value::from(limit));
-
-            let mut stmt = conn
-                .prepare(&sql)
-                .map_err(|e| AppError::internal(format!("prepare list(filtered) 失败: {e}")))?;
-            let rows = stmt
-                .query_map(rusqlite::params_from_iter(param_values.iter()), row_to_item)
-                .map_err(|e| AppError::internal(format!("query list(filtered) 失败: {e}")))?;
-
-            let mut result = Vec::new();
-            for row in rows {
-                result.push(row.map_err(|e| AppError::internal(format!("读 list 行失败: {e}")))?);
-            }
-            for item in &mut result {
-                fill_image_fields(conn, item, images_dir)?;
-                fill_file_url(conn, item)?;
-            }
-            Ok(result)
-        }
-        _ => {
-            // 无过滤:原始查询
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
-                     FROM clipboard_items ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC LIMIT ?1",
-                )
-                .map_err(|e| AppError::internal(format!("prepare list 失败: {e}")))?;
-            let rows = stmt
-                .query_map(params![limit], row_to_item)
-                .map_err(|e| AppError::internal(format!("query list 失败: {e}")))?;
-            let mut result = Vec::new();
-            for row in rows {
-                result.push(row.map_err(|e| AppError::internal(format!("读 list 行失败: {e}")))?);
-            }
-            for item in &mut result {
-                fill_image_fields(conn, item, images_dir)?;
-                fill_file_url(conn, item)?;
-            }
-            Ok(result)
-        }
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| AppError::internal(format!("读 list 行失败: {e}")))?);
     }
+    for item in &mut result {
+        fill_image_fields(conn, item, images_dir)?;
+        fill_file_url(conn, item)?;
+    }
+    Ok(result)
+}
+
+/// 按类型过滤统计总条数(分页 total 用,与 list 的 WHERE 口径一致)。
+pub fn count(conn: &Connection, kinds: Option<&[String]>) -> Result<i64, AppError> {
+    let (where_clause, param_values) = kind_where(kinds);
+    let sql = format!("SELECT COUNT(*) FROM clipboard_items WHERE {where_clause}");
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| AppError::internal(format!("prepare count 失败: {e}")))?;
+    stmt.query_row(rusqlite::params_from_iter(param_values.iter()), |r| r.get(0))
+        .map_err(|e| AppError::internal(format!("query count 失败: {e}")))
 }
 
 /// 读某条的纯文本内容。
@@ -872,7 +868,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         insert_or_update(&conn, "新", &test_images_dir()).unwrap();
 
-        let list = list(&conn, 10, &test_images_dir(), None).unwrap();
+        let list = list(&conn, 10, 0, &test_images_dir(), None).unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].title, "新", "最新复制应排第一");
     }
@@ -998,7 +994,7 @@ mod tests {
         // 置顶 item_a(最旧的)
         toggle_pin(&conn, item_a.id).unwrap();
 
-        let list = list(&conn, 10, &test_images_dir(), None).unwrap();
+        let list = list(&conn, 10, 0, &test_images_dir(), None).unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(
             list[0].title, "普通A",
@@ -1019,7 +1015,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         toggle_pin(&conn, item_b.id).unwrap();
 
-        let list = list(&conn, 10, &test_images_dir(), None).unwrap();
+        let list = list(&conn, 10, 0, &test_images_dir(), None).unwrap();
         assert_eq!(list[0].title, "B", "最近置顶的 B 应排第一");
         assert_eq!(list[1].title, "A", "先置顶的 A 应排第二");
     }

@@ -17,7 +17,7 @@ use tauri::State;
 
 use crate::clipboard::{title, uti};
 use crate::error::{codes, AppError};
-use crate::models::{ClipboardItem, StorageStats};
+use crate::models::{ClipboardItem, ListPage, StorageStats};
 use crate::storage::{cleanup, items};
 
 /// 列表默认条数上限(前端不传 limit 时)。
@@ -40,7 +40,7 @@ fn update_last_copied_at(conn: &Connection, id: i64) -> Result<(), AppError> {
 // 核心逻辑(接 &Connection,可单测)
 // ============================================================
 
-/// 查历史列表。
+/// 查历史列表(不分页辅助,offset=0;命令分页路径走 items::list + count)。
 ///
 /// `images_dir`:图片存储根目录,用于把缩略图相对路径转绝对路径(前端 convertFileSrc 用)。
 pub fn list_items_with_conn(
@@ -50,7 +50,20 @@ pub fn list_items_with_conn(
     kinds: Option<&[String]>,
 ) -> Result<Vec<ClipboardItem>, AppError> {
     // items::list 已通过 fill_image_fields 把 thumb_path 填为绝对路径
-    items::list(conn, limit, images_dir, kinds)
+    items::list(conn, limit, 0, images_dir, kinds)
+}
+
+/// 分页查历史列表(命令层核心逻辑:当前页 + 过滤口径下的命中总数)。
+pub fn list_page_with_conn(
+    conn: &Connection,
+    limit: i64,
+    offset: i64,
+    images_dir: &std::path::Path,
+    kinds: Option<&[String]>,
+) -> Result<ListPage, AppError> {
+    let items = items::list(conn, limit, offset, images_dir, kinds)?;
+    let total = items::count(conn, kinds)?;
+    Ok(ListPage { items, total })
 }
 
 /// 删除单条(含图片引用计数删除)。
@@ -62,17 +75,27 @@ pub fn delete_item_with_conn(
     items::delete(conn, id, images_dir)
 }
 
-/// 搜索剪贴板历史(FTS5 + bigram 中文分词,单字 LIKE 兜底)。
-///
-/// `images_dir`:图片存储根目录,搜索结果里的图片条目需要把缩略图相对路径转绝对。
+/// 搜索剪贴板历史(不分页辅助,offset=0)。
 pub fn search_items_with_conn(
     conn: &Connection,
     query: &str,
     limit: i64,
     images_dir: &std::path::Path,
 ) -> Result<Vec<ClipboardItem>, AppError> {
-    // search::search 内部已通过 fill_image_fields 把 thumb_path 填为绝对路径
-    crate::storage::search::search(conn, query, limit, images_dir)
+    crate::storage::search::search(conn, query, limit, 0, images_dir)
+}
+
+/// 分页搜索(命令层核心逻辑:当前页 + 命中总数)。
+pub fn search_page_with_conn(
+    conn: &Connection,
+    query: &str,
+    limit: i64,
+    offset: i64,
+    images_dir: &std::path::Path,
+) -> Result<ListPage, AppError> {
+    let items = crate::storage::search::search(conn, query, limit, offset, images_dir)?;
+    let total = crate::storage::search::count(conn, query)?;
+    Ok(ListPage { items, total })
 }
 
 /// 在格式行中找指定 UTI 的 blob,按 UTF-8(lossy)解码为文本。
@@ -289,13 +312,14 @@ fn read_image_content(
 // Tauri command 包装(接 State,薄转发)
 // ============================================================
 
-/// 查历史列表。`limit` 默认从设置读(用户配置的 max_items)。
+/// 查历史列表(分页)。`limit` 默认从设置读(用户配置的 max_items);`offset` 分页偏移。
 #[tauri::command]
 pub fn list_items(
     state: State<'_, crate::AppState>,
     limit: Option<i64>,
+    offset: Option<i64>,
     kinds: Option<Vec<String>>,
-) -> Result<Vec<ClipboardItem>, AppError> {
+) -> Result<ListPage, AppError> {
     let effective_limit = match limit {
         Some(l) => l,
         None => {
@@ -308,7 +332,13 @@ pub fn list_items(
     // kinds: 空 Vec 或 None = 不过滤
     let kinds_ref = kinds.filter(|ks| !ks.is_empty());
     let conn = state.db();
-    list_items_with_conn(&conn, effective_limit, state.images_dir(), kinds_ref.as_deref())
+    list_page_with_conn(
+        &conn,
+        effective_limit,
+        offset.unwrap_or(0),
+        state.images_dir(),
+        kinds_ref.as_deref(),
+    )
 }
 
 /// 删除单条(含图片引用计数)。
@@ -331,15 +361,22 @@ pub fn toggle_pin(
     items::toggle_pin(&conn, id)
 }
 
-/// 搜索剪贴板历史(FTS5 + bigram)。
+/// 搜索剪贴板历史(分页,FTS5 + bigram)。
 #[tauri::command]
 pub fn search_items(
     state: State<'_, crate::AppState>,
     query: String,
     limit: Option<i64>,
-) -> Result<Vec<ClipboardItem>, AppError> {
+    offset: Option<i64>,
+) -> Result<ListPage, AppError> {
     let conn = state.db();
-    search_items_with_conn(&conn, &query, limit.unwrap_or(DEFAULT_LIST_LIMIT), state.images_dir())
+    search_page_with_conn(
+        &conn,
+        &query,
+        limit.unwrap_or(DEFAULT_LIST_LIMIT),
+        offset.unwrap_or(0),
+        state.images_dir(),
+    )
 }
 
 /// 读条目完整文本(右侧预览面板用)。
@@ -569,6 +606,59 @@ mod tests {
         );
         let err = get_item_text_with_conn(&conn, id).unwrap_err();
         assert_eq!(err.code, codes::NOT_FOUND);
+    }
+
+    // ============================================================
+    // 分页(offset + total)
+    // ============================================================
+
+    #[test]
+    fn list_offset_pagination_covers_all_without_overlap() {
+        let conn = db_with_sample_data(); // 3 条
+        let page0 = list_page_with_conn(&conn, 2, 0, &test_images_dir(), None).unwrap();
+        assert_eq!(page0.total, 3);
+        assert_eq!(page0.items.len(), 2);
+        let page1 = list_page_with_conn(&conn, 2, 2, &test_images_dir(), None).unwrap();
+        assert_eq!(page1.items.len(), 1);
+        // 两页无重叠,并集 = 全集(id DESC tiebreaker 保证翻页稳定)
+        let mut page_ids: Vec<i64> = page0.items.iter().chain(&page1.items).map(|i| i.id).collect();
+        let mut full_ids: Vec<i64> =
+            list_items_with_conn(&conn, 50, &test_images_dir(), None).unwrap().iter().map(|i| i.id).collect();
+        page_ids.sort_unstable();
+        full_ids.sort_unstable();
+        assert_eq!(page_ids, full_ids);
+    }
+
+    #[test]
+    fn list_count_matches_kinds_filter() {
+        let conn = db_with_sample_data(); // 3 条纯文字
+        let image_page = list_page_with_conn(
+            &conn, 50, 0, &test_images_dir(), Some(&["image".to_string()]),
+        ).unwrap();
+        assert_eq!(image_page.total, 0);
+        assert!(image_page.items.is_empty());
+        let all = list_page_with_conn(&conn, 50, 0, &test_images_dir(), None).unwrap();
+        assert_eq!(all.total, 3);
+    }
+
+    #[test]
+    fn search_offset_and_count_pages_disjoint() {
+        let conn = db_with_sample_data(); // 第一条/第二条/第三条,单字「条」LIKE 全命中
+        let page0 = search_page_with_conn(&conn, "条", 2, 0, &test_images_dir()).unwrap();
+        assert_eq!(page0.total, 3);
+        assert_eq!(page0.items.len(), 2);
+        let page1 = search_page_with_conn(&conn, "条", 2, 2, &test_images_dir()).unwrap();
+        assert_eq!(page1.items.len(), 1);
+        let mut page_ids: Vec<i64> = page0.items.iter().chain(&page1.items).map(|i| i.id).collect();
+        let mut full_ids: Vec<i64> =
+            search_items_with_conn(&conn, "条", 50, &test_images_dir()).unwrap().iter().map(|i| i.id).collect();
+        page_ids.sort_unstable();
+        full_ids.sort_unstable();
+        assert_eq!(page_ids, full_ids);
+        // 多字查询走 FTS,count 口径一致
+        let fts_page = search_page_with_conn(&conn, "第二", 10, 0, &test_images_dir()).unwrap();
+        assert_eq!(fts_page.total, 1);
+        assert_eq!(fts_page.items.len(), 1);
     }
 
     #[test]

@@ -130,6 +130,19 @@ pub struct StorageStats {
     pub storage_bytes: i64,
 }
 
+/// 分页列表响应(list_items / search_items 命令用,序列化给前端)。
+///
+/// `items` 为当前页数据,`total` 为过滤条件下的命中总数(前端据此判断 hasMore)。
+/// 前端镜像:`src/core/types/models.ts` 的 ListPageSchema。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPage {
+    /// 当前页条目
+    pub items: Vec<ClipboardItem>,
+    /// 过滤条件下的命中总数
+    pub total: i64,
+}
+
 /// 按内容类型的分类计数。
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]

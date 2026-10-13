@@ -114,11 +114,13 @@ fn escape_fts_phrase(token: &str) -> String {
 /// - 单字查询 → `LIKE '%字%'` 兜底(bigram 对单字不可靠)
 /// - 多字查询 → bigram 预处理 → FTS MATCH + BM25 排序
 ///
+/// `offset`:分页偏移(与 limit 组成页窗口;排序尾带 id DESC 保证翻页稳定)。
 /// 返回的 ClipboardItem 不含 search_text(那是内部索引列,不暴露给前端)。
 pub fn search(
     conn: &Connection,
     query: &str,
     limit: i64,
+    offset: i64,
     images_dir: &Path,
 ) -> Result<Vec<ClipboardItem>, AppError> {
     let trimmed = query.trim();
@@ -127,9 +129,9 @@ pub fn search(
     }
 
     let mut results = if is_single_char_query(trimmed) {
-        search_by_like(conn, trimmed, limit)?
+        search_by_like(conn, trimmed, limit, offset)?
     } else {
-        search_by_fts(conn, trimmed, limit)?
+        search_by_fts(conn, trimmed, limit, offset)?
     };
     // 补充图片缩略图 + 文件 URL(与 list/get_item 保持一致)
     for item in &mut results {
@@ -139,8 +141,35 @@ pub fn search(
     Ok(results)
 }
 
+/// 搜索命中总数(分页 total 用,与 search 的分支口径一致;空查询 = 0)。
+pub fn count(conn: &Connection, query: &str) -> Result<i64, AppError> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(0);
+    }
+    if is_single_char_query(trimmed) {
+        let pattern = format!("%{trimmed}%");
+        conn.query_row(
+            "SELECT COUNT(*) FROM clipboard_items WHERE search_text LIKE ?1",
+            params![&pattern],
+            |r| r.get(0),
+        )
+        .map_err(|e| AppError::internal(format!("like count 查询失败: {e}")))
+    } else {
+        let fts_query = to_fts_query(trimmed).ok_or_else(|| {
+            AppError::internal(format!("查询无法转成 FTS 表达式: {trimmed:?}"))
+        })?;
+        conn.query_row(
+            "SELECT COUNT(*) FROM clipboard_fts WHERE clipboard_fts MATCH ?1",
+            params![&fts_query],
+            |r| r.get(0),
+        )
+        .map_err(|e| AppError::internal(format!("fts count 查询失败: {e}")))
+    }
+}
+
 /// FTS + BM25 搜索(多字查询)。
-fn search_by_fts(conn: &Connection, query: &str, limit: i64) -> Result<Vec<ClipboardItem>, AppError> {
+fn search_by_fts(conn: &Connection, query: &str, limit: i64, offset: i64) -> Result<Vec<ClipboardItem>, AppError> {
     let fts_query = to_fts_query(query).ok_or_else(|| {
         AppError::internal(format!("查询无法转成 FTS 表达式: {query:?}"))
     })?;
@@ -151,33 +180,33 @@ fn search_by_fts(conn: &Connection, query: &str, limit: i64) -> Result<Vec<Clipb
              FROM clipboard_fts \
              JOIN clipboard_items i ON i.id = clipboard_fts.rowid \
              WHERE clipboard_fts MATCH ?1 \
-             ORDER BY i.pinned DESC, i.pinned_at DESC, bm25(clipboard_fts), i.last_copied_at DESC \
-             LIMIT ?2",
+             ORDER BY i.pinned DESC, i.pinned_at DESC, bm25(clipboard_fts), i.last_copied_at DESC, i.id DESC \
+             LIMIT ?2 OFFSET ?3",
         )
         .map_err(|e| AppError::internal(format!("prepare fts search 失败: {e}")))?;
 
     let rows = stmt
-        .query_map(params![&fts_query, limit], row_to_item)
+        .query_map(params![&fts_query, limit, offset], row_to_item)
         .map_err(|e| AppError::internal(format!("fts search 查询失败: {e}")))?;
 
     collect_items(rows)
 }
 
 /// LIKE 兜底搜索(单字查询)。
-fn search_by_like(conn: &Connection, ch: &str, limit: i64) -> Result<Vec<ClipboardItem>, AppError> {
+fn search_by_like(conn: &Connection, ch: &str, limit: i64, offset: i64) -> Result<Vec<ClipboardItem>, AppError> {
     let pattern = format!("%{ch}%");
     let mut stmt = conn
         .prepare(
             "SELECT id, first_copied_at, last_copied_at, copy_count, title, content_kind, content_subtype, pinned, pinned_at \
              FROM clipboard_items \
              WHERE search_text LIKE ?1 \
-             ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC \
-             LIMIT ?2",
+             ORDER BY pinned DESC, pinned_at DESC, last_copied_at DESC, id DESC \
+             LIMIT ?2 OFFSET ?3",
         )
         .map_err(|e| AppError::internal(format!("prepare like search 失败: {e}")))?;
 
     let rows = stmt
-        .query_map(params![&pattern, limit], row_to_item)
+        .query_map(params![&pattern, limit, offset], row_to_item)
         .map_err(|e| AppError::internal(format!("like search 查询失败: {e}")))?;
 
     collect_items(rows)
@@ -288,7 +317,7 @@ mod tests {
     #[test]
     fn search_empty_query_returns_empty() {
         let conn = setup_with_data();
-        let r = search(&conn, "", 50, &test_images_dir()).unwrap();
+        let r = search(&conn, "", 50, 0, &test_images_dir()).unwrap();
         assert!(r.is_empty());
     }
 
@@ -296,7 +325,7 @@ mod tests {
     fn search_chinese_bigram_recall() {
         let conn = setup_with_data();
         // 搜「你好」→ 命中「你好世界」
-        let r = search(&conn, "你好", 50, &test_images_dir()).unwrap();
+        let r = search(&conn, "你好", 50, 0, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].title, "你好世界");
     }
@@ -305,7 +334,7 @@ mod tests {
     fn search_chinese_partial_recall() {
         let conn = setup_with_data();
         // 搜「你好世」→ MATCH "你好" OR "好世" → 命中「你好世界」
-        let r = search(&conn, "你好世", 50, &test_images_dir()).unwrap();
+        let r = search(&conn, "你好世", 50, 0, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].title, "你好世界");
     }
@@ -313,7 +342,7 @@ mod tests {
     #[test]
     fn search_english_token() {
         let conn = setup_with_data();
-        let r = search(&conn, "async", 50, &test_images_dir()).unwrap();
+        let r = search(&conn, "async", 50, 0, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].title, "rust async await");
     }
@@ -321,7 +350,7 @@ mod tests {
     #[test]
     fn search_code_url() {
         let conn = setup_with_data();
-        let r = search(&conn, "github", 50, &test_images_dir()).unwrap();
+        let r = search(&conn, "github", 50, 0, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert!(r[0].title.contains("github"));
     }
@@ -330,7 +359,7 @@ mod tests {
     fn search_single_char_like_fallback() {
         let conn = setup_with_data();
         // 搜「你」(单字)→ LIKE 兜底,命中含「你」的
-        let r = search(&conn, "你", 50, &test_images_dir()).unwrap();
+        let r = search(&conn, "你", 50, 0, &test_images_dir()).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].title, "你好世界");
     }
@@ -353,7 +382,7 @@ mod tests {
         )
         .unwrap();
 
-        let r = search(&conn, "rust", 50, &test_images_dir()).unwrap();
+        let r = search(&conn, "rust", 50, 0, &test_images_dir()).unwrap();
         assert_eq!(r[0].title, "rust x3", "词频高的应排前(BM25)");
         assert_eq!(r[1].title, "rust x1");
     }
