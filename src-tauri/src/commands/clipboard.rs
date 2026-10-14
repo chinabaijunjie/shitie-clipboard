@@ -17,7 +17,7 @@ use tauri::State;
 
 use crate::clipboard::{title, uti};
 use crate::error::{codes, AppError};
-use crate::models::{ClipboardItem, ListPage, StorageStats};
+use crate::models::{ListPage, StorageStats};
 use crate::storage::{cleanup, items};
 
 /// 列表默认条数上限(前端不传 limit 时)。
@@ -40,19 +40,6 @@ fn update_last_copied_at(conn: &Connection, id: i64) -> Result<(), AppError> {
 // 核心逻辑(接 &Connection,可单测)
 // ============================================================
 
-/// 查历史列表(不分页辅助,offset=0;命令分页路径走 items::list + count)。
-///
-/// `images_dir`:图片存储根目录,用于把缩略图相对路径转绝对路径(前端 convertFileSrc 用)。
-pub fn list_items_with_conn(
-    conn: &Connection,
-    limit: i64,
-    images_dir: &std::path::Path,
-    kinds: Option<&[String]>,
-) -> Result<Vec<ClipboardItem>, AppError> {
-    // items::list 已通过 fill_image_fields 把 thumb_path 填为绝对路径
-    items::list(conn, limit, 0, images_dir, kinds)
-}
-
 /// 分页查历史列表(命令层核心逻辑:当前页 + 过滤口径下的命中总数)。
 pub fn list_page_with_conn(
     conn: &Connection,
@@ -73,16 +60,6 @@ pub fn delete_item_with_conn(
     images_dir: &std::path::Path,
 ) -> Result<(), AppError> {
     items::delete(conn, id, images_dir)
-}
-
-/// 搜索剪贴板历史(不分页辅助,offset=0)。
-pub fn search_items_with_conn(
-    conn: &Connection,
-    query: &str,
-    limit: i64,
-    images_dir: &std::path::Path,
-) -> Result<Vec<ClipboardItem>, AppError> {
-    crate::storage::search::search(conn, query, limit, 0, images_dir)
 }
 
 /// 分页搜索(命令层核心逻辑:当前页 + 命中总数)。

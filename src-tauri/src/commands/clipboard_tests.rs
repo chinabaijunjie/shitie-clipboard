@@ -1,7 +1,7 @@
 use super::*;
     use crate::clipboard::capture::CapturedFormat;
     use crate::clipboard::uti;
-    use crate::models::ContentKind;
+    use crate::models::{ClipboardItem, ContentKind};
     use crate::storage::init_db_in_memory;
 
     fn db_with_sample_data() -> Connection {
@@ -18,7 +18,27 @@ use super::*;
     }
 
     /// 测试用 images_dir(临时目录,纯文本测试不实际写图,但 delete 签名要求传)。
-    fn test_images_dir() -> std::path::PathBuf {
+    /// 不分页列表辅助(offset=0)——分页命令走 list_page_with_conn,此函数仅供测试断言全集。
+fn list_items_with_conn(
+    conn: &Connection,
+    limit: i64,
+    images_dir: &std::path::Path,
+    kinds: Option<&[String]>,
+) -> Result<Vec<ClipboardItem>, AppError> {
+    items::list(conn, limit, 0, images_dir, kinds)
+}
+
+/// 不分页搜索辅助(offset=0)——仅供测试断言全集。
+fn search_items_with_conn(
+    conn: &Connection,
+    query: &str,
+    limit: i64,
+    images_dir: &std::path::Path,
+) -> Result<Vec<ClipboardItem>, AppError> {
+    crate::storage::search::search(conn, query, limit, 0, images_dir)
+}
+
+fn test_images_dir() -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "clipboard-cmd-test-{}",
             std::time::SystemTime::now()
